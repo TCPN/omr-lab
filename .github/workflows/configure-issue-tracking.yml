@@ -1,0 +1,118 @@
+name: Configure issue labels and milestone
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_changes:
+        description: "Apply changes (unchecked = dry run only)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  configure-tracking:
+    name: Configure M1 tracking
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create labels and milestone, then label M1 issues
+        uses: actions/github-script@v7
+        env:
+          APPLY_CHANGES: ${{ inputs.apply_changes }}
+        with:
+          script: |
+            const applyChanges = process.env.APPLY_CHANGES === "true";
+            const { owner, repo } = context.repo;
+
+            const labels = [
+              { name: "type: feature", color: "0E8A16", description: "New functionality or capability" },
+              { name: "type: bug", color: "D73A4A", description: "Incorrect or unexpected behavior" },
+              { name: "type: docs", color: "0075CA", description: "Documentation changes" },
+              { name: "type: research", color: "D4C5F9", description: "Investigation or evaluation work" },
+              { name: "type: infrastructure", color: "FBCA04", description: "Development tooling, CI, or project infrastructure" },
+              { name: "priority: P0", color: "B60205", description: "Highest priority; blocks essential progress" },
+              { name: "priority: P1", color: "D93F0B", description: "High priority for the current milestone" },
+              { name: "priority: P2", color: "FBCA04", description: "Normal or deferrable priority" },
+              { name: "status: ready", color: "0E8A16", description: "Scoped and ready to be picked up" },
+              { name: "status: blocked", color: "B60205", description: "Blocked by an external dependency or decision" },
+              { name: "area: pipeline", color: "1D76DB", description: "Pipeline orchestration and end-to-end flow" },
+              { name: "area: engine", color: "5319E7", description: "OMR engine integration and interfaces" },
+              { name: "area: schema", color: "0052CC", description: "Normalized JSON schema and MusicXML parsing" },
+              { name: "area: preprocessing", color: "C2E0C6", description: "Image preprocessing and dewarping" },
+              { name: "area: benchmark", color: "F9D0C4", description: "Evaluation datasets, metrics, and benchmarks" },
+              { name: "area: deployment", color: "006B75", description: "Local packaging and deployment" },
+            ];
+
+            const issuePlan = [
+              { number: 3, labels: ["type: infrastructure", "status: ready"] },
+              { number: 4, labels: ["type: feature", "area: engine", "status: ready"] },
+              { number: 5, labels: ["type: feature", "area: schema", "status: ready"] },
+              { number: 6, labels: ["type: feature", "area: pipeline", "status: ready"] },
+              { number: 7, labels: ["type: feature", "area: engine", "status: ready"] },
+              { number: 8, labels: ["type: feature", "area: schema", "status: ready"] },
+              { number: 9, labels: ["type: feature", "area: pipeline", "status: ready"] },
+              { number: 10, labels: ["type: feature", "area: benchmark", "status: ready"] },
+            ];
+
+            const milestoneTitle = "M1 — Local OMR Foundation";
+            const milestoneDescription = "OMR-001 through OMR-008: establish the local OMR foundation.";
+
+            const existingLabels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner, repo, per_page: 100
+            });
+            const existingLabelNames = new Set(existingLabels.map(label => label.name));
+            const existingMilestones = await github.paginate(github.rest.issues.listMilestones, {
+              owner, repo, state: "all", per_page: 100
+            });
+            let milestone = existingMilestones.find(item => item.title === milestoneTitle);
+
+            if (milestone && milestone.state !== "open") {
+              throw new Error(`Milestone "${milestoneTitle}" already exists but is closed. Reopen it before running this workflow.`);
+            }
+
+            for (const item of issuePlan) {
+              const response = await github.rest.issues.get({ owner, repo, issue_number: item.number });
+              core.info(`Issue #${item.number}: ${response.data.title}; current milestone=${response.data.milestone?.title ?? "none"}; planned labels=${item.labels.join(", ")}`);
+            }
+
+            core.info(`Labels to create: ${labels.filter(label => !existingLabelNames.has(label.name)).map(label => label.name).join(", ") || "none"}`);
+            core.info(`Milestone: ${milestone ? `reuse #${milestone.number}` : "create " + milestoneTitle}`);
+
+            if (!applyChanges) {
+              core.notice("Dry run only. Re-run this workflow with 'Apply changes' checked to create labels/milestone and update issues.");
+              return;
+            }
+
+            for (const label of labels) {
+              if (existingLabelNames.has(label.name)) {
+                core.info(`Keeping existing label: ${label.name}`);
+                continue;
+              }
+              await github.rest.issues.createLabel({ owner, repo, ...label });
+              core.info(`Created label: ${label.name}`);
+            }
+
+            if (!milestone) {
+              const result = await github.rest.issues.createMilestone({
+                owner, repo, title: milestoneTitle, description: milestoneDescription, state: "open"
+              });
+              milestone = result.data;
+              core.info(`Created milestone #${milestone.number}: ${milestone.title}`);
+            } else {
+              core.info(`Reusing milestone #${milestone.number}: ${milestone.title}`);
+            }
+
+            for (const item of issuePlan) {
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: item.number, labels: item.labels
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: item.number, milestone: milestone.number
+              });
+              core.info(`Updated issue #${item.number}: milestone #${milestone.number}; added labels ${item.labels.join(", ")}`);
+            }
+
+            core.notice("M1 labels and milestone have been configured for issues #3–#10.");
