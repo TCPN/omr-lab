@@ -10,12 +10,20 @@
 7. Write a run record with provenance and timing.
 
 ## Boundaries
-- engines/: engine-specific availability and process invocation.
+- engines/: engine-specific availability and process invocation; shared contracts live in engines/base.py.
 - preprocess/: optional, independently testable image transforms.
 - musicxml/: validation/parsing independent of engine.
 - conversion/: normalized JSON mapping.
 - pipeline.py: orchestration only.
 - reporting/: run metadata and benchmark reports.
+
+## Engine contract
+- Each adapter implements the Engine protocol: name, check_available(), and recognize().
+- Availability reports include whether the engine is runnable, optional version metadata, and an actionable message.
+- Recognition results include success/failure, engine name/version, raw artifact paths, diagnostics, return code, and optional error text.
+- External processes are launched with an argument sequence, captured stdout/stderr, and a finite timeout. Do not construct shell command strings from paths or user input.
+- Unit tests use fake engines and monkeypatched subprocess calls; they must not require Java, network access, model downloads, or real OMR engines.
+- A successful process or adapter result does not prove musical correctness. Recognition accuracy must be assessed separately.
 
 ## Rules
 MusicXML is the initial interchange format. Keep engine-specific arguments in adapters. Unit tests must not require Java, network, model downloads, or paid APIs. A successful process exit does not prove musical correctness. Do not fabricate image coordinates or confidence. Dewarping is a separately evaluated transform; measure downstream music correctness, not only visual straightness.
