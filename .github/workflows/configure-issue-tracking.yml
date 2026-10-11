@@ -16,10 +16,10 @@ permissions:
 jobs:
   configure-tracking:
     name: Configure M1 tracking
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Create labels and milestone, then label M1 issues
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           APPLY_CHANGES: ${{ inputs.apply_changes }}
         with:
