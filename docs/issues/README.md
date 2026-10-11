@@ -19,4 +19,4 @@ OMR-009 through OMR-014 remain proposed task descriptions in this directory, not
 
 ## Tracking setup
 
-Milestones and labels are specified in docs/governance/milestones-and-labels.md. They have not yet been created on GitHub because the available GitHub write actions in this session support issues/files/PRs but not creating repository labels or milestones. Create these in the repository UI, then associate issues with their milestone and labels.
+Use the manual [Configure issue labels and milestone workflow](../../.github/workflows/configure-issue-tracking.yml) to create the planned labels and M1 milestone and apply them to Issues #3–#10. The workflow defaults to a dry run; review its log, then rerun with **Apply changes** checked to make the changes. It preserves existing labels and is safe to rerun.
