@@ -6,6 +6,9 @@ Clarify goals, design architecture, draft issues and acceptance criteria, sugges
 ## Codex — implementation/verification
 Read the repository rules and issue; implement only agreed scope; add tests; run lint/unit/integration checks available; report exact commands and results. Never claim tests passed if they were not run.
 
+## Claude Code — implementation, local experiments, and review
+Same rules as Codex (AGENTS.md, via CLAUDE.md). Runs either on the owner's PC (WSL2 with GPU, local engines and private data) for engine integration, benchmarks, and experiments, or on GitHub Actions when mentioned with `@claude` in an issue or PR for code, docs, and review tasks that need no local resources. Opens decision issues for questions the owner must decide.
+
 ## Human owner
 Own priorities, scope approval, PR review/merge, licensing/privacy/cost decisions, data permissions, and releases.
 
