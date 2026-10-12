@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install
-        run: uv sync --dev
+        run: uv sync --dev --locked
       - name: Ruff
         run: uv run ruff check .
       - name: Tests
