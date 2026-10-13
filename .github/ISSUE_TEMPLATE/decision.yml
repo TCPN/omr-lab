@@ -28,13 +28,13 @@ body:
     id: recommendation
     attributes:
       label: Recommendation
-      description: Recommended option and reasoning
+      description: Recommended option and reasoning; write "None" and explain if there is no preference yet
     validations:
-      required: false
+      required: true
   - type: textarea
     id: blocks
     attributes:
       label: Blocks
-      description: Issues or PRs waiting on this decision
+      description: Issues or PRs waiting on this decision; write "None" if nothing is blocked yet
     validations:
-      required: false
+      required: true
