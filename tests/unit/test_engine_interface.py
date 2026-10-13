@@ -292,6 +292,37 @@ def test_run_command_timeout_kills_grandchild(tmp_path: Path) -> None:
         pytest.fail(f"grandchild {grandchild_pid} survived the timeout")
 
 
+class _BlockingStream:
+    """Stands in for a pipe whose reader thread is still blocked in read()."""
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize(("platform", "expect_closed"), [("win32", False), ("linux", True)])
+def test_collect_after_kill_does_not_close_pipes_held_by_windows_readers(
+    monkeypatch: pytest.MonkeyPatch, platform: str, expect_closed: bool
+) -> None:
+    from omr_lab.engines import base
+
+    monkeypatch.setattr(base.sys, "platform", platform)
+    process = FakePopen(["engine"], timeout_stderr=b"still running")
+    process.killed = False  # an escaped descendant keeps the pipes open
+    process.stdout = _BlockingStream()
+    process.stderr = _BlockingStream()
+    partial = subprocess.TimeoutExpired(["engine"], 1, output=b"out", stderr=b"err")
+
+    stdout, stderr = base._collect_after_kill(process, partial)
+
+    assert process.stdout.closed is expect_closed
+    assert process.stderr.closed is expect_closed
+    assert stdout == b"out"
+    assert stderr == b"still running"
+
+
 def test_run_command_validates_arguments() -> None:
     with pytest.raises(ValueError, match="executable"):
         run_command([], timeout_seconds=1)

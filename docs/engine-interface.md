@@ -17,7 +17,7 @@ This contract separates pipeline orchestration from engine-specific behavior. Ad
   - POSIX: the child starts in a new session (`start_new_session=True`); on timeout the whole process group receives `SIGKILL` via `os.killpg`.
   - Windows: the child starts with `CREATE_NEW_PROCESS_GROUP`; on timeout `taskkill /T /F /PID <pid>` terminates the child and its descendants, then the direct child is killed as a fallback.
 - Partial output written before a timeout is returned in `stdout`/`stderr`; `returncode` stays `None` for a timed-out command.
-- Known limitations: on POSIX, a descendant that moves itself into another session or process group (for example a daemonizing process) escapes the group kill. On Windows, `taskkill /T` follows parent process ids, so a descendant whose parent already exited is not found; a job object would close this gap and is not implemented. If such an escaped process keeps the output pipes open, run_command stops collecting output after a bounded drain period instead of hanging.
+- Known limitations: on POSIX, a descendant that moves itself into another session or process group (for example a daemonizing process) escapes the group kill. On Windows, `taskkill /T` follows parent process ids, so a descendant whose parent already exited is not found; a job object would close this gap and is not implemented. If such an escaped process keeps the output pipes open, run_command stops collecting output after a bounded drain period instead of hanging. On Windows the output pipes are then left open to the reader threads of `communicate()` (closing them while a read is blocked would hang); they finish once the escaped process exits.
 
 ## Result semantics
 

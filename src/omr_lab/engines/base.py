@@ -126,11 +126,25 @@ def _collect_after_kill(
         # Something outside the killed group still holds the pipes open.
         stdout = exc.stdout if exc.stdout is not None else partial.stdout
         stderr = exc.stderr if exc.stderr is not None else partial.stderr
-        for stream in (process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
+        _close_pipes(process)
         process.wait()
         return stdout, stderr
+
+
+def _close_pipes(process: subprocess.Popen[bytes]) -> None:
+    """Close the output pipes unless that could block on a still-running reader.
+
+    On Windows, communicate() reads through daemon threads that stay blocked in
+    read() while an escaped descendant holds a pipe open; closing the same
+    buffered stream would wait for that read and hang. The pipes are left to
+    those threads there, which finish once the descendant exits. On POSIX,
+    communicate() reads in the calling thread, so closing is safe.
+    """
+    if sys.platform == "win32":
+        return
+    for stream in (process.stdout, process.stderr):
+        if stream is not None:
+            stream.close()
 
 
 def run_command(
@@ -169,22 +183,25 @@ def run_command(
             error=f"Unable to start command: {exc}",
         )
 
-    with process:
-        try:
-            stdout, stderr = process.communicate(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired as exc:
-            _kill_process_tree(process)
-            stdout, stderr = _collect_after_kill(process, exc)
-            return CommandResult(
-                args=command,
-                stdout=_as_text(stdout),
-                stderr=_as_text(stderr),
-                timed_out=True,
-                error=f"Command timed out after {timeout_seconds:g} seconds",
-            )
-        except BaseException:
-            _kill_process_tree(process)
-            raise
+    # Not ``with process:``: its exit closes the pipes, which can hang on Windows
+    # (see _close_pipes). communicate() closes them itself once it reaches EOF.
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        _kill_process_tree(process)
+        stdout, stderr = _collect_after_kill(process, exc)
+        return CommandResult(
+            args=command,
+            stdout=_as_text(stdout),
+            stderr=_as_text(stderr),
+            timed_out=True,
+            error=f"Command timed out after {timeout_seconds:g} seconds",
+        )
+    except BaseException:
+        _kill_process_tree(process)
+        _close_pipes(process)
+        process.wait()
+        raise
 
     return CommandResult(
         args=command,
