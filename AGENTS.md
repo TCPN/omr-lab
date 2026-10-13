@@ -9,7 +9,7 @@ Read README.md, this file, docs/architecture.md, relevant schema/decision docs, 
 ## Engineering
 - Python src layout; pyproject.toml; uv dependency management.
 - Type hints for public interfaces; use pathlib for paths.
-- External programs: subprocess.run with argument lists, timeouts, captured return codes/output; never shell-concatenate untrusted paths.
+- External programs: use `run_command` in `engines/base.py` (argument lists, timeouts, UTF-8 decoding, process-tree kill, captured return codes/output); never shell-concatenate untrusted paths.
 - Do not swallow exceptions silently, overwrite source images, commit secrets, or commit private/unlicensed scores.
 - Keep generated artifacts in explicit output/temp directories.
 
