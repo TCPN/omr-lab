@@ -21,7 +21,7 @@
 - Each adapter implements the Engine protocol: name, check_available(), and recognize().
 - Availability reports include whether the engine is runnable, optional version metadata, and an actionable message.
 - Recognition results include success/failure, engine name/version, raw artifact paths, diagnostics, return code, and optional error text.
-- External processes are launched with an argument sequence, captured stdout/stderr, and a finite timeout. Do not construct shell command strings from paths or user input.
+- External processes are launched with an argument sequence, captured stdout/stderr (decoded as UTF-8), and a finite timeout that terminates the whole process tree. Do not construct shell command strings from paths or user input. Details: docs/engine-interface.md.
 - Unit tests use fake engines and monkeypatched subprocess calls; they must not require Java, network access, model downloads, or real OMR engines.
 - A successful process or adapter result does not prove musical correctness. Recognition accuracy must be assessed separately.
 
