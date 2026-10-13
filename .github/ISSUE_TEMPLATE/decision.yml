@@ -1,0 +1,40 @@
+name: Decision request
+description: A question the project owner needs to decide
+title: "Decision: "
+labels: ["decision: needed"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Decision needed
+      description: One concrete question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this matters now; link related issues, PRs, or docs
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: Each option with its trade-offs (cost, risk, effort, reversibility)
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: Recommended option and reasoning; write "None" and explain if there is no preference yet
+    validations:
+      required: true
+  - type: textarea
+    id: blocks
+    attributes:
+      label: Blocks
+      description: Issues or PRs waiting on this decision; write "None" if nothing is blocked yet
+    validations:
+      required: true

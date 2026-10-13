@@ -24,7 +24,7 @@ uv run omr-lab --help
 The bootstrap project does not require Java or an OMR engine. Real recognition is a later milestone.
 
 ## Source of truth
-- `AGENTS.md`: coding-agent rules
+- `AGENTS.md`: coding-agent rules (`CLAUDE.md` imports it for Claude Code)
 - `docs/architecture.md`: boundaries and data flow
 - `docs/json-schema.md`: normalized result contract draft
 - `docs/governance/`: roles, workflow, milestones and labels
@@ -34,4 +34,4 @@ The bootstrap project does not require Java or an OMR engine. Real recognition i
 - `tests/`: automated tests
 
 ## Collaboration
-ChatGPT plans and reviews; GitHub Issues define bounded tasks; Codex implements and tests; a human reviews and merges. Durable decisions must be written to this repository rather than relying on chat history.
+ChatGPT plans and reviews; GitHub Issues define bounded tasks; Codex and Claude Code implement and test; a human reviews, merges, and answers `decision: needed` issues. Durable decisions must be written to this repository rather than relying on chat history.

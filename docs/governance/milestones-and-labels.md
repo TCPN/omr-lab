@@ -10,6 +10,7 @@
 - `type: feature`, `type: bug`, `type: docs`, `type: research`, `type: infrastructure`
 - `priority: P0`, `priority: P1`, `priority: P2`
 - `status: ready`, `status: blocked`
+- `decision: needed` (owner decision pending; see the Decisions section of issue-and-pr-workflow.md)
 - `area: pipeline`, `area: engine`, `area: schema`, `area: preprocessing`, `area: benchmark`, `area: deployment`
 
 ## Apply labels and milestone on GitHub
