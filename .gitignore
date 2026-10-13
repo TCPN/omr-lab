@@ -16,10 +16,11 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+# Generated artifacts (including engine MusicXML/.mxl output) stay in these
+# directories. MusicXML is not ignored globally so that synthetic, redistributable
+# fixtures under tests/fixtures/ can be committed.
 runs/
 outputs/
 tmp/
 data/private/
 benchmarks/reports/generated/
-*.musicxml
-*.mxl
