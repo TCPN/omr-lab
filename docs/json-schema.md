@@ -1,6 +1,12 @@
-# Normalized JSON Contract (Draft)
+# Normalized JSON Contract (Run Document v0.1.0)
 
-The first contract records only facts supported by the pipeline. Example shape:
+Each pipeline run produces one **run document**: a JSON object recording what was run, how, and what came out. It records only facts supported by the pipeline and engine output. A valid run document is not proof that the music was recognized correctly.
+
+- Schema (source of truth): [`src/omr_lab/schemas/run-0.1.0.schema.json`](../src/omr_lab/schemas/run-0.1.0.schema.json), JSON Schema draft 2020-12, `$id` `urn:omr-lab:schema:run:0.1.0`. It ships inside the `omr_lab` package.
+- Validation: `omr_lab.schemas.validate_run_document(document)` raises `RunDocumentValidationError` (a `ValueError`) whose `errors` list holds one `"<json path>: <message>"` entry per violation. `omr_lab.schemas.load_run_schema()` returns the schema as a dict.
+- Examples: `tests/fixtures/run-documents/valid/` and `tests/fixtures/run-documents/invalid/`.
+
+## Example: succeeded run
 
 ```json
 {
@@ -8,11 +14,86 @@ The first contract records only facts supported by the pipeline. Example shape:
   "status": "succeeded",
   "input": {"filename": "score.png", "media_type": "image/png"},
   "engine": {"name": "audiveris", "version": null},
+  "options": {},
   "artifacts": {"musicxml": "result.musicxml"},
-  "timing": {"duration_seconds": 0.0},
+  "timing": {"duration_seconds": 12.5},
   "score": null,
-  "warnings": []
+  "warnings": [],
+  "error": null
 }
 ```
 
-This is illustrative only; score: null is not recognized score content. OMR-003 must define formal JSON Schema, failed-run error shape, required/nullable fields, and positive/negative tests. Do not fabricate coordinates, confidence, or missing musical properties.
+`score: null` means no normalized musical content is available; it is not an empty or recognized score. The recognized notation is only in the raw `musicxml` artifact until the score content model (issue #19) exists.
+
+## Example: failed run
+
+```json
+{
+  "schema_version": "0.1.0",
+  "status": "failed",
+  "input": {"filename": "score.png", "media_type": "image/png"},
+  "engine": {"name": "audiveris", "version": "5.4"},
+  "options": {},
+  "artifacts": {"engine_log": "raw/audiveris.log"},
+  "timing": {"duration_seconds": 41.0},
+  "score": null,
+  "warnings": [],
+  "error": {"code": "engine_failed", "message": "Audiveris exited with status 1; see raw/audiveris.log.", "returncode": 1}
+}
+```
+
+## Fields
+
+All top-level fields are **required**; unknown top-level fields are rejected. "Nullable" means the key must be present but may be `null`.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `schema_version` | `"0.1.0"` | Exact version of this contract. |
+| `status` | `"succeeded"` \| `"failed"` | Pipeline outcome, not a correctness claim. |
+| `input` | object | See below. |
+| `engine` | object | Engine provenance. See below. |
+| `options` | object | Effective run/engine options; `{}` when none. Values are any JSON. Populated by issue #21. |
+| `artifacts` | object | Raw artifacts by kind (e.g. `musicxml`, `engine_log`); may be `{}`. |
+| `timing` | object | See below. |
+| `score` | `null` | Normalized musical content. Always `null` in 0.1.0 (placeholder for issue #19). |
+| `warnings` | array of objects | Non-fatal problems in order of occurrence; may be `[]`. |
+| `error` | object \| `null` | Object when `status` is `failed`; `null` when `status` is `succeeded`. |
+
+### `input`
+- `filename` (required, string): base name only; `/` and `\` are rejected so local directory paths are not recorded.
+- `media_type` (required, nullable string): IANA media type such as `image/png` or `application/pdf`; `null` when not determined.
+- `sha256` (optional, nullable string): lowercase hex SHA-256 of the input bytes.
+
+### `engine`
+- `name` (required, non-empty string): `Engine.name` of the selected adapter.
+- `version` (required, nullable string): version reported by the engine; `null` when unknown. Never guessed.
+
+### `artifacts`
+Keys are snake_case artifact kinds. Values are POSIX-style paths relative to the run output directory: absolute paths, Windows drive prefixes, backslashes, and `..` segments are rejected. Raw engine artifacts stay in these files and are never merged into `score`.
+
+### `timing`
+- `duration_seconds` (required, number ≥ 0): total elapsed wall-clock time.
+- `started_at` (optional, nullable string): RFC 3339 timestamp. `format: date-time` is an annotation and is not enforced by the validator.
+
+### `warnings[]` and `error`
+Both use a snake_case `code` (pattern `^[a-z][a-z0-9_]*$`) and a non-empty, human-readable `message`; no other warning fields are allowed. `error` may also carry `returncode` (nullable integer) when the failure came from an external process.
+
+Codes are not an enum in 0.1.0. Codes in use so far:
+
+| Code | Kind | Meaning |
+| --- | --- | --- |
+| `invalid_input` | error | Input path missing, unreadable, or unsupported type. |
+| `engine_unavailable` | error | Engine prerequisites not found (`check_available()` failed). |
+| `engine_failed` | error | Engine process exited non-zero or the adapter reported failure. |
+| `engine_timeout` | error | Engine process exceeded its timeout. |
+| `musicxml_invalid` | error | Engine output could not be parsed or validated as MusicXML. |
+| `internal_error` | error | Unexpected pipeline error; the message should say what failed. |
+| `score_content_not_normalized` | warning | Musical content exists only in raw artifacts. |
+
+## Rules
+- Do not fabricate coordinates, confidence values, or musical properties absent from engine output. Unknown values are `null` or absent, never guessed.
+- `score` is `null` whenever normalized content is unavailable, including every failed run.
+- Raw engine artifacts are kept separate from normalized content.
+
+## Versioning
+`schema_version` is fixed per schema file. Any change to the contract adds a new schema file with a new version (for example, `run-0.2.0.schema.json` when issue #19 replaces the `score` placeholder with the score content model) and updates this document. Within 0.x, any change may be breaking.
