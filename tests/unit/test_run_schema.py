@@ -68,8 +68,8 @@ def test_invalid_documents_fail(name):
     document = _load(FIXTURES / "invalid" / f"{name}.json")
     with pytest.raises(RunDocumentValidationError) as excinfo:
         validate_run_document(document)
-    paths = {message.split(": ", 1)[0] for message in excinfo.value.errors}
-    assert INVALID_EXPECTED_PATH[name] in paths
+    paths = [message.split(": ", 1)[0] for message in excinfo.value.errors]
+    assert paths == [INVALID_EXPECTED_PATH[name]], excinfo.value.errors
 
 
 @pytest.mark.parametrize("path", VALID, ids=lambda p: p.stem)
@@ -108,3 +108,19 @@ def test_docs_example_validates():
     assert blocks, "docs/json-schema.md should contain JSON examples"
     for block in blocks:
         validate_run_document(json.loads(block))
+
+
+def test_malformed_error_object_reports_each_violation():
+    document = _load(FIXTURES / "valid" / "failed-engine-exit.json")
+    document["error"] = {"code": "Not Snake", "unexpected": True}
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(document)
+    assert len(excinfo.value.errors) == 3, excinfo.value.errors
+    assert all(message.startswith("$.error") for message in excinfo.value.errors)
+
+
+def test_load_run_schema_returns_independent_copies():
+    schema = load_run_schema()
+    schema["properties"].clear()
+    assert load_run_schema()["properties"]
+    validate_run_document(_load(VALID[0]))

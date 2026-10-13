@@ -31,9 +31,12 @@ class RunDocumentValidationError(ValueError):
         super().__init__(f"Run document is invalid ({len(errors)} error(s)): {summary}")
 
 
-@cache
 def load_run_schema() -> dict[str, Any]:
-    """Return the packaged run document JSON Schema."""
+    """Return a fresh copy of the packaged run document JSON Schema.
+
+    Not cached, so a caller that mutates the result cannot change the schema
+    used by validate_run_document().
+    """
     text = files(__name__).joinpath(_RUN_SCHEMA_RESOURCE).read_text(encoding="utf-8")
     return json.loads(text)
 

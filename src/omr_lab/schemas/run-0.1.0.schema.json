@@ -129,30 +129,25 @@
     },
     "error": {
       "description": "Failure details. Required to be an object when status is 'failed' and null when status is 'succeeded'.",
-      "oneOf": [
-        {"type": "null"},
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["code", "message"],
-          "properties": {
-            "code": {
-              "description": "Stable snake_case error identifier (see docs/json-schema.md for known codes).",
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9_]*$"
-            },
-            "message": {
-              "description": "Actionable, human-readable explanation.",
-              "type": "string",
-              "minLength": 1
-            },
-            "returncode": {
-              "description": "Engine process return code when the failure came from an external process, otherwise null.",
-              "type": ["integer", "null"]
-            }
-          }
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "description": "Stable snake_case error identifier (see docs/json-schema.md for known codes).",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "message": {
+          "description": "Actionable, human-readable explanation.",
+          "type": "string",
+          "minLength": 1
+        },
+        "returncode": {
+          "description": "Engine process return code when the failure came from an external process, otherwise null.",
+          "type": ["integer", "null"]
         }
-      ]
+      }
     }
   },
   "allOf": [
