@@ -2,14 +2,90 @@
 
 from __future__ import annotations
 
+import math
 import os
 import signal
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeAlias, runtime_checkable
+
+EngineOptionValue: TypeAlias = str | int | float | bool | None
+"""A single engine option value: a JSON scalar (finite floats only)."""
+
+EngineOptions: TypeAlias = Mapping[str, EngineOptionValue]
+"""Engine-specific settings passed to Engine.recognize(), keyed by option name."""
+
+
+class InvalidEngineOptionError(ValueError):
+    """An engine option has an unsupported key type or a non-scalar value."""
+
+
+class UnknownEngineOptionError(InvalidEngineOptionError):
+    """One or more option names are not supported by the selected engine."""
+
+    def __init__(
+        self,
+        engine_name: str,
+        unknown: Sequence[str],
+        supported: Sequence[str],
+    ) -> None:
+        self.engine_name = engine_name
+        self.unknown = tuple(sorted(unknown))
+        self.supported = tuple(sorted(supported))
+        supported_text = ", ".join(self.supported) if self.supported else "(none)"
+        super().__init__(
+            f"Unknown option(s) for engine {engine_name!r}: {', '.join(self.unknown)}. "
+            f"Supported options: {supported_text}."
+        )
+
+
+def _check_option_value(engine_name: str, key: str, value: object) -> None:
+    if value is None or isinstance(value, str | bool | int):
+        return
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return
+        raise InvalidEngineOptionError(
+            f"Option {key!r} for engine {engine_name!r} must be a finite number, got {value!r}."
+        )
+    raise InvalidEngineOptionError(
+        f"Option {key!r} for engine {engine_name!r} must be a string, number, boolean, "
+        f"or None, got {type(value).__name__}."
+    )
+
+
+def resolve_options(
+    engine_name: str,
+    options: EngineOptions | None,
+    defaults: EngineOptions,
+) -> dict[str, EngineOptionValue]:
+    """Validate requested options against an adapter's defaults and merge them.
+
+    ``defaults`` lists every option the adapter supports with its default value
+    (``None`` when the engine's own default applies and nothing is passed). The
+    returned dict is the effective option set to echo in EngineResult.options.
+
+    Raises UnknownEngineOptionError for option names absent from ``defaults`` and
+    InvalidEngineOptionError for non-string keys or non-scalar/non-finite values.
+    Per-option type and range checks (for example ``device`` in {"cpu", "cuda"})
+    remain the adapter's responsibility.
+    """
+    requested = dict(options or {})
+    for key in requested:
+        if not isinstance(key, str):
+            raise InvalidEngineOptionError(
+                f"Option names for engine {engine_name!r} must be strings, got {key!r}."
+            )
+    unknown = [key for key in requested if key not in defaults]
+    if unknown:
+        raise UnknownEngineOptionError(engine_name, unknown, list(defaults))
+    effective = {**defaults, **requested}
+    for key, value in effective.items():
+        _check_option_value(engine_name, key, value)
+    return effective
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +104,9 @@ class EngineResult:
 
     The success flag describes process/adapter completion only; it does not imply
     that the recognized musical content is correct.
+
+    ``options`` holds the effective engine options (requested values merged with
+    adapter defaults) so that the pipeline can record them in the run output.
     """
 
     engine_name: str
@@ -37,6 +116,7 @@ class EngineResult:
     diagnostics: tuple[str, ...] = ()
     returncode: int | None = None
     error: str | None = None
+    options: dict[str, EngineOptionValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,6 +310,13 @@ class Engine(Protocol):
         output_dir: Path,
         *,
         timeout_seconds: float,
+        options: EngineOptions | None = None,
     ) -> EngineResult:
-        """Recognize a score and return raw artifacts plus diagnostics."""
+        """Recognize a score and return raw artifacts plus diagnostics.
+
+        ``options`` holds engine-specific settings; ``None`` means no options and
+        is treated like an empty mapping. Adapters raise UnknownEngineOptionError
+        (see resolve_options) for names they do not support, before running the
+        engine, and echo the effective options in EngineResult.options.
+        """
         ...

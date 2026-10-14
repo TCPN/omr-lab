@@ -6,9 +6,23 @@ This contract separates pipeline orchestration from engine-specific behavior. Ad
 
 - Engine.name: stable engine identifier.
 - Engine.check_available(): local prerequisite check, returning EngineAvailability with availability, optional version, and an actionable message when unavailable.
-- Engine.recognize(input_path, output_dir, timeout_seconds=...): run recognition and return an EngineResult.
-- EngineResult: success/failure, engine name/version, raw artifact paths, diagnostics, process return code, and an optional error message.
+- Engine.recognize(input_path, output_dir, *, timeout_seconds, options=None): run recognition and return an EngineResult. See [Engine options](#engine-options).
+- EngineResult: success/failure, engine name/version, raw artifact paths, diagnostics, process return code, an optional error message, and the effective options (`options`, `{}` by default).
 - run_command(...): shared subprocess helper that passes an argument sequence without a shell, captures stdout/stderr, enforces a timeout, and normalizes launch/timeout failures. See [Process execution](#process-execution).
+
+## Engine options
+
+Engine-specific settings (for example `device` = `"cpu"`/`"cuda"`, a model variant, or an Audiveris flag) are passed as a keyword-only `options` mapping so that they can be recorded for provenance and fair benchmarking.
+
+- Types: `EngineOptions = Mapping[str, EngineOptionValue]` with `EngineOptionValue = str | int | float | bool | None`. Option names are strings; values are JSON scalars, and floats must be finite. `options=None` is treated as `{}`.
+- Why scalars only: the effective options are written verbatim to the run JSON (`options` object, see docs/json-schema.md), so every value must round-trip through `json.dumps(..., allow_nan=False)` without a custom encoder. Scalars also compare and diff cleanly between benchmark runs. Paths (for example a custom model file) are passed as strings; the adapter converts them with `pathlib`. Lists or nested objects are not supported yet; extend the alias in a separate issue if an engine needs them.
+- Validation: each adapter declares its supported options with default values and calls `resolve_options(engine_name, options, defaults)` before running anything. It returns the effective options (defaults overridden by requested values) and raises:
+  - `UnknownEngineOptionError` (a `ValueError`) naming the engine, the unknown option names, and the supported names, for example `Unknown option(s) for engine 'fake': devcie. Supported options: device, model.` Its `engine_name`, `unknown`, and `supported` attributes hold the same information.
+  - `InvalidEngineOptionError` (a `ValueError`, base class of the above) for non-string names and for non-scalar or non-finite values.
+  A default of `None` means "not set; the engine's own default applies" and is recorded as `null`. Per-option type/range checks (for example accepting only `cpu`/`cuda`) stay in the adapter and should raise `InvalidEngineOptionError` with an equally actionable message.
+- Echo: the adapter returns the effective options in `EngineResult.options`, including on failed runs, so that the run record shows exactly which settings were used.
+- Run output: the pipeline (issue #6) copies `EngineResult.options` into the top-level `options` object of the run JSON. Invalid options are raised before recognition starts; how the pipeline reports that error in the run record is decided there.
+- Mapping options to command-line arguments is the adapter's job and must keep using argument lists via `run_command`; never interpolate option values into a shell string.
 
 ## Process execution
 
