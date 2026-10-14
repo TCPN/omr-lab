@@ -561,6 +561,11 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
     )
 
 
+def _local_name(tag: str) -> str:
+    """Strip a ``prefix:`` or ``{namespace}`` qualifier from an element tag."""
+    return tag.rsplit("}", 1)[-1].rsplit(":", 1)[-1]
+
+
 def _rootfile_from_container(
     archive: zipfile.ZipFile,
     entries: dict[str, zipfile.ZipInfo],
@@ -582,7 +587,15 @@ def _rootfile_from_container(
     except (XmlSyntaxError, ForbiddenXmlConstructError) as exc:
         return None, f"{CONTAINER_PATH} could not be parsed ({exc})"
 
-    rootfiles = container.findall("rootfiles/rootfile")
+    # Match local names: the safe parser keeps tags as written, so a container that uses
+    # a prefix for the OCF namespace (``<ocf:rootfile>``) must still be recognized.
+    rootfiles = [
+        rootfile
+        for group in container
+        if _local_name(group.tag) == "rootfiles"
+        for rootfile in group
+        if _local_name(rootfile.tag) == "rootfile"
+    ]
     if not rootfiles or not rootfiles[0].get("full-path"):
         return None, f"{CONTAINER_PATH} names no rootfile with a full-path"
     # MusicXML 4.0: the first rootfile is the main score; others (e.g. PDF renderings)

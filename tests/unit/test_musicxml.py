@@ -364,6 +364,35 @@ def test_mxl_with_container(tmp_path: Path, no_network: None) -> None:
     assert document.warnings == ()
 
 
+OCF_NAMESPACE = "urn:oasis:names:tc:opendocument:xmlns:container"
+
+
+@pytest.mark.parametrize(
+    "container",
+    [
+        CONTAINER_XML.replace("<container>", f'<container version="1.0" xmlns="{OCF_NAMESPACE}">'),
+        CONTAINER_XML.replace("<container>", f'<ocf:container xmlns:ocf="{OCF_NAMESPACE}">')
+        .replace("</container>", "</ocf:container>")
+        .replace("rootfiles>", "ocf:rootfiles>")
+        .replace("<rootfile ", "<ocf:rootfile "),
+    ],
+    ids=["default-namespace", "prefixed-namespace"],
+)
+def test_mxl_with_namespaced_container(tmp_path: Path, container: str) -> None:
+    # Real MusicXML containers declare the OCF namespace.
+    archive = make_mxl(
+        tmp_path / "score.mxl",
+        {
+            "META-INF/container.xml": container.format(path="music/score.musicxml"),
+            "music/score.musicxml": (FIXTURES / "valid-partwise.musicxml").read_bytes(),
+            "aaa-other.xml": "<not-a-score/>",
+        },
+    )
+    document = load_musicxml(archive)
+    assert document.archive_member == "music/score.musicxml"
+    assert document.warnings == ()
+
+
 def test_mxl_detected_by_content_not_extension(tmp_path: Path) -> None:
     archive = make_mxl(
         tmp_path / "renamed.musicxml",
