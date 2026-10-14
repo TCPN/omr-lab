@@ -36,10 +36,38 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # A repository-specific prompt replaces the code-review plugin. The plugin
+          # stops on every push after its first comment ("Claude has already
+          # commented") and only flags issues that hold for all inputs, so it
+          # reported "No issues found" on PRs where Copilot found real bugs.
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD SHA: ${{ github.event.pull_request.head.sha }}
+
+            Review this pull request. The checkout is the PR merged into its base.
+
+            1. Read the PR title, body and linked issue with `gh pr view` and
+               `gh issue view`, and the diff with `gh pr diff`. Read AGENTS.md,
+               CLAUDE.md and any docs, schemas or ADRs the change touches.
+            2. Read the surrounding code, not only the diff, before judging a change.
+            3. Look for: bugs and incorrect logic, edge cases the change mishandles
+               (empty, missing, malformed or oversized input, symlinks, races,
+               subprocess failures), behavior that contradicts the linked issue's
+               acceptance criteria or the docs/schema, AGENTS.md violations, and
+               missing tests for new behavior. Skip pure style nits.
+            4. Fetch existing review comments with
+               `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments`
+               and do not repeat an issue that is already raised there.
+            5. Post each finding as an inline comment with
+               `mcp__github_inline_comment__create_inline_comment` (confirmed: true),
+               saying what goes wrong, for which input, and how to fix it.
+            6. Post or update one summary comment:
+               `gh pr comment ${{ github.event.pull_request.number }} --edit-last --create-if-none --body "..."`
+               Start it with "## Claude code review (<short head sha>)", then list the
+               findings by severity, or say that none were found and what you checked.
+          claude_args: >-
+            --model claude-opus-5-5
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-
