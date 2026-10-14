@@ -12,13 +12,18 @@ from omr_lab.engines import (
     CommandResult,
     Engine,
     EngineAvailability,
+    EngineOptions,
     EngineResult,
+    InvalidEngineOptionError,
+    UnknownEngineOptionError,
+    resolve_options,
     run_command,
 )
 
 
 class FakeEngine:
     name = "fake"
+    default_options: EngineOptions = {"device": "cpu", "model": None}
 
     def check_available(self) -> EngineAvailability:
         return EngineAvailability(engine_name=self.name, available=True, version="test-1")
@@ -29,8 +34,10 @@ class FakeEngine:
         output_dir: Path,
         *,
         timeout_seconds: float,
+        options: EngineOptions | None = None,
     ) -> EngineResult:
         del timeout_seconds
+        effective = resolve_options(self.name, options, self.default_options)
         output_dir.mkdir(parents=True, exist_ok=True)
         artifact = output_dir / "result.musicxml"
         artifact.write_text("<score-partwise version='4.0' />", encoding="utf-8")
@@ -41,6 +48,7 @@ class FakeEngine:
             version="test-1",
             diagnostics=(f"Processed {input_path.name}",),
             returncode=0,
+            options=effective,
         )
 
 
@@ -57,6 +65,80 @@ def test_fake_engine_implements_protocol_without_external_dependencies(tmp_path:
     assert result.success is True
     assert result.artifacts["musicxml"].is_file()
     assert result.diagnostics == ("Processed score.png",)
+    assert result.options == {"device": "cpu", "model": None}
+
+
+def test_engine_result_options_default_to_empty() -> None:
+    result = EngineResult(engine_name="fake", success=False)
+
+    assert result.options == {}
+
+
+def test_recognize_echoes_effective_options_as_json(tmp_path: Path) -> None:
+    engine: Engine = FakeEngine()
+    input_path = tmp_path / "score.png"
+    input_path.write_bytes(b"fixture")
+    requested = {"device": "cuda"}
+
+    result = engine.recognize(input_path, tmp_path / "out", timeout_seconds=2, options=requested)
+
+    assert result.options == {"device": "cuda", "model": None}
+    assert json.loads(json.dumps(result.options, allow_nan=False)) == result.options
+    result.options["device"] = "changed"
+    assert requested == {"device": "cuda"}  # caller's mapping is not aliased
+
+
+def test_recognize_rejects_unknown_option_before_running(tmp_path: Path) -> None:
+    engine: Engine = FakeEngine()
+
+    with pytest.raises(UnknownEngineOptionError) as excinfo:
+        engine.recognize(
+            tmp_path / "score.png",
+            tmp_path / "out",
+            timeout_seconds=2,
+            options={"devcie": "cuda", "beam": 4},
+        )
+
+    error = excinfo.value
+    assert isinstance(error, ValueError)
+    assert error.engine_name == "fake"
+    assert error.unknown == ("beam", "devcie")
+    assert error.supported == ("device", "model")
+    message = str(error)
+    assert "'fake'" in message
+    assert "beam, devcie" in message
+    assert "Supported options: device, model" in message
+    assert not (tmp_path / "out").exists()
+
+
+def test_unknown_option_error_for_engine_without_options() -> None:
+    with pytest.raises(UnknownEngineOptionError, match=r"Supported options: \(none\)"):
+        resolve_options("plain", {"device": "cpu"}, {})
+
+
+def test_resolve_options_treats_none_and_empty_alike() -> None:
+    assert resolve_options("plain", None, {}) == {}
+    assert resolve_options("plain", {}, {}) == {}
+    assert resolve_options("fake", None, {"device": "cpu"}) == {"device": "cpu"}
+
+
+@pytest.mark.parametrize("value", ["cpu", 3, 0.5, True, None])
+def test_resolve_options_accepts_json_scalars(value: object) -> None:
+    assert resolve_options("fake", {"x": value}, {"x": None}) == {"x": value}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [["a"], {"nested": 1}, ("a",), b"bytes", Path("model.onnx"), float("nan"), float("inf")],
+)
+def test_resolve_options_rejects_non_scalar_values(value: object) -> None:
+    with pytest.raises(InvalidEngineOptionError, match="'x' for engine 'fake'"):
+        resolve_options("fake", {"x": value}, {"x": None})  # type: ignore[dict-item]
+
+
+def test_resolve_options_rejects_non_string_keys() -> None:
+    with pytest.raises(InvalidEngineOptionError, match="must be strings"):
+        resolve_options("fake", {1: "cpu"}, {"device": "cpu"})  # type: ignore[dict-item]
 
 
 def test_command_result_marks_nonzero_exit_as_failure() -> None:
