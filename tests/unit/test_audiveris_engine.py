@@ -419,18 +419,21 @@ def test_zero_exit_without_artifact_is_failure(
     assert result.artifacts == {}
 
 
-def test_stale_artifacts_are_not_reported(
+def test_output_dir_with_existing_musicxml_is_refused(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
 ) -> None:
     output_dir = tmp_path / "out"
-    output_dir.mkdir()
-    (output_dir / "old.mxl").write_bytes(b"old run")
-    _install(monkeypatch, FakeRunner(write=()))
+    (output_dir / "sub").mkdir(parents=True)
+    (output_dir / "sub" / "old.mxl").write_bytes(b"old run")
+    runner = FakeRunner(write=("score.mxl",))
+    _install(monkeypatch, runner)
 
     result = _engine(launcher).recognize(score, output_dir, timeout_seconds=5)
 
     assert result.success is False
     assert result.artifacts == {}
+    assert "already contains MusicXML (sub/old.mxl)" in (result.error or "")
+    assert runner.calls == []
 
 
 def test_multiple_artifacts_are_all_reported(

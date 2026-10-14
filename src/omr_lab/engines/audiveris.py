@@ -119,15 +119,15 @@ def _command_diagnostics(command: CommandResult) -> list[str]:
     return diagnostics
 
 
-def _snapshot(directory: Path) -> dict[Path, int]:
-    """Map existing MusicXML files under ``directory`` to their mtime in ns."""
+def _musicxml_files(directory: Path) -> list[Path]:
+    """List MusicXML files under ``directory``, recursively, in sorted order."""
     if not directory.is_dir():
-        return {}
-    return {
-        path: path.stat().st_mtime_ns
+        return []
+    return sorted(
+        path
         for path in directory.rglob("*")
         if path.is_file() and path.suffix.lower() in MUSICXML_SUFFIXES
-    }
+    )
 
 
 class AudiverisEngine:
@@ -311,20 +311,28 @@ class AudiverisEngine:
                 "different output directory."
             )
 
+        # Every MusicXML file found after the run is attributed to it, so the output
+        # directory must not already hold any; timestamps cannot tell a rewrite from
+        # a stale file reliably.
+        existing = _musicxml_files(output_dir)
+        if existing:
+            return failure(
+                f"Output directory {output_dir} already contains MusicXML "
+                f"({existing[0].relative_to(output_dir).as_posix()}"
+                f"{', ...' if len(existing) > 1 else ''}); use a fresh directory for each run."
+            )
+
         availability = self.check_available()
         executable = self._executable
         if not availability.available or executable is None:
             return failure(availability.message or missing_executable_message())
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        before = _snapshot(output_dir)
         args = self.build_command(executable, input_path, output_dir, effective)
         command = run_command(args, timeout_seconds=timeout_seconds)
         diagnostics = _command_diagnostics(command)
 
-        produced = sorted(
-            path for path, mtime in _snapshot(output_dir).items() if before.get(path) != mtime
-        )
+        produced = _musicxml_files(output_dir)
         artifacts: dict[str, Path] = {}
         if len(produced) == 1:
             artifacts["musicxml"] = produced[0]
