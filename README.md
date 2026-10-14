@@ -23,6 +23,27 @@ uv run omr-lab --help
 
 The bootstrap project does not require Java or an OMR engine. Real recognition is a later milestone.
 
+## Test selection
+Tests that need more than a plain Python environment carry a pytest marker:
+
+| Marker | Needs |
+| --- | --- |
+| `integration` | a real OMR engine, Java, or other external tools |
+| `gpu` | a CUDA-capable GPU |
+| `network` | network access, model downloads, or API credentials |
+
+`uv run pytest` (and CI) deselects all marked tests; the summary line reports them as
+`deselected`. A `-m` on the command line replaces the default selection, so opt in with:
+
+```bash
+uv run pytest -m integration            # only integration tests
+uv run pytest -m "integration or gpu"   # several groups
+uv run pytest -m ""                     # everything, marked or not
+```
+
+`--strict-markers` is on, so an unregistered marker is an error; register new markers in
+`pyproject.toml`. If no test matches the selection, pytest exits with code 5.
+
 ## Source of truth
 - `AGENTS.md`: coding-agent rules (`CLAUDE.md` imports it for Claude Code)
 - `docs/architecture.md`: boundaries and data flow

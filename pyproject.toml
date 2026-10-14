@@ -22,7 +22,14 @@ packages = ["src/omr_lab"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+# Marked tests are deselected by default (and in CI). A `-m` given on the
+# command line replaces this one, e.g. `uv run pytest -m integration`.
+addopts = "-ra --strict-markers -p pytester -m 'not integration and not gpu and not network'"
+markers = [
+    "integration: needs a real OMR engine, Java, or other external tools",
+    "gpu: needs a CUDA-capable GPU",
+    "network: needs network access, model downloads, or API credentials",
+]
 
 [tool.ruff]
 line-length = 100
