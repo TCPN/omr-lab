@@ -35,7 +35,6 @@ from omr_lab.engines.base import (
     EngineOptions,
     EngineOptionValue,
     EngineResult,
-    InvalidEngineOptionError,
     resolve_options,
     run_command,
 )
@@ -64,15 +63,11 @@ DEFAULT_VERSION_TIMEOUT_SECONDS = 60.0
 # ``-version`` prints a block such as ``- Version:      5.10.0``.
 _VERSION_PATTERN = re.compile(r"^\s*-?\s*Version:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
-# ``-sheets`` takes sheet ids (starting at 1) and ``X-Y`` ranges, space-separated.
-_SHEETS_PATTERN = re.compile(r"^[1-9]\d*(-[1-9]\d*)?( [1-9]\d*(-[1-9]\d*)?)*$")
-
 _MAX_LOG_LINES = 20
 
-DEFAULT_OPTIONS: Mapping[str, EngineOptionValue] = {
-    # Sheet selection passed as ``-sheets``; None processes every sheet.
-    "sheets": None,
-}
+# No options are supported yet. ``-sheets`` is documented, but how it parses several
+# ids/ranges has not been verified against a real installation, so it is deferred.
+DEFAULT_OPTIONS: Mapping[str, EngineOptionValue] = {}
 
 Which = Callable[[str], str | None]
 
@@ -155,8 +150,10 @@ class AudiverisEngine:
         self._version_timeout_seconds = version_timeout_seconds
         self._environ = os.environ if environ is None else environ
         self._which = which
-        self._version: str | None = None
-        self._version_checked = False
+        # check_available() starts Java via ``-version``; its outcome (including a
+        # failure) is cached per instance so that Java starts at most once for it.
+        self._availability: EngineAvailability | None = None
+        self._executable: Path | None = None
 
     @property
     def name(self) -> str:
@@ -190,20 +187,27 @@ class AudiverisEngine:
                 return candidate, None
         return None, missing_executable_message()
 
-    def _detect_version(self, executable: Path) -> tuple[str | None, CommandResult]:
+    def check_available(self) -> EngineAvailability:
+        """Locate Audiveris and read its version; the result is cached per instance.
+
+        Create a new AudiverisEngine to re-check after installing or changing
+        Audiveris.
+        """
+        if self._availability is None:
+            self._executable, self._availability = self._probe()
+        return self._availability
+
+    def _probe(self) -> tuple[Path | None, EngineAvailability]:
+        executable, message = self.find_executable()
+        if executable is None:
+            return None, EngineAvailability(engine_name=self.name, available=False, message=message)
+        return executable, self._availability_from_version(executable)
+
+    def _availability_from_version(self, executable: Path) -> EngineAvailability:
         command = run_command(
             [executable, "-version"], timeout_seconds=self._version_timeout_seconds
         )
         version = parse_version(command.stdout) or parse_version(command.stderr)
-        self._version = version
-        self._version_checked = True
-        return version, command
-
-    def check_available(self) -> EngineAvailability:
-        executable, message = self.find_executable()
-        if executable is None:
-            return EngineAvailability(engine_name=self.name, available=False, message=message)
-        version, command = self._detect_version(executable)
         if not command.succeeded:
             details = command.error or f"exit code {command.returncode}"
             stderr = command.stderr.strip()
@@ -247,23 +251,17 @@ class AudiverisEngine:
         ``-transcribe`` runs the full recognition and ``-export`` writes MusicXML;
         ``--`` makes the input path an input file even if it starts with ``-``.
         """
-        args: list[str | Path] = [executable, "-batch", "-transcribe", "-export"]
-        sheets = options.get("sheets")
-        if sheets is not None:
-            args.append("-sheets")
-            args.extend(str(sheets).split(" "))
-        args.extend(["-output", output_dir, "--", input_path])
-        return args
-
-    def _validate_options(self, effective: Mapping[str, EngineOptionValue]) -> None:
-        sheets = effective.get("sheets")
-        if sheets is None:
-            return
-        if not isinstance(sheets, str) or not _SHEETS_PATTERN.fullmatch(sheets):
-            raise InvalidEngineOptionError(
-                f"Option 'sheets' for engine {self.name!r} must be a string of sheet ids "
-                f"and ranges separated by single spaces, such as '1 3-5', got {sheets!r}."
-            )
+        del options  # No options are mapped to arguments yet.
+        return [
+            executable,
+            "-batch",
+            "-transcribe",
+            "-export",
+            "-output",
+            output_dir,
+            "--",
+            input_path,
+        ]
 
     def recognize(
         self,
@@ -274,7 +272,7 @@ class AudiverisEngine:
         options: EngineOptions | None = None,
     ) -> EngineResult:
         effective = resolve_options(self.name, options, DEFAULT_OPTIONS)
-        self._validate_options(effective)
+        availability: EngineAvailability | None = None
 
         def failure(
             error: str,
@@ -287,16 +285,13 @@ class AudiverisEngine:
                 engine_name=self.name,
                 success=False,
                 artifacts=artifacts or {},
-                version=self._version,
+                version=availability.version if availability else None,
                 diagnostics=tuple(diagnostics or ()),
                 returncode=returncode,
                 error=error,
                 options=effective,
             )
 
-        executable, message = self.find_executable()
-        if executable is None:
-            return failure(message or missing_executable_message())
         if not input_path.is_file():
             return failure(f"Input file {str(input_path)!r} does not exist or is not a file.")
         if input_path.suffix.lower() == ".omr":
@@ -307,14 +302,19 @@ class AudiverisEngine:
             )
 
         expected_output = output_dir / f"{input_path.stem}.mxl"
-        if expected_output.resolve() == input_path.resolve():
+        if expected_output.resolve() == input_path.resolve() or (
+            expected_output.exists() and expected_output.samefile(input_path)
+        ):
+            # samefile() also catches hard links, which resolve() does not.
             return failure(
                 f"Audiveris would write {expected_output} over the input file; choose a "
                 "different output directory."
             )
 
-        if not self._version_checked:
-            self._detect_version(executable)
+        availability = self.check_available()
+        executable = self._executable
+        if not availability.available or executable is None:
+            return failure(availability.message or missing_executable_message())
 
         output_dir.mkdir(parents=True, exist_ok=True)
         before = _snapshot(output_dir)
@@ -354,7 +354,7 @@ class AudiverisEngine:
             engine_name=self.name,
             success=True,
             artifacts=artifacts,
-            version=self._version,
+            version=availability.version,
             diagnostics=tuple(diagnostics),
             returncode=command.returncode,
             options=effective,

@@ -1,5 +1,6 @@
 """Unit tests for the Audiveris adapter; process execution is mocked throughout."""
 
+import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -9,7 +10,6 @@ from omr_lab.engines import (
     AudiverisEngine,
     CommandResult,
     Engine,
-    InvalidEngineOptionError,
     UnknownEngineOptionError,
 )
 from omr_lab.engines import audiveris as audiveris_module
@@ -182,6 +182,36 @@ def test_check_available_reports_version(monkeypatch: pytest.MonkeyPatch, launch
     assert runner.calls == [((str(launcher), "-version"), 7)]
 
 
+def test_check_available_runs_version_command_once(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path
+) -> None:
+    runner = _install(monkeypatch, FakeRunner())
+    engine = _engine(launcher)
+
+    first = engine.check_available()
+    second = engine.check_available()
+
+    assert first is second
+    assert len(runner.calls) == 1
+
+
+def test_failed_availability_is_cached_and_reused_by_recognize(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+) -> None:
+    failed = CommandResult(args=(), returncode=1, stderr="Error: no Java runtime\n")
+    runner = _install(monkeypatch, FakeRunner(version_result=failed))
+    engine = _engine(launcher)
+
+    availability = engine.check_available()
+    result = engine.recognize(score, tmp_path / "out", timeout_seconds=5)
+
+    assert engine.check_available() is availability
+    assert availability.available is False
+    assert result.success is False
+    assert result.error == availability.message
+    assert [call[0][1] for call in runner.calls] == ["-version"]
+
+
 def test_check_available_when_version_command_fails(
     monkeypatch: pytest.MonkeyPatch, launcher: Path
 ) -> None:
@@ -236,7 +266,7 @@ def test_recognize_builds_verified_batch_command(
     assert result.returncode == 0
     assert result.version == "5.10.0"
     assert result.artifacts == {"musicxml": output_dir / "score.mxl"}
-    assert result.options == {"sheets": None}
+    assert result.options == {}
     assert any("INFO done" in line for line in result.diagnostics)
     assert score.read_bytes() == b"not really a png"
 
@@ -254,39 +284,16 @@ def test_version_is_detected_once(
     assert [call[0][1] for call in runner.calls] == ["-version", "-batch", "-batch"]
 
 
-def test_sheets_option_is_passed(
-    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+@pytest.mark.parametrize("name", ["sheets", "device"])
+def test_no_options_are_supported_yet(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path, name: str
 ) -> None:
+    # -sheets is deferred until its multi-value parsing is verified on a real install.
     runner = _install(monkeypatch, FakeRunner())
 
-    result = _engine(launcher).recognize(
-        score, tmp_path / "out", timeout_seconds=5, options={"sheets": "1 3-4"}
-    )
-
-    args = runner.calls[-1][0]
-    assert args[4:7] == ("-sheets", "1", "3-4")
-    assert args.index("-output") > args.index("3-4")
-    assert result.options == {"sheets": "1 3-4"}
-
-
-@pytest.mark.parametrize("value", ["", "0", "1,2", "1  2", "-1", "1 -force", 3])
-def test_invalid_sheets_option_is_rejected_before_running(
-    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path, value: object
-) -> None:
-    runner = _install(monkeypatch, FakeRunner())
-
-    with pytest.raises(InvalidEngineOptionError, match="sheets"):
-        _engine(launcher).recognize(
-            score, tmp_path / "out", timeout_seconds=5, options={"sheets": value}
-        )
+    with pytest.raises(UnknownEngineOptionError, match=r"Supported options: \(none\)"):
+        _engine(launcher).recognize(score, tmp_path / "out", timeout_seconds=5, options={name: "1"})
     assert runner.calls == []
-
-
-def test_unknown_option_is_rejected(launcher: Path, score: Path, tmp_path: Path) -> None:
-    with pytest.raises(UnknownEngineOptionError, match="Supported options: sheets"):
-        _engine(launcher).recognize(
-            score, tmp_path / "out", timeout_seconds=5, options={"device": "cuda"}
-        )
 
 
 def test_missing_executable_returns_failure_result(
@@ -299,7 +306,7 @@ def test_missing_executable_returns_failure_result(
 
     assert result.success is False
     assert "AUDIVERIS_EXE" in (result.error or "")
-    assert result.options == {"sheets": None}
+    assert result.options == {}
     assert runner.calls == []
 
 
@@ -337,6 +344,27 @@ def test_output_that_would_overwrite_input_is_refused(
     source.write_bytes(b"original")
 
     result = _engine(launcher).recognize(source, tmp_path, timeout_seconds=5)
+
+    assert result.success is False
+    assert "over the input" in (result.error or "")
+    assert source.read_bytes() == b"original"
+    assert runner.calls == []
+
+
+def test_hard_linked_output_that_would_overwrite_input_is_refused(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, tmp_path: Path
+) -> None:
+    runner = _install(monkeypatch, FakeRunner())
+    source = tmp_path / "input.png"
+    source.write_bytes(b"original")
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    try:
+        os.link(source, output_dir / "input.mxl")
+    except OSError as exc:
+        pytest.skip(f"hard links not supported here: {exc}")
+
+    result = _engine(launcher).recognize(source, output_dir, timeout_seconds=5)
 
     assert result.success is False
     assert "over the input" in (result.error or "")

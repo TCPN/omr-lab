@@ -16,27 +16,23 @@
    4. the documented default install location for the platform (`/opt/audiveris/bin/Audiveris` on Linux, `C:\Program Files\Audiveris\Audiveris.exe` on Windows).
 
    If an explicit path or `AUDIVERIS_EXE` is set but wrong, the adapter reports that instead of falling back to `PATH`.
-3. Check: `AudiverisEngine().check_available()` runs `<launcher> -version` (timeout 60 s by default, `version_timeout_seconds=` to change) and returns the parsed version, or `available=False` with an actionable message.
+3. Check: `AudiverisEngine().check_available()` runs `<launcher> -version` (timeout 60 s by default, `version_timeout_seconds=` to change) and returns the parsed version, or `available=False` with an actionable message. The result, including a failure, is cached per `AudiverisEngine` instance, so Java starts at most once for it; create a new instance to re-check after installing or changing Audiveris.
 
-When Audiveris is missing, `check_available()` returns `available=False` and `recognize()` returns `EngineResult(success=False, error=...)` with the same guidance; neither raises. Invalid options raise `InvalidEngineOptionError`/`UnknownEngineOptionError` before anything runs, as documented in the engine interface.
+When Audiveris is missing or `-version` fails, `check_available()` returns `available=False` and `recognize()` returns `EngineResult(success=False, error=...)` with the same message; neither raises. Invalid options raise `InvalidEngineOptionError`/`UnknownEngineOptionError` before anything runs, as documented in the engine interface.
 
 ## Invocation
 
 ```text
-<launcher> -batch -transcribe -export [-sheets <ids>...] -output <output_dir> -- <input_path>
+<launcher> -batch -transcribe -export -output <output_dir> -- <input_path>
 ```
 
 - `-batch`: no graphical interface. `-transcribe`: transcribe each book. `-export`: export each book as MusicXML. `-output`: the folder that receives all output files. `--`: every following argument is an input file, even if it starts with `-`.
 - Arguments are passed as a list through `run_command` (no shell), with the caller's `timeout_seconds`; on timeout the whole process tree is killed.
-- `-version` is run once per `AudiverisEngine` instance (in `check_available()` or before the first `recognize()`) and its result is reported in `EngineResult.version`.
+- `recognize()` reuses the cached `check_available()` result: `-version` runs once per `AudiverisEngine` instance (in `check_available()` or before the first `recognize()`), and its version is reported in `EngineResult.version`.
 
 ### Options
 
-| Option | Default | Maps to |
-| --- | --- | --- |
-| `sheets` | `None` (all sheets) | `-sheets` followed by the space-separated ids/ranges, e.g. `"1 3-5"` → `-sheets 1 3-5` |
-
-`sheets` must match sheet ids starting at 1 and `X-Y` ranges separated by single spaces; anything else raises `InvalidEngineOptionError`. Other Audiveris flags (`-constant`, `-step`, `-force`, `-save`, `-print`, `-swap`, `-playlist`) are intentionally not exposed yet.
+The adapter supports no options yet; any option name raises `UnknownEngineOptionError` ("Supported options: (none)"). `-sheets` is documented, but how it parses several ids/ranges has not been verified, so sheet selection is deferred until it has been checked against a real installation. Other Audiveris flags (`-constant`, `-step`, `-force`, `-save`, `-print`, `-swap`, `-playlist`) are not exposed either.
 
 ### Results and artifacts
 
@@ -44,7 +40,7 @@ When Audiveris is missing, `check_available()` returns `available=False` and `re
 - Artifacts are every `.mxl`/`.musicxml` file under `output_dir` (searched recursively) that is new or modified by this run; files left by earlier runs are ignored. One file is reported as `artifacts["musicxml"]`; several (for example a book with several movements) are reported as `artifacts["musicxml:<relative path>"]`.
 - `success` is `True` only if the process exited with code 0, did not time out, **and** at least one artifact was written. Audiveris exit codes are not documented, so a zero exit alone is not trusted. Artifacts from failed runs are still listed for inspection.
 - `diagnostics` contain the argument list, the return code or launch/timeout error, and the last 20 non-empty lines of stdout and stderr.
-- Safety: the input file is never written. `.omr` project files are refused as input (Audiveris uses them as input *and* output and would modify them), and a run whose `<output_dir>/<stem>.mxl` would be the input file itself is refused.
+- Safety: the input file is never written. `.omr` project files are refused as input (Audiveris uses them as input *and* output and would modify them), and a run whose `<output_dir>/<stem>.mxl` would be the input file itself (same resolved path, or an existing hard link to it per `Path.samefile`) is refused.
 - A successful result only means MusicXML was produced, not that the music was recognized correctly.
 
 ## Verified CLI facts
@@ -66,7 +62,7 @@ Verified on 2026-10-14 against the Audiveris handbook (web edition, which shows 
 - **Process exit codes**: undocumented; whether a failed transcription returns non-zero is unknown. Hence the artifact requirement.
 - **Whether `-export` alone triggers transcription** in batch mode: not stated, so `-transcribe` is passed explicitly.
 - **File names for multi-movement books** (e.g. `foo.mvt1.mxl`): not documented on the pages read; the adapter therefore collects any new `.mxl`/`.musicxml` file.
-- **Exact `-sheets` parsing** when followed by other options: only the help line `-sheets int[] : Select sheet numbers and ranges (1 4-5)` was verified; the adapter places `-output` after the ids and `--` before the input.
+- **Exact `-sheets` parsing** of several ids/ranges: only the help line `-sheets int[] : Select sheet numbers and ranges (1 4-5)` was verified, so the adapter does not offer sheet selection yet.
 - **macOS launcher path** inside `Audiveris.app`: not documented.
 - **Real runs**: no Audiveris installation was available when the adapter was written; the integration tests have not yet been run against a real engine.
 
