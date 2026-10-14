@@ -119,6 +119,15 @@ class PartInfo:
     measure_count: int | None
 
 
+def _lists_from_tuples(value: Any) -> Any:
+    """Recursively turn tuples (as left by ``dataclasses.asdict``) into lists."""
+    if isinstance(value, dict):
+        return {key: _lists_from_tuples(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_lists_from_tuples(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class MusicXmlMetadata:
     """Metadata present in the document. Absent values are ``None`` or empty, never guessed.
@@ -141,7 +150,7 @@ class MusicXmlMetadata:
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dict (tuples become lists)."""
-        return asdict(self)
+        return _lists_from_tuples(asdict(self))
 
 
 @dataclass(frozen=True)
@@ -195,7 +204,16 @@ def load_musicxml(path: str | Path, *, max_bytes: int = DEFAULT_MAX_BYTES) -> Mu
                 "limit. Raise max_bytes if this file is expected.",
                 path=path,
             )
-        data = path.read_bytes()
+        # The file can grow after stat(); never read more than max_bytes + 1.
+        with path.open("rb") as handle:
+            data = handle.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise MusicXmlError(
+                "musicxml_unreadable",
+                f"MusicXML file {path} is larger than the {max_bytes}-byte limit. "
+                "Raise max_bytes if this file is expected.",
+                path=path,
+            )
     except OSError as exc:
         raise MusicXmlError(
             "musicxml_unreadable",

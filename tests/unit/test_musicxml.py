@@ -207,10 +207,10 @@ def test_unreadable_file_via_oserror(tmp_path: Path, monkeypatch: pytest.MonkeyP
     target = tmp_path / "score.musicxml"
     target.write_bytes(b"<score-partwise/>")
 
-    def fail(_self: Path) -> bytes:
+    def fail(_self: Path, *args: object, **kwargs: object) -> bytes:
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr(Path, "read_bytes", fail)
+    monkeypatch.setattr(Path, "open", fail)
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(target)
     assert excinfo.value.code == "musicxml_unreadable"
@@ -474,3 +474,30 @@ def test_mxl_member_over_size_limit(tmp_path: Path) -> None:
         load_musicxml(archive, max_bytes=20_000)
     assert excinfo.value.code == "musicxml_unreadable"
     assert excinfo.value.member == "score.xml"
+
+
+def test_metadata_to_dict_returns_lists_not_tuples() -> None:
+    meta = load_musicxml(FIXTURES / "valid-partwise.musicxml").metadata
+    data = meta.to_dict()
+    assert isinstance(data["parts"], list)
+    assert isinstance(data["creators"], list)
+    assert data == json.loads(json.dumps(data, ensure_ascii=False))
+
+
+def test_file_growing_after_stat_is_still_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "grows.musicxml"
+    target.write_bytes(b"<a/>")
+    real_stat = Path.stat
+
+    def small_stat(self: Path, *args: object, **kwargs: object) -> object:
+        result = real_stat(self, *args, **kwargs)
+        if self == target:
+            target.write_bytes(b"x" * 100)  # grows between stat() and read
+        return result
+
+    monkeypatch.setattr(Path, "stat", small_stat)
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target, max_bytes=10)
+    assert excinfo.value.code == "musicxml_unreadable"
