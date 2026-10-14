@@ -12,7 +12,7 @@
   "timing": {"duration_seconds": 3.25, "started_at": "2026-10-13T09:30:00Z"},
   "score": null,
   "warnings": [
-    {"code": "score_content_not_normalized", "message": "Normalized score content is not produced by this schema version; see the musicxml artifact."}
+    {"code": "score_not_normalized", "message": "Normalized score content is not produced by this schema version; see the musicxml artifact."}
   ],
   "error": null
 }

@@ -78,10 +78,7 @@
       "description": "Raw engine and pipeline artifacts, keyed by artifact kind (e.g. 'musicxml'). Values are POSIX-style paths relative to the run output directory (no absolute paths, backslashes, control characters such as newlines, or '..' segments). Kept separate from normalized content.",
       "type": "object",
       "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
-      "additionalProperties": {
-        "type": "string",
-        "pattern": "^(?![\\s\\S]*[\\u0000-\\u001F\\u007F])(?!/)(?![A-Za-z]:)(?!(.*/)?\\.\\.(/|$))[^\\\\]+$"
-      }
+      "additionalProperties": {"$ref": "#/$defs/relativePosixPath"}
     },
     "timing": {
       "description": "Wall-clock timing of the run.",
@@ -148,6 +145,36 @@
           "type": ["integer", "null"]
         }
       }
+    }
+  },
+  "$defs": {
+    "relativePosixPath": {
+      "$comment": "One rule per entry so a violation names the broken rule. Control characters are rejected first; the other patterns can then assume a single line.",
+      "description": "A POSIX-style path relative to the run output directory.",
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "description": "must not contain control characters such as newlines or tabs",
+          "not": {"pattern": "[\\u0000-\\u001F\\u007F]"}
+        },
+        {
+          "description": "must be relative, not start with '/'",
+          "not": {"pattern": "^/"}
+        },
+        {
+          "description": "must not start with a Windows drive prefix such as 'C:'",
+          "not": {"pattern": "^[A-Za-z]:"}
+        },
+        {
+          "description": "must use '/' as the separator, not '\\'",
+          "not": {"pattern": "\\\\"}
+        },
+        {
+          "description": "must not contain a '..' segment",
+          "not": {"pattern": "(^|/)\\.\\.(/|$)"}
+        }
+      ]
     }
   },
   "allOf": [

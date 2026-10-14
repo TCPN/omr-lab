@@ -1,9 +1,9 @@
-# Normalized JSON Contract (Run Document v0.1.0)
+# Run Document JSON Schema (v0.1.0)
 
 Each pipeline run produces one **run document**: a JSON object recording what was run, how, and what came out. It records only facts supported by the pipeline and engine output. A valid run document is not proof that the music was recognized correctly.
 
 - Schema (source of truth): [`src/omr_lab/schemas/run-0.1.0.schema.json`](../src/omr_lab/schemas/run-0.1.0.schema.json), JSON Schema draft 2020-12, `$id` `urn:omr-lab:schema:run:0.1.0`. It ships inside the `omr_lab` package.
-- Validation: `omr_lab.schemas.validate_run_document(document)` raises `RunDocumentValidationError` (a `ValueError`) whose `errors` list holds one `"<json path>: <message>"` entry per violation. `omr_lab.schemas.load_run_schema()` returns the schema as a dict.
+- Validation: `omr_lab.schemas.validate_run_document(document, *, version=None)` raises `RunDocumentValidationError` (a `ValueError`) whose `errors` list holds one `"<json path>: <message>"` entry per violation, ordered by location (array indexes numerically). Artifact path errors name the broken rule instead of printing a regular expression. `omr_lab.schemas.load_run_schema(version=CURRENT_RUN_SCHEMA_VERSION)` returns a schema as a dict.
 - Examples: `tests/fixtures/run-documents/valid/` and `tests/fixtures/run-documents/invalid/`.
 
 ## Example: succeeded run
@@ -88,7 +88,7 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `engine_timeout` | error | Engine process exceeded its timeout. |
 | `musicxml_invalid` | error | Engine output could not be parsed or validated as MusicXML. |
 | `internal_error` | error | Unexpected pipeline error; the message should say what failed. |
-| `score_content_not_normalized` | warning | Musical content exists only in raw artifacts. |
+| `score_not_normalized` | warning | Musical content exists only in raw artifacts. |
 
 ## Rules
 - Do not fabricate coordinates, confidence values, or musical properties absent from engine output. Unknown values are `null` or absent, never guessed.
@@ -97,3 +97,7 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 
 ## Versioning
 `schema_version` is fixed per schema file. Any change to the contract adds a new schema file with a new version (for example, `run-0.2.0.schema.json` when issue #19 replaces the `score` placeholder with the score content model) and updates this document. Within 0.x, any change may be breaking.
+
+- Old schema files stay in the package. `SUPPORTED_RUN_SCHEMA_VERSIONS` lists every version that can still be validated; `CURRENT_RUN_SCHEMA_VERSION` is the one writers emit.
+- Writers always emit the current version.
+- Readers validate according to the document's own `schema_version`: `validate_run_document(document)` picks that schema when the version is supported. A missing or unknown `schema_version` is validated against the current schema and reported as a violation at `$.schema_version` (or `$` when missing). Passing an unsupported `version=` explicitly raises `ValueError`.

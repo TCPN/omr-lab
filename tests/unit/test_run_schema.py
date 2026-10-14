@@ -6,7 +6,8 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from omr_lab.schemas import (
-    RUN_SCHEMA_VERSION,
+    CURRENT_RUN_SCHEMA_VERSION,
+    SUPPORTED_RUN_SCHEMA_VERSIONS,
     RunDocumentValidationError,
     load_run_schema,
     validate_run_document,
@@ -24,7 +25,7 @@ INVALID_EXPECTED_PATH = {
     "missing-engine-version": "$.engine",
     "empty-engine-name": "$.engine.name",
     "unknown-status": "$.status",
-    "failed-without-error": "$.error",
+    "failed-with-null-error": "$.error",
     "succeeded-with-error": "$.error",
     "error-missing-message": "$.error",
     "missing-score": "$",
@@ -32,7 +33,6 @@ INVALID_EXPECTED_PATH = {
     "missing-options": "$",
     "absolute-artifact-path": "$.artifacts.musicxml",
     "parent-artifact-path": "$.artifacts.musicxml",
-    "newline-parent-artifact-path": "$.artifacts.musicxml",
     "trailing-newline-artifact-path": "$.artifacts.musicxml",
     "negative-duration": "$.timing.duration_seconds",
     "warning-as-plain-string": "$.warnings[0]",
@@ -51,8 +51,8 @@ def test_schema_is_valid_draft_2020_12():
 
 def test_schema_version_matches_constant():
     schema = load_run_schema()
-    assert schema["properties"]["schema_version"]["const"] == RUN_SCHEMA_VERSION
-    assert schema["$id"].endswith(RUN_SCHEMA_VERSION)
+    assert schema["properties"]["schema_version"]["const"] == CURRENT_RUN_SCHEMA_VERSION
+    assert schema["$id"].endswith(CURRENT_RUN_SCHEMA_VERSION)
 
 
 def test_invalid_fixture_set_matches_expectations():
@@ -77,7 +77,7 @@ def test_invalid_documents_fail(name):
 @pytest.mark.parametrize("path", VALID, ids=lambda p: p.stem)
 def test_valid_documents_carry_version_and_engine_provenance(path):
     document = _load(path)
-    assert document["schema_version"] == RUN_SCHEMA_VERSION
+    assert document["schema_version"] == CURRENT_RUN_SCHEMA_VERSION
     assert document["engine"]["name"]
     assert "version" in document["engine"]
 
@@ -126,3 +126,75 @@ def test_load_run_schema_returns_independent_copies():
     schema["properties"].clear()
     assert load_run_schema()["properties"]
     validate_run_document(_load(VALID[0]))
+
+
+def _with_artifact(value: str) -> dict:
+    document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
+    document["artifacts"] = {"musicxml": value}
+    return document
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("/abs/result.musicxml", "must be relative"),
+        ("C:result.musicxml", "Windows drive prefix"),
+        ("raw\\result.musicxml", "separator"),
+        ("raw/../result.musicxml", "'..' segment"),
+        ("result.musicxml\n", "control characters"),
+    ],
+)
+def test_artifact_path_errors_name_the_broken_rule(value, expected):
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(_with_artifact(value))
+    (message,) = excinfo.value.errors
+    assert message.startswith("$.artifacts.musicxml: ")
+    assert expected in message
+    assert "(?" not in message and "^" not in message, "should not echo the regex"
+
+
+def test_newline_cannot_hide_parent_segment():
+    # '.' in a regex does not match a newline; the '..' rule must still apply.
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(_with_artifact("raw\n/../../outside.xml"))
+    messages = excinfo.value.errors
+    assert any("control characters" in message for message in messages), messages
+    assert any("'..' segment" in message for message in messages), messages
+
+
+def test_errors_are_ordered_by_numeric_array_index():
+    document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
+    document["warnings"] = [{"code": "ok", "message": "fine"} for _ in range(12)]
+    for index in (2, 10):
+        document["warnings"][index] = "not an object"
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(document)
+    paths = [message.split(": ", 1)[0] for message in excinfo.value.errors]
+    assert paths == ["$.warnings[2]", "$.warnings[10]"]
+
+
+def test_supported_versions_include_current():
+    assert CURRENT_RUN_SCHEMA_VERSION in SUPPORTED_RUN_SCHEMA_VERSIONS
+    for version in SUPPORTED_RUN_SCHEMA_VERSIONS:
+        assert load_run_schema(version)["properties"]["schema_version"]["const"] == version
+
+
+def test_unsupported_explicit_version_is_rejected():
+    document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
+    with pytest.raises(ValueError, match="Unsupported run schema version"):
+        validate_run_document(document, version="9.9.9")
+    with pytest.raises(ValueError, match="Unsupported run schema version"):
+        load_run_schema("9.9.9")
+
+
+def test_explicit_version_validates_against_that_schema():
+    document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
+    validate_run_document(document, version=CURRENT_RUN_SCHEMA_VERSION)
+
+
+def test_unknown_document_version_is_reported_as_violation():
+    document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
+    document["schema_version"] = "9.9.9"
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(document)
+    assert [m.split(": ", 1)[0] for m in excinfo.value.errors] == ["$.schema_version"]
