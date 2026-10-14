@@ -52,7 +52,7 @@ All top-level fields are **required**; unknown top-level fields are rejected. "N
 | `status` | `"succeeded"` \| `"failed"` | Pipeline outcome, not a correctness claim. |
 | `input` | object | See below. |
 | `engine` | object | Engine provenance. See below. |
-| `options` | object | Effective run/engine options; `{}` when none. Values are any JSON. Populated by issue #21. |
+| `options` | object | Effective engine options as echoed in `EngineResult.options`; `{}` when none or when the engine did not return a result. Values are any JSON. See [pipeline.md](pipeline.md). |
 | `artifacts` | object | Raw artifacts by kind (e.g. `musicxml`, `engine_log`); may be `{}`. |
 | `timing` | object | See below. |
 | `score` | `null` | Normalized musical content. Always `null` in 0.1.0 (placeholder for issue #19). |
@@ -85,10 +85,15 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `invalid_input` | error | Input path missing, unreadable, or unsupported type. |
 | `engine_unavailable` | error | Engine prerequisites not found (`check_available()` failed). |
 | `engine_failed` | error | Engine process exited non-zero or the adapter reported failure. |
+| `invalid_option` | error | The engine rejected an option name or value (`InvalidEngineOptionError`, including `UnknownEngineOptionError`). |
 | `engine_timeout` | error | Engine process exceeded its timeout. |
 | `musicxml_invalid` | error | Engine output could not be parsed or validated as MusicXML. |
 | `internal_error` | error | Unexpected pipeline error; the message should say what failed. |
 | `score_not_normalized` | warning | Musical content exists only in raw artifacts. |
+| `engine_diagnostic` | warning | One entry of `EngineResult.diagnostics`, copied verbatim. |
+| `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the run output directory, missing, or an unrepresentable path). |
+
+The pipeline's use of these codes is described in [pipeline.md](pipeline.md). `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed`.
 
 ## Rules
 - Do not fabricate coordinates, confidence values, or musical properties absent from engine output. Unknown values are `null` or absent, never guessed.
