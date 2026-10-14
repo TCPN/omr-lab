@@ -75,12 +75,12 @@
       "propertyNames": {"minLength": 1}
     },
     "artifacts": {
-      "description": "Raw engine and pipeline artifacts, keyed by artifact kind (e.g. 'musicxml'). Values are POSIX-style paths relative to the run output directory (no absolute paths, backslashes, or '..' segments). Kept separate from normalized content.",
+      "description": "Raw engine and pipeline artifacts, keyed by artifact kind (e.g. 'musicxml'). Values are POSIX-style paths relative to the run output directory (no absolute paths, backslashes, control characters such as newlines, or '..' segments). Kept separate from normalized content.",
       "type": "object",
       "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
       "additionalProperties": {
         "type": "string",
-        "pattern": "^(?!/)(?![A-Za-z]:)(?!(.*/)?\\.\\.(/|$))[^\\\\]+$"
+        "pattern": "^(?![\\s\\S]*[\\u0000-\\u001F\\u007F])(?!/)(?![A-Za-z]:)(?!(.*/)?\\.\\.(/|$))[^\\\\]+$"
       }
     },
     "timing": {

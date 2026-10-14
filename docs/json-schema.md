@@ -69,7 +69,7 @@ All top-level fields are **required**; unknown top-level fields are rejected. "N
 - `version` (required, nullable string): version reported by the engine; `null` when unknown. Never guessed.
 
 ### `artifacts`
-Keys are snake_case artifact kinds. Values are POSIX-style paths relative to the run output directory: absolute paths, Windows drive prefixes, backslashes, and `..` segments are rejected. Raw engine artifacts stay in these files and are never merged into `score`.
+Keys are snake_case artifact kinds. Values are POSIX-style paths relative to the run output directory: absolute paths, Windows drive prefixes, backslashes, control characters (including newlines), and `..` segments are rejected. Raw engine artifacts stay in these files and are never merged into `score`.
 
 ### `timing`
 - `duration_seconds` (required, number ≥ 0): total elapsed wall-clock time.

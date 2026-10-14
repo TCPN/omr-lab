@@ -32,6 +32,8 @@ INVALID_EXPECTED_PATH = {
     "missing-options": "$",
     "absolute-artifact-path": "$.artifacts.musicxml",
     "parent-artifact-path": "$.artifacts.musicxml",
+    "newline-parent-artifact-path": "$.artifacts.musicxml",
+    "trailing-newline-artifact-path": "$.artifacts.musicxml",
     "negative-duration": "$.timing.duration_seconds",
     "warning-as-plain-string": "$.warnings[0]",
     "input-filename-with-directory": "$.input.filename",
