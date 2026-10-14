@@ -6,7 +6,7 @@ Local-first, modular Optical Music Recognition (OMR) pipeline:
 
 ## Status
 - Phase 1: Local OMR Foundation
-- Initial engine candidate: Audiveris (verify version, CLI, and license before use/distribution)
+- Initial engine candidate: Audiveris, adapter in `omr_lab.engines.AudiverisEngine`; setup, verified CLI, and AGPL notes in `docs/engines/audiveris.md` (license policy pending decision #30)
 - Second candidate: homr
 - Interchange format: MusicXML
 - Python, uv, pytest, Ruff
@@ -51,6 +51,7 @@ uv run pytest -m ""                     # everything, marked or not
 - `docs/governance/`: roles, workflow, milestones and labels
 - `docs/issues/`: proposed issue bodies (not yet live GitHub Issues)
 - `docs/research/`: research notes and sources
+- `docs/engines/`: per-engine setup, verified CLI behavior, and license notes
 - `src/omr_lab/`: Python package
 - `tests/`: automated tests
 

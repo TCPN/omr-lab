@@ -1,6 +1,8 @@
 # OMR Engine Interface
 
-This contract separates pipeline orchestration from engine-specific behavior. Adapters for Audiveris and homr should implement the same protocol; this issue does not add either production adapter.
+This contract separates pipeline orchestration from engine-specific behavior. Adapters for Audiveris and homr implement the same protocol. Implemented adapters:
+
+- Audiveris: `omr_lab.engines.AudiverisEngine`, see [engines/audiveris.md](engines/audiveris.md).
 
 ## Contract
 

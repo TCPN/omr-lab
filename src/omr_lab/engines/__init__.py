@@ -1,5 +1,6 @@
-"""Interfaces and shared utilities for OMR engine adapters."""
+"""Interfaces, shared utilities, and adapters for OMR engines."""
 
+from omr_lab.engines.audiveris import AudiverisEngine
 from omr_lab.engines.base import (
     CommandResult,
     Engine,
@@ -14,6 +15,7 @@ from omr_lab.engines.base import (
 )
 
 __all__ = [
+    "AudiverisEngine",
     "CommandResult",
     "Engine",
     "EngineAvailability",
