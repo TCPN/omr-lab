@@ -48,6 +48,7 @@ uv run pytest -m ""                     # everything, marked or not
 - `AGENTS.md`: coding-agent rules (`CLAUDE.md` imports it for Claude Code)
 - `docs/architecture.md`: boundaries and data flow
 - `docs/json-schema.md`: normalized result contract draft
+- `docs/musicxml.md`: MusicXML loading, validation errors/warnings, and XML safety
 - `docs/governance/`: roles, workflow, milestones and labels
 - `docs/issues/`: proposed issue bodies (not yet live GitHub Issues)
 - `docs/research/`: research notes and sources
