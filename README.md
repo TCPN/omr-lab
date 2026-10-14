@@ -21,7 +21,7 @@ uv run ruff check .
 uv run omr-lab --help
 ```
 
-The bootstrap project does not require Java or an OMR engine. Real recognition is a later milestone.
+Installing and testing the project does not require Java or an OMR engine. With Audiveris installed, `AudiverisEngine.recognize()` already runs real recognition; the CLI and pipeline integration come later in milestone M1.
 
 ## Test selection
 Tests that need more than a plain Python environment carry a pytest marker:

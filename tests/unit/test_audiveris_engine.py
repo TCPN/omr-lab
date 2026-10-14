@@ -141,6 +141,43 @@ def test_path_lookup_tries_documented_launcher_names() -> None:
     assert path == Path("/opt/audiveris/bin/Audiveris")
 
 
+@pytest.mark.parametrize("suffix", [".bat", ".cmd", ".BAT"])
+def test_explicit_batch_launcher_is_refused(tmp_path: Path, suffix: str) -> None:
+    batch = tmp_path / f"Audiveris{suffix}"
+    batch.write_text("@echo off\n", encoding="utf-8")
+
+    for engine in (_engine(batch), _engine(environ={"AUDIVERIS_EXE": str(batch)})):
+        path, message = engine.find_executable()
+        assert path is None
+        assert "batch file" in (message or "")
+        assert "Audiveris.exe" in (message or "")
+
+
+def test_batch_launcher_on_path_is_skipped(tmp_path: Path) -> None:
+    batch = tmp_path / "Audiveris.bat"
+    exe = tmp_path / "audiveris.exe"
+    found = {"Audiveris": str(batch), "audiveris": None}
+
+    path, message = _engine(which=found.get).find_executable()
+    assert path is None
+    assert "batch file" in (message or "")
+
+    found["audiveris"] = str(exe)
+    assert _engine(which=found.get).find_executable() == (exe, None)
+
+
+def test_relative_explicit_launcher_is_made_absolute(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path
+) -> None:
+    monkeypatch.chdir(launcher.parent)
+
+    path, message = _engine(Path(launcher.name)).find_executable()
+
+    assert message is None
+    assert path is not None and path.is_absolute()
+    assert path == launcher
+
+
 def test_default_install_location_is_used(monkeypatch: pytest.MonkeyPatch, launcher: Path) -> None:
     monkeypatch.setattr(audiveris_module, "_default_launchers", lambda: (launcher,))
 
@@ -372,6 +409,19 @@ def test_hard_linked_output_that_would_overwrite_input_is_refused(
     assert runner.calls == []
 
 
+def test_uncompressed_xml_output_is_collected(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+) -> None:
+    # Audiveris writes <stem>.xml when its compression preference is disabled.
+    _install(monkeypatch, FakeRunner(write=("score.xml",)))
+    output_dir = tmp_path / "out"
+
+    result = _engine(launcher).recognize(score, output_dir, timeout_seconds=5)
+
+    assert result.success is True
+    assert result.artifacts == {"musicxml": output_dir / "score.xml"}
+
+
 def test_nonzero_exit_is_failure_even_with_artifact(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
 ) -> None:
@@ -415,7 +465,7 @@ def test_zero_exit_without_artifact_is_failure(
 
     assert result.success is False
     assert result.returncode == 0
-    assert "wrote no .mxl or .musicxml" in (result.error or "")
+    assert "wrote no .mxl/.xml/.musicxml" in (result.error or "")
     assert result.artifacts == {}
 
 

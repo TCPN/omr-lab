@@ -49,14 +49,22 @@ INSTALL_DOC_URL = "https://audiveris.github.io/audiveris/_pages/tutorials/instal
 
 # Launcher names searched on PATH. ``audiveris`` is the Scoop command on Windows;
 # ``Audiveris`` is the launcher of the Linux .deb package and of source builds
-# (on Windows, shutil.which also resolves Audiveris.exe / Audiveris.bat via PATHEXT).
+# (on Windows, shutil.which also tries PATHEXT suffixes such as Audiveris.exe).
 PATH_NAMES: tuple[str, ...] = ("audiveris", "Audiveris")
 
 # Default install locations documented in the handbook's binary install page.
 LINUX_DEFAULT_LAUNCHER = Path("/opt/audiveris/bin/Audiveris")
 WINDOWS_DEFAULT_LAUNCHER = Path(r"C:\Program Files\Audiveris\Audiveris.exe")
 
-MUSICXML_SUFFIXES: frozenset[str] = frozenset({".mxl", ".musicxml"})
+# Windows runs .bat/.cmd files through cmd.exe even without shell=True, and cmd.exe
+# re-parses the arguments, so input/output paths would no longer be passed safely.
+BATCH_LAUNCHER_SUFFIXES: frozenset[str] = frozenset({".bat", ".cmd"})
+
+# Audiveris writes compressed ``.mxl`` by default and uncompressed ``.xml`` when its
+# compression preference is disabled; ``.musicxml`` is accepted as well.
+MUSICXML_SUFFIXES: tuple[str, ...] = (".mxl", ".xml", ".musicxml")
+
+_SUFFIX_LIST = "/".join(MUSICXML_SUFFIXES)
 
 DEFAULT_VERSION_TIMEOUT_SECONDS = 60.0
 
@@ -78,6 +86,20 @@ def _default_launchers() -> tuple[Path, ...]:
     if sys.platform.startswith("linux"):
         return (LINUX_DEFAULT_LAUNCHER,)
     return ()
+
+
+def _is_batch_launcher(path: Path) -> bool:
+    return path.suffix.lower() in BATCH_LAUNCHER_SUFFIXES
+
+
+def batch_launcher_message(path: Path) -> str:
+    """Explain why a .bat/.cmd launcher is refused."""
+    return (
+        f"Audiveris launcher {str(path)!r} is a batch file. Windows runs batch files "
+        "through cmd.exe, which re-parses file paths, so it is not used. Point "
+        f"{EXECUTABLE_ENV_VAR} at Audiveris.exe from the Windows installer instead, for "
+        f"example {WINDOWS_DEFAULT_LAUNCHER}."
+    )
 
 
 def missing_executable_message() -> str:
@@ -163,7 +185,7 @@ class AudiverisEngine:
         """Return the launcher path, or None plus an actionable message."""
         if self._explicit is not None:
             if self._explicit.is_file():
-                return self._explicit, None
+                return self._accept(self._explicit)
             return None, (
                 f"Audiveris executable {str(self._explicit)!r} (passed explicitly) does not "
                 "exist or is not a file. " + missing_executable_message()
@@ -172,20 +194,36 @@ class AudiverisEngine:
         if env_value:
             env_path = Path(env_value)
             if env_path.is_file():
-                return env_path, None
+                return self._accept(env_path)
             return None, (
                 f"{EXECUTABLE_ENV_VAR} is set to {env_value!r}, which does not exist or is "
                 "not a file. Set it to the full path of the Audiveris launcher, for example "
                 f"{LINUX_DEFAULT_LAUNCHER} or {WINDOWS_DEFAULT_LAUNCHER}."
             )
+        skipped: list[Path] = []
         for name in PATH_NAMES:
             found = self._which(name)
             if found:
-                return Path(found), None
+                path = Path(found)
+                if _is_batch_launcher(path):
+                    skipped.append(path)
+                    continue
+                return path.absolute(), None
         for candidate in _default_launchers():
             if candidate.is_file():
                 return candidate, None
+        if skipped:
+            return None, batch_launcher_message(skipped[0])
         return None, missing_executable_message()
+
+    @staticmethod
+    def _accept(path: Path) -> tuple[Path | None, str | None]:
+        if _is_batch_launcher(path):
+            return None, batch_launcher_message(path)
+        # A bare relative name such as ``Audiveris`` would be looked up on PATH by the
+        # OS rather than run from the current directory, so make it absolute. The path
+        # is not resolved: a symlinked launcher keeps its own name and location.
+        return path.absolute(), None
 
     def check_available(self) -> EngineAvailability:
         """Locate Audiveris and read its version; the result is cached per instance.
@@ -301,15 +339,16 @@ class AudiverisEngine:
                 "writes back to them; pass the source image or PDF instead."
             )
 
-        expected_output = output_dir / f"{input_path.stem}.mxl"
-        if expected_output.resolve() == input_path.resolve() or (
-            expected_output.exists() and expected_output.samefile(input_path)
-        ):
-            # samefile() also catches hard links, which resolve() does not.
-            return failure(
-                f"Audiveris would write {expected_output} over the input file; choose a "
-                "different output directory."
-            )
+        for suffix in MUSICXML_SUFFIXES:
+            expected_output = output_dir / f"{input_path.stem}{suffix}"
+            if expected_output.resolve() == input_path.resolve() or (
+                expected_output.exists() and expected_output.samefile(input_path)
+            ):
+                # samefile() also catches hard links, which resolve() does not.
+                return failure(
+                    f"Audiveris could write {expected_output} over the input file; choose "
+                    "a different output directory."
+                )
 
         # Every MusicXML file found after the run is attributed to it, so the output
         # directory must not already hold any; timestamps cannot tell a rewrite from
@@ -352,7 +391,7 @@ class AudiverisEngine:
             )
         if not produced:
             return failure(
-                f"Audiveris exited with code 0 but wrote no .mxl or .musicxml file to "
+                f"Audiveris exited with code 0 but wrote no {_SUFFIX_LIST} file to "
                 f"{output_dir}. The input may not contain recognizable music; see stdout/"
                 "stderr in the diagnostics.",
                 diagnostics,
