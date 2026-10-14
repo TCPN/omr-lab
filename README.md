@@ -47,7 +47,7 @@ uv run pytest -m ""                     # everything, marked or not
 ## Source of truth
 - `AGENTS.md`: coding-agent rules (`CLAUDE.md` imports it for Claude Code)
 - `docs/architecture.md`: boundaries and data flow
-- `docs/json-schema.md`: normalized result contract draft
+- `docs/json-schema.md`: normalized run document contract (schema in `src/omr_lab/schemas/`)
 - `docs/governance/`: roles, workflow, milestones and labels
 - `docs/issues/`: proposed issue bodies (not yet live GitHub Issues)
 - `docs/research/`: research notes and sources

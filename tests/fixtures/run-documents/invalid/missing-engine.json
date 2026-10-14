@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1.0",
+  "status": "succeeded",
+  "input": {
+    "filename": "score.png",
+    "media_type": "image/png"
+  },
+  "options": {},
+  "artifacts": {
+    "musicxml": "result.musicxml"
+  },
+  "timing": {
+    "duration_seconds": 12.5
+  },
+  "score": null,
+  "warnings": [],
+  "error": null
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": "0.1.0",
+  "status": "failed",
+  "input": {"filename": "score.png", "media_type": "image/png"},
+  "engine": {"name": "audiveris", "version": "5.4"},
+  "options": {},
+  "artifacts": {"engine_log": "raw/audiveris.log"},
+  "timing": {"duration_seconds": 41.0},
+  "score": null,
+  "warnings": [],
+  "error": {"code": "engine_failed", "message": "Audiveris exited with status 1; see raw/audiveris.log.", "returncode": 1}
+}

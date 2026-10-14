@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "status": "failed",
+  "input": {
+    "filename": "score.jpg",
+    "media_type": null
+  },
+  "engine": {
+    "name": "audiveris",
+    "version": null
+  },
+  "options": {},
+  "artifacts": {},
+  "timing": {
+    "duration_seconds": 0.0
+  },
+  "score": null,
+  "warnings": [],
+  "error": null
+}
