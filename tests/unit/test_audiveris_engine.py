@@ -1,6 +1,5 @@
 """Unit tests for the Audiveris adapter; process execution is mocked throughout."""
 
-import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from omr_lab.engines import (
     AudiverisEngine,
     CommandResult,
     Engine,
+    LauncherLookup,
     UnknownEngineOptionError,
 )
 from omr_lab.engines import audiveris as audiveris_module
@@ -42,6 +42,15 @@ class FakeRunner:
         self.version_result = version_result
         self.batch_result = batch_result
         self.write = write
+
+    @property
+    def run_dirs(self) -> list[Path]:
+        """The ``-output`` directories of the batch runs, in call order."""
+        return [
+            Path(command[command.index("-output") + 1])
+            for command, _ in self.calls
+            if "-output" in command
+        ]
 
     def __call__(self, args, *, timeout_seconds: float, cwd=None) -> CommandResult:
         command = tuple(str(arg) for arg in args)
@@ -101,31 +110,31 @@ def test_explicit_executable_wins_over_env_and_path(launcher: Path, tmp_path: Pa
     other.write_text("", encoding="utf-8")
     engine = _engine(launcher, environ={"AUDIVERIS_EXE": str(other)}, which=lambda n: str(other))
 
-    assert engine.find_executable() == (launcher, None)
+    assert engine.find_executable() == LauncherLookup(launcher, None)
 
 
 def test_env_var_used_before_path(launcher: Path) -> None:
     engine = _engine(environ={"AUDIVERIS_EXE": str(launcher)}, which=lambda n: "/usr/bin/x")
 
-    assert engine.find_executable() == (launcher, None)
+    assert engine.find_executable() == LauncherLookup(launcher, None)
 
 
 def test_env_var_pointing_nowhere_is_reported(tmp_path: Path) -> None:
     missing = tmp_path / "nope" / "Audiveris"
     engine = _engine(environ={"AUDIVERIS_EXE": str(missing)}, which=lambda n: "/usr/bin/x")
 
-    path, message = engine.find_executable()
+    lookup = engine.find_executable()
 
-    assert path is None
-    assert "AUDIVERIS_EXE" in (message or "")
-    assert str(missing) in (message or "")
+    assert lookup.path is None
+    assert "AUDIVERIS_EXE" in (lookup.message or "")
+    assert str(missing) in (lookup.message or "")
 
 
 def test_explicit_missing_executable_is_reported(tmp_path: Path) -> None:
-    path, message = _engine(tmp_path / "missing").find_executable()
+    lookup = _engine(tmp_path / "missing").find_executable()
 
-    assert path is None
-    assert "passed explicitly" in (message or "")
+    assert lookup.path is None
+    assert "passed explicitly" in (lookup.message or "")
 
 
 def test_path_lookup_tries_documented_launcher_names() -> None:
@@ -135,10 +144,10 @@ def test_path_lookup_tries_documented_launcher_names() -> None:
         asked.append(name)
         return "/opt/audiveris/bin/Audiveris" if name == "Audiveris" else None
 
-    path, _ = _engine(which=which).find_executable()
+    lookup = _engine(which=which).find_executable()
 
     assert asked == ["audiveris", "Audiveris"]
-    assert path == Path("/opt/audiveris/bin/Audiveris")
+    assert lookup == LauncherLookup(Path("/opt/audiveris/bin/Audiveris"), None)
 
 
 @pytest.mark.parametrize("suffix", [".bat", ".cmd", ".BAT"])
@@ -147,10 +156,10 @@ def test_explicit_batch_launcher_is_refused(tmp_path: Path, suffix: str) -> None
     batch.write_text("@echo off\n", encoding="utf-8")
 
     for engine in (_engine(batch), _engine(environ={"AUDIVERIS_EXE": str(batch)})):
-        path, message = engine.find_executable()
-        assert path is None
-        assert "batch file" in (message or "")
-        assert "Audiveris.exe" in (message or "")
+        lookup = engine.find_executable()
+        assert lookup.path is None
+        assert "batch file" in (lookup.message or "")
+        assert "Audiveris.exe" in (lookup.message or "")
 
 
 def test_batch_launcher_on_path_is_skipped(tmp_path: Path) -> None:
@@ -158,12 +167,12 @@ def test_batch_launcher_on_path_is_skipped(tmp_path: Path) -> None:
     exe = tmp_path / "audiveris.exe"
     found = {"Audiveris": str(batch), "audiveris": None}
 
-    path, message = _engine(which=found.get).find_executable()
-    assert path is None
-    assert "batch file" in (message or "")
+    lookup = _engine(which=found.get).find_executable()
+    assert lookup.path is None
+    assert "batch file" in (lookup.message or "")
 
     found["audiveris"] = str(exe)
-    assert _engine(which=found.get).find_executable() == (exe, None)
+    assert _engine(which=found.get).find_executable() == LauncherLookup(exe, None)
 
 
 def test_relative_explicit_launcher_is_made_absolute(
@@ -171,17 +180,17 @@ def test_relative_explicit_launcher_is_made_absolute(
 ) -> None:
     monkeypatch.chdir(launcher.parent)
 
-    path, message = _engine(Path(launcher.name)).find_executable()
+    lookup = _engine(Path(launcher.name)).find_executable()
 
-    assert message is None
-    assert path is not None and path.is_absolute()
-    assert path == launcher
+    assert lookup.message is None
+    assert lookup.path is not None and lookup.path.is_absolute()
+    assert lookup.path == launcher
 
 
 def test_default_install_location_is_used(monkeypatch: pytest.MonkeyPatch, launcher: Path) -> None:
     monkeypatch.setattr(audiveris_module, "_default_launchers", lambda: (launcher,))
 
-    assert _engine().find_executable() == (launcher, None)
+    assert _engine().find_executable() == LauncherLookup(launcher, None)
 
 
 def test_missing_audiveris_gives_actionable_availability(
@@ -274,6 +283,45 @@ def test_check_available_with_unparseable_version(
     assert "could not be parsed" in (availability.message or "")
 
 
+def test_parsed_version_counts_as_available_despite_nonzero_exit(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path
+) -> None:
+    # Exit codes are undocumented; a parsed version is trusted over them.
+    odd = CommandResult(args=(), returncode=1, stdout=VERSION_OUTPUT)
+    _install(monkeypatch, FakeRunner(version_result=odd))
+
+    availability = _engine(launcher).check_available()
+
+    assert availability.available is True
+    assert availability.version == "5.10.0"
+    assert "exit code 1" in (availability.message or "")
+
+
+def test_version_read_from_stderr_is_available(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path
+) -> None:
+    on_stderr = CommandResult(args=(), returncode=0, stderr=VERSION_OUTPUT)
+    _install(monkeypatch, FakeRunner(version_result=on_stderr))
+
+    availability = _engine(launcher).check_available()
+
+    assert availability.available is True
+    assert availability.version == "5.10.0"
+    assert "stderr" in (availability.message or "")
+
+
+def test_version_timeout_without_version_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path
+) -> None:
+    hung = CommandResult(args=(), timed_out=True, error="Command timed out after 60 seconds")
+    _install(monkeypatch, FakeRunner(version_result=hung))
+
+    availability = _engine(launcher).check_available()
+
+    assert availability.available is False
+    assert "timed out" in (availability.message or "")
+
+
 # --- recognition ----------------------------------------------------------
 
 
@@ -285,6 +333,9 @@ def test_recognize_builds_verified_batch_command(
 
     result = _engine(launcher).recognize(score, output_dir, timeout_seconds=123)
 
+    [run_dir] = runner.run_dirs
+    assert run_dir.parent == output_dir
+    assert run_dir.name.startswith("audiveris-")
     assert runner.calls[-1] == (
         (
             str(launcher),
@@ -292,7 +343,7 @@ def test_recognize_builds_verified_batch_command(
             "-transcribe",
             "-export",
             "-output",
-            str(output_dir),
+            str(run_dir),
             "--",
             str(score),
         ),
@@ -302,7 +353,7 @@ def test_recognize_builds_verified_batch_command(
     assert result.error is None
     assert result.returncode == 0
     assert result.version == "5.10.0"
-    assert result.artifacts == {"musicxml": output_dir / "score.mxl"}
+    assert result.artifacts == {"musicxml": run_dir / "score.mxl"}
     assert result.options == {}
     assert any("INFO done" in line for line in result.diagnostics)
     assert score.read_bytes() == b"not really a png"
@@ -319,6 +370,23 @@ def test_version_is_detected_once(
     engine.recognize(score, tmp_path / "b", timeout_seconds=5)
 
     assert [call[0][1] for call in runner.calls] == ["-version", "-batch", "-batch"]
+
+
+def test_runs_sharing_an_output_dir_get_separate_run_directories(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+) -> None:
+    runner = _install(monkeypatch, FakeRunner())
+    engine = _engine(launcher)
+    output_dir = tmp_path / "shared"
+
+    first = engine.recognize(score, output_dir, timeout_seconds=5)
+    second = engine.recognize(score, output_dir, timeout_seconds=5)
+
+    first_dir, second_dir = runner.run_dirs
+    assert first_dir != second_dir
+    assert first.success is True and second.success is True
+    assert first.artifacts == {"musicxml": first_dir / "score.mxl"}
+    assert second.artifacts == {"musicxml": second_dir / "score.mxl"}
 
 
 @pytest.mark.parametrize("name", ["sheets", "device"])
@@ -373,39 +441,49 @@ def test_omr_project_input_is_refused(
     assert runner.calls == []
 
 
-def test_output_that_would_overwrite_input_is_refused(
+def test_input_inside_output_dir_is_left_untouched(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, tmp_path: Path
 ) -> None:
-    runner = _install(monkeypatch, FakeRunner())
+    # Audiveris writes into a new run subdirectory, so <output_dir>/<stem>.mxl is
+    # never a target even when the input itself is that file.
+    runner = _install(monkeypatch, FakeRunner(write=("score.mxl",)))
     source = tmp_path / "score.mxl"
     source.write_bytes(b"original")
 
     result = _engine(launcher).recognize(source, tmp_path, timeout_seconds=5)
 
-    assert result.success is False
-    assert "over the input" in (result.error or "")
+    [run_dir] = runner.run_dirs
+    assert result.success is True
+    assert result.artifacts == {"musicxml": run_dir / "score.mxl"}
     assert source.read_bytes() == b"original"
-    assert runner.calls == []
 
 
-def test_hard_linked_output_that_would_overwrite_input_is_refused(
-    monkeypatch: pytest.MonkeyPatch, launcher: Path, tmp_path: Path
+def test_output_dir_that_is_a_file_returns_failure(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
 ) -> None:
     runner = _install(monkeypatch, FakeRunner())
-    source = tmp_path / "input.png"
-    source.write_bytes(b"original")
-    output_dir = tmp_path / "out"
-    output_dir.mkdir()
-    try:
-        os.link(source, output_dir / "input.mxl")
-    except OSError as exc:
-        pytest.skip(f"hard links not supported here: {exc}")
+    not_a_dir = tmp_path / "out"
+    not_a_dir.write_bytes(b"file")
 
-    result = _engine(launcher).recognize(source, output_dir, timeout_seconds=5)
+    result = _engine(launcher).recognize(score, not_a_dir, timeout_seconds=5)
 
     assert result.success is False
-    assert "over the input" in (result.error or "")
-    assert source.read_bytes() == b"original"
+    assert "not a directory" in (result.error or "")
+    assert not_a_dir.read_bytes() == b"file"
+    assert runner.calls == []  # Java is not started for a doomed call
+
+
+def test_uncreatable_output_dir_returns_failure(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+) -> None:
+    runner = _install(monkeypatch, FakeRunner())
+    blocker = tmp_path / "blocker"
+    blocker.write_bytes(b"file")
+
+    result = _engine(launcher).recognize(score, blocker / "out", timeout_seconds=5)
+
+    assert result.success is False
+    assert "Cannot create output directory" in (result.error or "")
     assert runner.calls == []
 
 
@@ -413,13 +491,14 @@ def test_uncompressed_xml_output_is_collected(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
 ) -> None:
     # Audiveris writes <stem>.xml when its compression preference is disabled.
-    _install(monkeypatch, FakeRunner(write=("score.xml",)))
     output_dir = tmp_path / "out"
 
+    runner = _install(monkeypatch, FakeRunner(write=("score.xml",)))
     result = _engine(launcher).recognize(score, output_dir, timeout_seconds=5)
 
+    [run_dir] = runner.run_dirs
     assert result.success is True
-    assert result.artifacts == {"musicxml": output_dir / "score.xml"}
+    assert result.artifacts == {"musicxml": run_dir / "score.xml"}
 
 
 def test_nonzero_exit_is_failure_even_with_artifact(
@@ -436,7 +515,9 @@ def test_nonzero_exit_is_failure_even_with_artifact(
     assert result.returncode == 3
     assert "code 3" in (result.error or "")
     assert "musicxml" in result.artifacts  # raw output is kept for inspection
+    assert result.artifacts["musicxml"].is_file()
     assert any("SEVERE boom" in line for line in result.diagnostics)
+    assert any(line.startswith("run directory: ") for line in result.diagnostics)
 
 
 def test_timeout_is_failure(
@@ -459,7 +540,7 @@ def test_timeout_is_failure(
 def test_zero_exit_without_artifact_is_failure(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
 ) -> None:
-    _install(monkeypatch, FakeRunner(write=("score.omr",)))
+    runner = _install(monkeypatch, FakeRunner(write=("score.omr",)))
 
     result = _engine(launcher).recognize(score, tmp_path / "out", timeout_seconds=5)
 
@@ -467,38 +548,81 @@ def test_zero_exit_without_artifact_is_failure(
     assert result.returncode == 0
     assert "wrote no .mxl/.xml/.musicxml" in (result.error or "")
     assert result.artifacts == {}
+    [run_dir] = runner.run_dirs
+    assert (run_dir / "score.omr").is_file()  # the run directory is kept on failure
 
 
-def test_output_dir_with_existing_musicxml_is_refused(
+def test_existing_files_in_output_dir_do_not_block_or_leak_into_results(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
 ) -> None:
     output_dir = tmp_path / "out"
     (output_dir / "sub").mkdir(parents=True)
     (output_dir / "sub" / "old.mxl").write_bytes(b"old run")
-    runner = FakeRunner(write=("score.mxl",))
-    _install(monkeypatch, runner)
+    (output_dir / "config.xml").write_bytes(b"<config/>")
+    (output_dir / "score.mxl").write_bytes(b"stale")
+    runner = _install(monkeypatch, FakeRunner(write=("score.mxl",)))
 
     result = _engine(launcher).recognize(score, output_dir, timeout_seconds=5)
+
+    [run_dir] = runner.run_dirs
+    assert result.success is True
+    assert result.artifacts == {"musicxml": run_dir / "score.mxl"}
+    assert (output_dir / "score.mxl").read_bytes() == b"stale"
+
+
+def test_unrelated_xml_written_by_the_run_is_not_reported(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+) -> None:
+    runner = _install(
+        monkeypatch, FakeRunner(write=("score.mxl", "config.xml", "sub/other.musicxml"))
+    )
+
+    result = _engine(launcher).recognize(score, tmp_path / "out", timeout_seconds=5)
+
+    [run_dir] = runner.run_dirs
+    assert result.success is True
+    assert result.artifacts == {"musicxml": run_dir / "score.mxl"}
+
+
+def test_only_unrelated_xml_is_not_success(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+) -> None:
+    _install(monkeypatch, FakeRunner(write=("config.xml",)))
+
+    result = _engine(launcher).recognize(score, tmp_path / "out", timeout_seconds=5)
 
     assert result.success is False
     assert result.artifacts == {}
-    assert "already contains MusicXML (sub/old.mxl)" in (result.error or "")
-    assert runner.calls == []
 
 
-def test_multiple_artifacts_are_all_reported(
-    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+@pytest.mark.parametrize(
+    ("written", "primary"),
+    [
+        (("score.mvt1.mxl", "sub/score.mvt2.musicxml"), "score.mvt1.mxl"),
+        (("score.mvt1.mxl", "score.xml", "sub/score.mvt2.musicxml"), "score.xml"),
+        (("score.musicxml", "score.mxl", "score.mvt1.mxl"), "score.mxl"),
+    ],
+)
+def test_multiple_artifacts_have_a_primary_and_are_all_reported(
+    monkeypatch: pytest.MonkeyPatch,
+    launcher: Path,
+    score: Path,
+    tmp_path: Path,
+    written: tuple[str, ...],
+    primary: str,
 ) -> None:
-    _install(monkeypatch, FakeRunner(write=("score.mvt1.mxl", "sub/score.mvt2.musicxml")))
-    output_dir = tmp_path / "out"
+    runner = _install(monkeypatch, FakeRunner(write=written))
 
-    result = _engine(launcher).recognize(score, output_dir, timeout_seconds=5)
+    result = _engine(launcher).recognize(score, tmp_path / "out", timeout_seconds=5)
 
+    [run_dir] = runner.run_dirs
+    expected = {"musicxml": run_dir / primary}
+    for name in written:
+        if name != primary:
+            expected[f"musicxml:{name}"] = run_dir / name
     assert result.success is True
-    assert result.artifacts == {
-        "musicxml:score.mvt1.mxl": output_dir / "score.mvt1.mxl",
-        "musicxml:sub/score.mvt2.musicxml": output_dir / "sub" / "score.mvt2.musicxml",
-    }
+    assert result.artifacts == expected
+    assert f"Audiveris wrote {len(written)} MusicXML files." in result.diagnostics
 
 
 def test_long_output_is_truncated_in_diagnostics(

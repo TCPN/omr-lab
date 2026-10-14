@@ -24,9 +24,9 @@ SAMPLE_ENV_VAR = "OMR_LAB_AUDIVERIS_SAMPLE"
 @pytest.fixture(scope="module")
 def engine() -> AudiverisEngine:
     engine = AudiverisEngine()
-    executable, message = engine.find_executable()
-    if executable is None:
-        pytest.skip(f"Audiveris not installed: {message}")
+    lookup = engine.find_executable()
+    if lookup.path is None:
+        pytest.skip(f"Audiveris not installed: {lookup.message}")
     return engine
 
 
@@ -51,6 +51,7 @@ def test_recognize_sample_produces_musicxml(engine: AudiverisEngine, tmp_path: P
 
     assert result.success is True, (result.error, result.diagnostics)
     assert result.artifacts
+    assert "musicxml" in result.artifacts
     assert all(path.is_file() for path in result.artifacts.values())
     assert sample_path.read_bytes() == original
     # A produced file is not proof of correct recognition; see docs/engine-interface.md.

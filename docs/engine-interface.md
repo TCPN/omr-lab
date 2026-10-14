@@ -10,8 +10,16 @@ This contract separates pipeline orchestration from engine-specific behavior. Ev
 - Engine.name: stable engine identifier.
 - Engine.check_available(): local prerequisite check, returning EngineAvailability with availability, optional version, and an actionable message when unavailable.
 - Engine.recognize(input_path, output_dir, *, timeout_seconds, options=None): run recognition and return an EngineResult. See [Engine options](#engine-options).
-- EngineResult: success/failure, engine name/version, raw artifact paths, diagnostics, process return code, an optional error message, and the effective options (`options`, `{}` by default).
+- EngineResult: success/failure, engine name/version, raw artifact paths (see [Artifact keys](#artifact-keys)), diagnostics, process return code, an optional error message, and the effective options (`options`, `{}` by default).
 - run_command(...): shared subprocess helper that passes an argument sequence without a shell, captures stdout/stderr, enforces a timeout, and normalizes launch/timeout failures. See [Process execution](#process-execution).
+
+## Artifact keys
+
+`EngineResult.artifacts` maps keys to raw files written by the engine. All adapters use the same keys so that the pipeline does not depend on how many files an engine wrote:
+
+- `"musicxml"`: always present when at least one MusicXML file was written, and always the **primary** MusicXML file. Each adapter documents how it picks the primary file (for Audiveris: `<stem>.mxl`/`.xml`/`.musicxml` if present, otherwise the first file in sorted order).
+- `"musicxml:<relative path>"`: every additional MusicXML file (for example further movements), keyed by its path relative to the directory the engine wrote to, in POSIX form (`/` separators).
+- Writing one more file never changes the key of the primary file. Other artifact kinds follow the same pattern with their own prefix when an adapter needs them.
 
 ## Engine options
 
