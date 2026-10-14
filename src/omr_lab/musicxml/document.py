@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import posixpath
+import struct
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import asdict, dataclass, field
@@ -27,6 +28,18 @@ DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 """Default size limit for a MusicXML document (after decompression for ``.mxl``)."""
 
 ZIP_MAGIC = b"PK\x03\x04"
+
+MAX_CENTRAL_DIRECTORY_BYTES = 1024 * 1024
+"""Limit on an .mxl central directory. ``zipfile`` builds a ZipInfo for every entry up
+front, so an archive packed with empty entries could exhaust memory before any member
+size check runs. A MusicXML archive has a handful of entries; 1 MiB allows thousands."""
+
+_EOCD = struct.Struct("<4s4H2LH")
+_EOCD_SIGNATURE = b"PK\x05\x06"
+_ZIP64_LOCATOR_SIGNATURE = b"PK\x06\x07"
+_ZIP64_LOCATOR_SIZE = 20
+_ZIP64_EOCD = struct.Struct("<4sQ2H2L4Q")
+_ZIP64_EOCD_SIGNATURE = b"PK\x06\x06"
 CONTAINER_PATH = "META-INF/container.xml"
 
 # Child elements of <score-partwise> defined by the MusicXML 4.0 schema, in order.
@@ -507,7 +520,43 @@ def _read_member(
     return data
 
 
+def _central_directory_size(data: bytes) -> int | None:
+    """Return the central directory size an .mxl claims, as ``zipfile`` will read it.
+
+    Mirrors how ``zipfile`` locates the end-of-central-directory record (at the very
+    end, else the last signature within the maximum comment length) and its ZIP64
+    variant. Returns None when there is no such record; ``zipfile`` then rejects the
+    archive itself.
+    """
+    start = len(data) - _EOCD.size
+    if start < 0:
+        return None
+    if data[start : start + 4] != _EOCD_SIGNATURE or data[-2:] != b"\x00\x00":
+        start = data.rfind(_EOCD_SIGNATURE, max(0, len(data) - _EOCD.size - 0xFFFF))
+        if start < 0 or start + _EOCD.size > len(data):
+            return None
+    size = _EOCD.unpack_from(data, start)[5]
+    locator = start - _ZIP64_LOCATOR_SIZE
+    record = locator - _ZIP64_EOCD.size
+    if (
+        record >= 0
+        and data[locator : locator + 4] == _ZIP64_LOCATOR_SIGNATURE
+        and data[record : record + 4] == _ZIP64_EOCD_SIGNATURE
+    ):
+        size = max(size, _ZIP64_EOCD.unpack_from(data, record)[8])
+    return size
+
+
 def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
+    directory_size = _central_directory_size(data)
+    if directory_size is not None and directory_size > MAX_CENTRAL_DIRECTORY_BYTES:
+        raise MusicXmlError(
+            "musicxml_unreadable",
+            f"The .mxl archive {path} has a {directory_size}-byte central directory, "
+            f"larger than the {MAX_CENTRAL_DIRECTORY_BYTES}-byte limit; a MusicXML "
+            "archive needs only a few entries.",
+            path=path,
+        )
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
@@ -562,8 +611,8 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
 
 
 def _local_name(tag: str) -> str:
-    """Strip a ``prefix:`` or ``{namespace}`` qualifier from an element tag."""
-    return tag.rsplit("}", 1)[-1].rsplit(":", 1)[-1]
+    """Strip the ``{namespace}`` qualifier from an element tag."""
+    return tag.rsplit("}", 1)[-1]
 
 
 def _rootfile_from_container(
@@ -587,8 +636,8 @@ def _rootfile_from_container(
     except (XmlSyntaxError, ForbiddenXmlConstructError) as exc:
         return None, f"{CONTAINER_PATH} could not be parsed ({exc})"
 
-    # Match local names: the safe parser keeps tags as written, so a container that uses
-    # a prefix for the OCF namespace (``<ocf:rootfile>``) must still be recognized.
+    # Match local names: containers normally declare the OCF namespace, either as the
+    # default namespace or with a prefix, so tags arrive as ``{urn:...}rootfile``.
     rootfiles = [
         rootfile
         for group in container

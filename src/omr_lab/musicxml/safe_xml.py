@@ -52,6 +52,11 @@ class ParsedXml:
     """1-based start line of each direct child of the root, keyed by ``id(element)``."""
 
 
+def _clark(name: str) -> str:
+    """Turn expat's ``uri}local`` into ElementTree's ``{uri}local``."""
+    return "{" + name if "}" in name else name
+
+
 def parse_xml_bytes(data: bytes) -> ParsedXml:
     """Parse ``data`` into an ElementTree, refusing DTD entity declarations.
 
@@ -59,7 +64,9 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
     :class:`ForbiddenXmlConstructError` for entity declarations.
     """
     builder = ET.TreeBuilder()
-    parser = expat.ParserCreate()
+    # Namespace processing makes unbound prefixes a syntax error and yields the same
+    # Clark-notation names (``{uri}local``) as ElementTree's own parser.
+    parser = expat.ParserCreate(namespace_separator="}")
     parser.buffer_text = True
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
 
@@ -83,14 +90,14 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
 
     def start(name: str, attrs: dict[str, str]) -> None:
         nonlocal depth
-        element = builder.start(name, attrs)
+        element = builder.start(_clark(name), {_clark(key): value for key, value in attrs.items()})
         depth += 1
         if depth == 2:
             child_lines[id(element)] = parser.CurrentLineNumber
 
     def end(name: str) -> None:
         nonlocal depth
-        builder.end(name)
+        builder.end(_clark(name))
         depth -= 1
 
     def start_doctype(

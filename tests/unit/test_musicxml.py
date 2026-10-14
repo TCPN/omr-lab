@@ -14,6 +14,8 @@ from omr_lab.musicxml import (
     load_musicxml,
     parse_musicxml_bytes,
 )
+from omr_lab.musicxml import document as document_module
+from omr_lab.musicxml.safe_xml import parse_xml_bytes
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "musicxml"
 
@@ -267,9 +269,27 @@ def test_timewise_is_unsupported() -> None:
     assert "score-timewise" in str(excinfo.value)
 
 
+def test_unbound_namespace_prefix_is_invalid() -> None:
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(b"<score-partwise><bad:note/></score-partwise>")
+    assert excinfo.value.code == "musicxml_invalid"
+    assert "unbound prefix" in str(excinfo.value)
+
+
+def test_namespaced_names_use_clark_notation() -> None:
+    parsed = parse_xml_bytes(
+        b'<a xmlns:xlink="http://www.w3.org/1999/xlink" xml:lang="zh"><b xlink:href="x"/></a>'
+    )
+    assert parsed.root.get("{http://www.w3.org/XML/1998/namespace}lang") == "zh"
+    assert parsed.root[0].get("{http://www.w3.org/1999/xlink}href") == "x"
+
+
 def test_opus_is_unsupported() -> None:
     with pytest.raises(MusicXmlError) as excinfo:
-        parse_musicxml_bytes(b'<opus><score xlink:href="a.musicxml"/></opus>')
+        parse_musicxml_bytes(
+            b'<opus xmlns:xlink="http://www.w3.org/1999/xlink">'
+            b'<score xlink:href="a.musicxml"/></opus>'
+        )
     assert excinfo.value.code == "musicxml_unsupported"
 
 
@@ -391,6 +411,55 @@ def test_mxl_with_namespaced_container(tmp_path: Path, container: str) -> None:
     document = load_musicxml(archive)
     assert document.archive_member == "music/score.musicxml"
     assert document.warnings == ()
+
+
+def test_mxl_with_oversized_central_directory_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = make_mxl(
+        tmp_path / "many.mxl",
+        {f"empty-{index}.txt": b"" for index in range(50)}
+        | {"score.xml": (FIXTURES / "minimal-partwise.xml").read_bytes()},
+    )
+    assert load_musicxml(archive).archive_member == "score.xml"
+
+    monkeypatch.setattr(document_module, "MAX_CENTRAL_DIRECTORY_BYTES", 1024)
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(archive)
+    assert excinfo.value.code == "musicxml_unreadable"
+    assert "central directory" in str(excinfo.value)
+
+
+def test_zip64_archive_with_many_entries_is_refused(tmp_path: Path) -> None:
+    # More than 65535 entries forces the ZIP64 end record, whose size field is the
+    # one zipfile trusts.
+    archive = tmp_path / "huge.mxl"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as handle:
+        for index in range(70_000):
+            handle.writestr(f"{index}", b"")
+    data = archive.read_bytes()
+    assert b"PK\x06\x06" in data[-200:]
+    assert (
+        document_module._central_directory_size(data) > document_module.MAX_CENTRAL_DIRECTORY_BYTES
+    )
+
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(archive)
+    assert "central directory" in str(excinfo.value)
+
+
+def test_central_directory_size_matches_zipfile(tmp_path: Path) -> None:
+    archive = make_mxl(tmp_path / "a.mxl", {"score.xml": "<x/>"})
+    with zipfile.ZipFile(archive, "a") as handle:
+        handle.comment = b"a trailing archive comment"
+    data = archive.read_bytes()
+    with zipfile.ZipFile(archive) as handle:
+        expected = sum(
+            46 + len(info.filename.encode()) + len(info.extra) + len(info.comment)
+            for info in handle.infolist()
+        )
+    assert document_module._central_directory_size(data) == expected
+    assert document_module._central_directory_size(b"not a zip") is None
 
 
 def test_mxl_detected_by_content_not_extension(tmp_path: Path) -> None:
