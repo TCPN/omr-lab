@@ -623,11 +623,42 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
                     f"outside META-INF/ by name{others}.",
                 )
             )
-        score_bytes = _read_member(archive, entries[member], path=path, max_bytes=max_bytes)
+        info = _find_entry(entries, member)
+        assert info is not None  # the rootfile lookup and the fallback both checked it
+        score_bytes = _read_member(archive, info, path=path, max_bytes=max_bytes)
 
     return parse_musicxml_bytes(
         score_bytes, path=path, container="mxl", archive_member=member, warnings=warnings
     )
+
+
+# Encodings tried, in order, for entry names stored without the UTF-8 flag. macOS
+# Archive Utility writes UTF-8 names without setting the flag; older Windows tools
+# write the local code page (Big5/CP950 or GBK for Chinese titles).
+_LEGACY_NAME_ENCODINGS = ("utf-8", "cp950", "gbk")
+
+
+def _find_entry(entries: dict[str, zipfile.ZipInfo], name: str) -> zipfile.ZipInfo | None:
+    """Return the archive entry for ``name`` as written in META-INF/container.xml.
+
+    zipfile decodes names without the UTF-8 flag (bit 0x800) as cp437, so a Chinese
+    file name re-zipped on macOS or older Windows does not match its container entry
+    exactly. Such names are re-decoded from their raw bytes before giving up.
+    """
+    info = entries.get(name)
+    if info is not None:
+        return info
+    for candidate in entries.values():
+        if candidate.flag_bits & 0x800:
+            continue
+        raw = candidate.filename.encode("cp437", errors="replace")
+        for encoding in _LEGACY_NAME_ENCODINGS:
+            try:
+                if raw.decode(encoding) == name:
+                    return candidate
+            except UnicodeDecodeError:
+                continue
+    return None
 
 
 def _local_name(tag: str) -> str:
@@ -670,7 +701,7 @@ def _rootfile_from_container(
     # MusicXML 4.0: the first rootfile is the main score; others (e.g. PDF renderings)
     # are ignored.
     member = rootfiles[0].get("full-path", "")
-    if member not in entries:
+    if _find_entry(entries, member) is None:
         raise MusicXmlError(
             "musicxml_invalid",
             f"{CONTAINER_PATH} in {path} points to {member!r}, which is not in the "

@@ -605,6 +605,29 @@ def test_mxl_with_corrupt_member_data(tmp_path: Path, compression: int) -> None:
     assert excinfo.value.member == "score.xml"
 
 
+@pytest.mark.parametrize("encoding", ["utf-8", "cp950", "gbk"])
+def test_mxl_rootfile_name_without_utf8_flag_is_found(tmp_path: Path, encoding: str) -> None:
+    # macOS Archive Utility stores UTF-8 names without the UTF-8 flag; older Windows
+    # tools store the local code page. zipfile then decodes the name as cp437.
+    name = "月亮代表我的心.musicxml"
+    placeholder = "Q" * len(name.encode(encoding))
+    target = make_mxl(
+        tmp_path / "song.mxl",
+        {
+            "META-INF/container.xml": CONTAINER_XML.format(path=name),
+            placeholder: (FIXTURES / "valid-partwise.musicxml").read_bytes(),
+        },
+    )
+    data = target.read_bytes()
+    assert data.count(placeholder.encode()) == 2  # local and central headers
+    target.write_bytes(data.replace(placeholder.encode(), name.encode(encoding)))
+
+    document = load_musicxml(target)
+    assert document.archive_member == name
+    assert document.metadata.work_title == "小星星 Synthetic Test Tune"
+    assert document.warnings == ()
+
+
 def test_mxl_with_invalid_utf8_entry_name(tmp_path: Path) -> None:
     target = tmp_path / "names.mxl"
     with zipfile.ZipFile(target, "w") as archive:

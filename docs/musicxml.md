@@ -47,6 +47,8 @@ surrounding whitespace.
   or BOM (UTF-8, UTF-16, ...).
 - Compressed `.mxl`: detected by the zip signature, so an `.mxl` with the wrong extension
   still loads. The score is the first `<rootfile full-path>` in `META-INF/container.xml`.
+  Entry names stored without the zip UTF-8 flag (macOS Archive Utility, older Windows
+  tools) are also matched by re-decoding them as UTF-8, CP950 (Big5) or GBK.
   If the container is absent or unusable, the loader falls back to the first `.xml` /
   `.musicxml` entry outside `META-INF/` (sorted by name; macOS `__MACOSX/` and `._*`
   entries are skipped) and warns.
