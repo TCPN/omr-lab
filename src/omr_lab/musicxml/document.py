@@ -550,7 +550,9 @@ def _central_directory_size(data: bytes) -> int | None:
     if start < 0:
         return None
     if data[start : start + 4] != _EOCD_SIGNATURE or data[-2:] != b"\x00\x00":
-        start = data.rfind(_EOCD_SIGNATURE, max(0, len(data) - _EOCD.size - 0xFFFF))
+        start = data.rfind(
+            _EOCD_SIGNATURE, max(0, len(data) - _EOCD.size - zipfile.ZIP_MAX_COMMENT)
+        )
         if start < 0 or start + _EOCD.size > len(data):
             return None
     size = _EOCD.unpack_from(data, start)[5]
@@ -567,7 +569,16 @@ def _central_directory_size(data: bytes) -> int | None:
 
 def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
     directory_size = _central_directory_size(data)
-    if directory_size is not None and directory_size > MAX_CENTRAL_DIRECTORY_BYTES:
+    if directory_size is None:
+        # Fail closed: if this mirror of zipfile's lookup finds no end record, do not
+        # let zipfile parse an archive whose central directory size was not checked.
+        raise MusicXmlError(
+            "musicxml_invalid",
+            f"{path} is not a valid compressed MusicXML (.mxl) file: no end of central "
+            "directory record was found. An .mxl file must be a zip archive.",
+            path=path,
+        )
+    if directory_size > MAX_CENTRAL_DIRECTORY_BYTES:
         raise MusicXmlError(
             "musicxml_unreadable",
             f"The .mxl archive {path} has a {directory_size}-byte central directory, "

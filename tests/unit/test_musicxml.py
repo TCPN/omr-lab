@@ -599,6 +599,42 @@ def test_mxl_with_invalid_utf8_entry_name(tmp_path: Path) -> None:
     assert excinfo.value.code == "musicxml_invalid"
 
 
+@pytest.mark.parametrize("padding", [0xFFFF, 0x10000], ids=["edge", "past-edge"])
+def test_eocd_search_window_matches_zipfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, padding: int
+) -> None:
+    # zipfile searches ZIP_MAX_COMMENT (65535) bytes before the 22-byte end record.
+    # A record at the edge must be found and capped; one past it is rejected by both.
+    archive = make_mxl(
+        tmp_path / "edge.mxl",
+        {"score.xml": (FIXTURES / "minimal-partwise.xml").read_bytes()},
+    )
+    data = archive.read_bytes() + b"\x00" * padding
+    archive.write_bytes(data)
+    try:
+        with zipfile.ZipFile(archive):
+            zipfile_accepts = True
+    except zipfile.BadZipFile:
+        zipfile_accepts = False
+
+    assert zipfile_accepts == (padding == zipfile.ZIP_MAX_COMMENT)
+    assert (document_module._central_directory_size(data) is not None) == zipfile_accepts
+    monkeypatch.setattr(document_module, "MAX_CENTRAL_DIRECTORY_BYTES", 16)
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(archive)
+    expected = "central directory" if zipfile_accepts else "end of central directory"
+    assert expected in str(excinfo.value)
+
+
+def test_mxl_without_end_record_is_rejected_before_zipfile(tmp_path: Path) -> None:
+    target = tmp_path / "noend.mxl"
+    target.write_bytes(b"PK\x03\x04" + b"\x00" * 100)
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target)
+    assert excinfo.value.code == "musicxml_invalid"
+    assert "end of central directory" in str(excinfo.value)
+
+
 def test_mxl_member_over_size_limit(tmp_path: Path) -> None:
     score = (FIXTURES / "valid-partwise.musicxml").read_bytes()
     archive = make_mxl(
