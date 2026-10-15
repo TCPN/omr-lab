@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import sys
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -641,6 +642,29 @@ def test_mxl_rootfile_name_without_utf8_flag_is_found(tmp_path: Path, encoding: 
     document = load_musicxml(target)
     assert document.archive_member == name
     assert document.metadata.work_title == "小星星 Synthetic Test Tune"
+    assert document.warnings == ()
+
+
+@pytest.mark.parametrize("utf8_flag", [True, False])
+def test_mxl_rootfile_name_in_nfd_is_found(tmp_path: Path, utf8_flag: bool) -> None:
+    # The container names the score in NFC; macOS tools may store the entry in NFD.
+    nfc = "\u304c\u00e9.musicxml"  # が and é, precomposed
+    nfd = unicodedata.normalize("NFD", nfc)
+    assert nfd != nfc
+    score = (FIXTURES / "valid-partwise.musicxml").read_bytes()
+    if utf8_flag:
+        entries: dict[str, bytes | str] = {nfd: score}
+    else:
+        placeholder = "Q" * len(nfd.encode())
+        entries = {placeholder: score}
+    entries["META-INF/container.xml"] = CONTAINER_XML.format(path=nfc)
+    target = make_mxl(tmp_path / "song.mxl", entries)
+    if not utf8_flag:
+        data = target.read_bytes()
+        target.write_bytes(data.replace(placeholder.encode(), nfd.encode()))
+
+    document = load_musicxml(target)
+    assert document.archive_member == nfc
     assert document.warnings == ()
 
 

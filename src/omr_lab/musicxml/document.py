@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import posixpath
 import stat
+import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
@@ -643,21 +644,26 @@ def _find_entry(entries: dict[str, zipfile.ZipInfo], name: str) -> zipfile.ZipIn
 
     zipfile decodes names without the UTF-8 flag (bit 0x800) as cp437, so a Chinese
     file name re-zipped on macOS or older Windows does not match its container entry
-    exactly. Such names are re-decoded from their raw bytes before giving up.
+    exactly. Such names are re-decoded from their raw bytes before giving up. Names
+    are compared in Unicode NFC, because macOS tools may store decomposed (NFD) names.
     """
     info = entries.get(name)
     if info is not None:
         return info
+    wanted = unicodedata.normalize("NFC", name)
     for candidate in entries.values():
+        if unicodedata.normalize("NFC", candidate.filename) == wanted:
+            return candidate
         if candidate.flag_bits & 0x800:
             continue
         raw = candidate.filename.encode("cp437", errors="replace")
         for encoding in _LEGACY_NAME_ENCODINGS:
             try:
-                if raw.decode(encoding) == name:
-                    return candidate
+                decoded = raw.decode(encoding)
             except UnicodeDecodeError:
                 continue
+            if unicodedata.normalize("NFC", decoded) == wanted:
+                return candidate
     return None
 
 
