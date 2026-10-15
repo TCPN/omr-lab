@@ -1,4 +1,4 @@
-# OMR-003 — Define Score JSON Schema and Validation
+# OMR-003 — Define Run Document JSON Schema and Validation
 
 **Proposed milestone:** M1
 **Priority:** P0
