@@ -48,8 +48,11 @@ class ParsedXml:
     doctype_public_id: str | None = None
     doctype_system_id: str | None = None
     skipped_entities: list[str] = field(default_factory=list)
-    child_lines: dict[int, int] = field(default_factory=dict)
-    """1-based start line of each direct child of the root, keyed by ``id(element)``."""
+    first_child_lines: dict[str, int] = field(default_factory=dict)
+    """1-based start line of the first direct child of the root with each tag.
+
+    Only the first occurrence is kept, so memory stays bounded by the number of
+    distinct tags rather than the number of children."""
 
 
 def _clark(name: str) -> str:
@@ -72,7 +75,7 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
 
     doctype: dict[str, str | None] = {}
     skipped: list[str] = []
-    child_lines: dict[int, int] = {}
+    first_child_lines: dict[str, int] = {}
     depth = 0
 
     def position() -> tuple[int, int]:
@@ -90,10 +93,11 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
 
     def start(name: str, attrs: dict[str, str]) -> None:
         nonlocal depth
-        element = builder.start(_clark(name), {_clark(key): value for key, value in attrs.items()})
+        tag = _clark(name)
+        builder.start(tag, {_clark(key): value for key, value in attrs.items()})
         depth += 1
         if depth == 2:
-            child_lines[id(element)] = parser.CurrentLineNumber
+            first_child_lines.setdefault(tag, parser.CurrentLineNumber)
 
     def end(name: str) -> None:
         nonlocal depth
@@ -145,5 +149,5 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
         doctype_public_id=doctype.get("public_id"),
         doctype_system_id=doctype.get("system_id"),
         skipped_entities=skipped,
-        child_lines=child_lines,
+        first_child_lines=first_child_lines,
     )

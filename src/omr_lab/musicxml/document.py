@@ -301,15 +301,21 @@ def parse_musicxml_bytes(
             )
         )
 
+    # One warning per distinct unknown tag, so a document with many repeated unknown
+    # elements cannot flood the warnings (or memory).
+    unknown_counts: dict[str, int] = {}
     for child in root:
-        if not isinstance(child.tag, str) or child.tag in KNOWN_PARTWISE_CHILDREN:
-            continue
-        line = parsed.child_lines.get(id(child))
-        at = f" (line {line})" if line is not None else ""
+        if isinstance(child.tag, str) and child.tag not in KNOWN_PARTWISE_CHILDREN:
+            unknown_counts[child.tag] = unknown_counts.get(child.tag, 0) + 1
+    for tag, count in unknown_counts.items():
+        line = parsed.first_child_lines.get(tag)
+        times = f" ({count} times)" if count > 1 else ""
+        first = "first " if count > 1 else ""
+        at = f" ({first}at line {line})" if line is not None else ""
         warnings.append(
             MusicXmlWarning(
                 "musicxml_unknown_element",
-                f"Unknown element <{child.tag}> under <score-partwise>{at} in {where}; "
+                f"Unknown element <{tag}> under <score-partwise>{times}{at} in {where}; "
                 "it is kept in the parsed tree but not interpreted.",
             )
         )

@@ -145,6 +145,19 @@ def test_unknown_elements_and_part_mismatches_are_warned() -> None:
     )
 
 
+def test_repeated_unknown_elements_give_one_warning_per_tag() -> None:
+    minimal = (FIXTURES / "minimal-partwise.xml").read_bytes()
+    extra = b"\n" + b"<x/>" * 5000 + b"\n<y/>\n<x/>"
+    data = minimal.replace(b"</score-partwise>", extra + b"</score-partwise>")
+    document = parse_musicxml_bytes(data)
+    unknown = [w for w in document.warnings if w.code == "musicxml_unknown_element"]
+    assert len(unknown) == 2, unknown
+    assert "<x>" in unknown[0].message and "5001 times" in unknown[0].message
+    assert "first at line" in unknown[0].message
+    assert "<y>" in unknown[1].message and "times" not in unknown[1].message
+    assert len(document.root.findall("x")) == 5001  # still kept in the tree
+
+
 def test_duplicate_and_unidentified_parts_are_warned() -> None:
     data = b"""<score-partwise>
       <part-list>
