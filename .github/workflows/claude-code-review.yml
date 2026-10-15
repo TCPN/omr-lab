@@ -61,6 +61,12 @@ jobs:
                with two shapes, duplicated logic, or an interface that will be hard
                to extend for the next planned engine. Keep at most three, each tied
                to specific files and a concrete consequence; skip taste-only remarks.
+               Also note readability and naming problems that would make the code
+               hard for a new reader to understand: names that mislead or do not
+               match what the code does, the same concept under different names,
+               unexplained abbreviations or magic values, and functions that are
+               hard to follow. Give each a concrete suggested name or rewrite; keep
+               at most five.
             4. Fetch existing review comments with
                `gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments`
                and do not repeat an issue that is already raised there.
@@ -72,8 +78,9 @@ jobs:
                Start it with "## Claude code review (<short head sha>)", then list the
                findings by severity, or say that none were found and what you checked.
                Put design concerns under a separate "### Design notes (non-blocking)"
-               heading in this summary, not as inline comments, and do not count them
-               as findings.
+               heading and readability/naming suggestions under
+               "### Readability and naming (non-blocking)" in this summary, not as
+               inline comments, and do not count either as findings.
           claude_args: >-
             --model claude-opus-5-5
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments:*)"
