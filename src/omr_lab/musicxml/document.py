@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import posixpath
+import stat
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
@@ -20,6 +21,7 @@ from typing import Any, Literal
 from omr_lab.musicxml.safe_xml import (
     ForbiddenXmlConstructError,
     ParsedXml,
+    UnsupportedEncodingError,
     XmlSyntaxError,
     parse_xml_bytes,
 )
@@ -207,14 +209,24 @@ def load_musicxml(path: str | Path, *, max_bytes: int = DEFAULT_MAX_BYTES) -> Mu
     Raises :class:`MusicXmlError` with an actionable message on failure.
     """
     path = Path(path)
-    if not path.exists():
+    # One stat() inside a try: on Python 3.11/3.12, exists() re-raises errors such as
+    # EACCES on a parent directory, and on 3.13+ it reports them as "not found".
+    try:
+        mode = path.stat().st_mode
+    except (FileNotFoundError, NotADirectoryError) as exc:
         raise MusicXmlError(
             "musicxml_missing",
             f"MusicXML file not found: {path}. Check that the engine wrote its output "
             "and that the path is correct.",
             path=path,
-        )
-    if not path.is_file():
+        ) from exc
+    except OSError as exc:
+        raise MusicXmlError(
+            "musicxml_unreadable",
+            f"Could not access MusicXML file {path}: {exc.strerror or exc}.",
+            path=path,
+        ) from exc
+    if not stat.S_ISREG(mode):
         raise MusicXmlError(
             "musicxml_missing",
             f"MusicXML path is not a regular file: {path}.",
@@ -342,6 +354,17 @@ def _describe(path: Path | None, member: str | None) -> str:
 def _parse_safely(data: bytes, *, where: str, path: Path | None, member: str | None) -> ParsedXml:
     try:
         return parse_xml_bytes(data)
+    except UnsupportedEncodingError as exc:
+        raise MusicXmlError(
+            "musicxml_unsupported",
+            f"{where} declares a character encoding the XML parser cannot decode ({exc}). "
+            "Multi-byte legacy encodings such as Big5 or GBK are not supported; re-export "
+            "the file as UTF-8.",
+            path=path,
+            member=member,
+            line=exc.line,
+            column=exc.column,
+        ) from exc
     except XmlSyntaxError as exc:
         raise MusicXmlError(
             "musicxml_invalid",
@@ -573,7 +596,9 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
             candidates = sorted(
                 name
                 for name in entries
-                if not name.startswith("META-INF/")
+                if not name.startswith(("META-INF/", "__MACOSX/"))
+                # macOS AppleDouble resource forks ("._score.musicxml") are not scores.
+                and not posixpath.basename(name).startswith("._")
                 and posixpath.splitext(name)[1].lower() in {".xml", ".musicxml"}
             )
             if not candidates:

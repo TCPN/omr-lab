@@ -604,6 +604,45 @@ def test_mxl_with_invalid_utf8_entry_name(tmp_path: Path) -> None:
     assert excinfo.value.code == "musicxml_invalid"
 
 
+def test_inaccessible_path_is_unreadable_not_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # E.g. a parent directory without search permission: stat() fails with EACCES.
+    target = tmp_path / "score.musicxml"
+    target.write_bytes((FIXTURES / "minimal-partwise.xml").read_bytes())
+
+    def denied(self, *args, **kwargs):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(Path, "stat", denied)
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target)
+    assert excinfo.value.code == "musicxml_unreadable"
+
+
+def test_mxl_fallback_skips_macos_appledouble_entries(tmp_path: Path) -> None:
+    archive = make_mxl(
+        tmp_path / "zipped-on-mac.mxl",
+        {
+            "__MACOSX/song/._score.musicxml": b"\x00\x05\x16\x07 resource fork",
+            "song/._score.musicxml": b"\x00\x05\x16\x07 resource fork",
+            "song/score.musicxml": (FIXTURES / "minimal-partwise.xml").read_bytes(),
+        },
+    )
+    document = load_musicxml(archive)
+    assert document.archive_member == "song/score.musicxml"
+    assert warning_codes(document) == ["musicxml_mxl_container_missing"]
+
+
+@pytest.mark.parametrize("encoding", ["Big5", "GBK", "x-no-such-encoding"])
+def test_unsupported_declared_encoding_is_reported(encoding: str) -> None:
+    data = f'<?xml version="1.0" encoding="{encoding}"?><score-partwise/>'.encode("ascii")
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(data)
+    assert excinfo.value.code == "musicxml_unsupported"
+    assert "UTF-8" in str(excinfo.value)
+
+
 def test_mxl_member_over_size_limit(tmp_path: Path) -> None:
     score = (FIXTURES / "valid-partwise.musicxml").read_bytes()
     archive = make_mxl(

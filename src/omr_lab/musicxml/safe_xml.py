@@ -39,6 +39,10 @@ class XmlSyntaxError(Exception):
         self.column = column
 
 
+class UnsupportedEncodingError(XmlSyntaxError):
+    """The document declares an encoding expat cannot decode (e.g. Big5 or GBK)."""
+
+
 @dataclass
 class ParsedXml:
     """Result of :func:`parse_xml_bytes`."""
@@ -135,9 +139,23 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
 
     try:
         parser.Parse(data, True)
+    except LookupError as exc:
+        # pyexpat looks up a declared encoding through Python codecs: an unknown name
+        # raises LookupError.
+        raise UnsupportedEncodingError(str(exc), 1, 1) from exc
+    except ValueError as exc:
+        # pyexpat raises a plain ValueError for declared multi-byte encodings such as
+        # Big5 or GBK, which it cannot decode.
+        if "encoding" not in str(exc):
+            raise
+        raise UnsupportedEncodingError(str(exc), 1, 1) from exc
     except expat.ExpatError as exc:
         reason = expat.errors.messages.get(exc.code, str(exc))
         column = exc.offset + 1
+        if reason == expat.errors.XML_ERROR_UNKNOWN_ENCODING:
+            raise UnsupportedEncodingError(
+                f"{reason} (line {exc.lineno}, column {column})", exc.lineno, column
+            ) from exc
         raise XmlSyntaxError(
             f"{reason} (line {exc.lineno}, column {column})", exc.lineno, column
         ) from exc

@@ -48,7 +48,8 @@ surrounding whitespace.
 - Compressed `.mxl`: detected by the zip signature, so an `.mxl` with the wrong extension
   still loads. The score is the first `<rootfile full-path>` in `META-INF/container.xml`.
   If the container is absent or unusable, the loader falls back to the first `.xml` /
-  `.musicxml` entry outside `META-INF/` (sorted by name) and warns.
+  `.musicxml` entry outside `META-INF/` (sorted by name; macOS `__MACOSX/` and `._*`
+  entries are skipped) and warns.
 - `max_bytes` (default 64 MiB) caps the file size and the decompressed size of each
   archive entry read, which bounds memory use for zip bombs.
 - An `.mxl` that may declare more than 10,000 entries (counted by central-directory
@@ -68,7 +69,7 @@ known, `path`, `member` (archive entry), and 1-based `line`/`column`.
 | `musicxml_missing` | Path does not exist or is not a regular file. |
 | `musicxml_unreadable` | File could not be read (permissions, I/O), exceeds `max_bytes`, or is an `.mxl` with too many entries. |
 | `musicxml_invalid` | Not well-formed XML, including unbound namespace prefixes (with line/column), root is not a MusicXML element, corrupt/empty/encrypted `.mxl`, container rootfile missing from the archive, or no `<part-list>` / `<part>`. |
-| `musicxml_unsupported` | Well-formed but not handled: `score-timewise`, `opus`, or DTD entity declarations. |
+| `musicxml_unsupported` | Not handled: `score-timewise`, `opus`, DTD entity declarations, or a declared encoding the parser cannot decode (e.g. Big5, GBK; re-export as UTF-8). |
 
 The run document (issue #5) currently lists only `musicxml_invalid`; the pipeline
 (issue #6) decides whether to record these finer codes or map them to it.
