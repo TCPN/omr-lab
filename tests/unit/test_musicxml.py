@@ -684,6 +684,43 @@ def test_mxl_rootfile_name_in_nfd_is_found(tmp_path: Path, utf8_flag: bool) -> N
     assert document.warnings == ()
 
 
+def test_mxl_with_invalid_utf8_name_in_local_header(tmp_path: Path) -> None:
+    # The central directory name is plain ASCII, but the local header sets the UTF-8
+    # flag on bytes that are not UTF-8; zipfile raises UnicodeDecodeError on open().
+    target = tmp_path / "local.mxl"
+    with zipfile.ZipFile(target, "w") as archive:
+        archive.writestr("score.xml", (FIXTURES / "valid-partwise.musicxml").read_bytes())
+    data = bytearray(target.read_bytes())
+    assert data[:4] == b"PK\x03\x04"
+    data[7] |= 0x08  # high byte of the little-endian flags: bit 11 is the UTF-8 flag
+    data[30] = 0xFF  # first byte of the local header's file name
+    target.write_bytes(bytes(data))
+
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target)
+    assert excinfo.value.code == "musicxml_invalid"
+    assert excinfo.value.member == "score.xml"
+
+
+def test_mxl_with_damaged_container_entry_falls_back(tmp_path: Path) -> None:
+    target = tmp_path / "damaged-container.mxl"
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("META-INF/container.xml", CONTAINER_XML.format(path="score.xml"))
+        archive.writestr("score.xml", (FIXTURES / "valid-partwise.musicxml").read_bytes())
+    data = bytearray(target.read_bytes())
+    with zipfile.ZipFile(target) as archive:
+        info = archive.getinfo("META-INF/container.xml")
+    start = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+    for offset in range(start, start + info.compress_size):
+        data[offset] ^= 0xFF
+    target.write_bytes(bytes(data))
+
+    document = load_musicxml(target)
+    assert document.archive_member == "score.xml"
+    assert warning_codes(document) == ["musicxml_mxl_container_invalid"]
+    assert "could not be read" in document.warnings[0].message
+
+
 def test_mxl_with_invalid_utf8_entry_name(tmp_path: Path) -> None:
     target = tmp_path / "names.mxl"
     with zipfile.ZipFile(target, "w") as archive:

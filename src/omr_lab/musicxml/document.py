@@ -38,9 +38,11 @@ except ImportError:  # pragma: no cover - depends on the Python build
     _LZMAError = OSError
 
 # Errors raised while decompressing a damaged member: zlib and lzma errors are not
-# OSError subclasses, so they are listed explicitly.
+# OSError subclasses, so they are listed explicitly. ValueError covers the
+# UnicodeDecodeError from a local header that sets the UTF-8 flag on a non-UTF-8 name.
 _EXTRACT_ERRORS = (
     zipfile.BadZipFile,
+    ValueError,
     RuntimeError,
     OSError,
     EOFError,
@@ -687,7 +689,11 @@ def _rootfile_from_container(
     info = entries.get(CONTAINER_PATH)
     if info is None:
         return None, f"no {CONTAINER_PATH}"
-    raw = _read_member(archive, info, path=path, max_bytes=max_bytes)
+    try:
+        raw = _read_member(archive, info, path=path, max_bytes=max_bytes)
+    except MusicXmlError as exc:
+        # A damaged or oversized container must not hide an intact score.
+        return None, f"{CONTAINER_PATH} could not be read ({exc})"
     try:
         container = parse_xml_bytes(raw).root
     except (XmlSyntaxError, ForbiddenXmlConstructError) as exc:

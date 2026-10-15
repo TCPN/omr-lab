@@ -92,7 +92,7 @@ full tree stays available in `document.root`.
 | `musicxml_part_without_id` | A `<part>` or `<score-part>` without an `id`. |
 | `musicxml_duplicate_part` | A part id declared or used more than once (first one wins). |
 | `musicxml_mxl_container_missing` | `.mxl` without `META-INF/container.xml`; fallback entry used. |
-| `musicxml_mxl_container_invalid` | `container.xml` unparseable or without a rootfile; fallback entry used. |
+| `musicxml_mxl_container_invalid` | `container.xml` damaged, oversized, unparseable or without a rootfile; fallback entry used. |
 
 Only the top level is checked for unknown elements. Element-level coverage of notes,
 lyrics, and harmony belongs to the score model conversion (issue #19).
