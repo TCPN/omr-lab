@@ -377,6 +377,20 @@ def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     assert "&name;" in document.warnings[0].message
 
 
+def test_repeated_unresolved_entity_is_recorded_once(tmp_path: Path, no_network: None) -> None:
+    dtd = tmp_path / "partwise.dtd"
+    dtd.write_text("", encoding="utf-8")
+    data = (
+        f'<!DOCTYPE score-partwise SYSTEM "{dtd.as_uri()}">'
+        + MINIMAL_BODY.format(name="&a;" * 5000 + "&b;&a;")
+    ).encode()
+    parsed = parse_xml_bytes(data)
+    assert parsed.skipped_entities == ["a", "b"]
+    document = parse_musicxml_bytes(data)
+    assert warning_codes(document) == ["musicxml_unresolved_entity"]
+    assert document.warnings[0].message.count("&a;") == 1
+
+
 # Compressed MusicXML (.mxl)
 
 

@@ -78,7 +78,8 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
 
     doctype: dict[str, str | None] = {}
-    skipped: list[str] = []
+    # Distinct names in first-seen order; a file can repeat one reference many times.
+    skipped: dict[str, None] = {}
     first_child_lines: dict[str, int] = {}
     depth = 0
 
@@ -126,7 +127,7 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
 
     def skipped_entity(name: str, is_parameter: int) -> None:
         if not is_parameter:
-            skipped.append(name)
+            skipped.setdefault(name)
 
     parser.StartElementHandler = start
     parser.EndElementHandler = end
@@ -166,6 +167,6 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
         doctype_name=doctype.get("name"),
         doctype_public_id=doctype.get("public_id"),
         doctype_system_id=doctype.get("system_id"),
-        skipped_entities=skipped,
+        skipped_entities=list(skipped),
         first_child_lines=first_child_lines,
     )

@@ -304,7 +304,7 @@ def parse_musicxml_bytes(
         )
 
     if parsed.skipped_entities:
-        names = ", ".join(f"&{name};" for name in dict.fromkeys(parsed.skipped_entities))
+        names = ", ".join(f"&{name};" for name in parsed.skipped_entities)
         warnings.append(
             MusicXmlWarning(
                 "musicxml_unresolved_entity",
