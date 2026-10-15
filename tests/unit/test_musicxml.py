@@ -1,6 +1,7 @@
 import json
 import os
 import socket
+import struct
 import sys
 import unicodedata
 import zipfile
@@ -728,6 +729,61 @@ def test_mxl_with_invalid_utf8_name_in_local_header(tmp_path: Path) -> None:
         load_musicxml(target)
     assert excinfo.value.code == "musicxml_invalid"
     assert excinfo.value.member == "score.xml"
+
+
+def _with_zip64_header_offset(data: bytes, member: str, offset: int) -> bytes:
+    """Point ``member``'s central-directory entry at ``offset`` via a ZIP64 extra field."""
+    eocd = data.rindex(b"PK\x05\x06")
+    cd_size, cd_offset = struct.unpack_from("<II", data, eocd + 12)
+    directory = data[cd_offset : cd_offset + cd_size]
+    rebuilt = b""
+    pos = 0
+    while pos < len(directory):
+        name_len, extra_len, comment_len = struct.unpack_from("<HHH", directory, pos + 28)
+        header = bytearray(directory[pos : pos + 46])
+        name = directory[pos + 46 : pos + 46 + name_len]
+        extra = directory[pos + 46 + name_len : pos + 46 + name_len + extra_len]
+        end = pos + 46 + name_len + extra_len + comment_len
+        comment = directory[pos + 46 + name_len + extra_len : end]
+        if name.decode() == member:
+            extra += struct.pack("<HHQ", 1, 8, offset)
+            struct.pack_into("<H", header, 30, len(extra))
+            struct.pack_into("<I", header, 42, 0xFFFFFFFF)
+        rebuilt += bytes(header) + name + extra + comment
+        pos = end
+    tail = bytearray(data[eocd:])
+    struct.pack_into("<I", tail, 12, len(rebuilt))
+    return data[:cd_offset] + rebuilt + bytes(tail)
+
+
+@pytest.mark.parametrize("offset", [2**64 - 1, 2**40])
+def test_mxl_with_out_of_range_zip64_offset(tmp_path: Path, offset: int) -> None:
+    target = make_mxl(
+        tmp_path / "offset.mxl",
+        {"score.xml": (FIXTURES / "valid-partwise.musicxml").read_bytes()},
+    )
+    target.write_bytes(_with_zip64_header_offset(target.read_bytes(), "score.xml", offset))
+
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target)
+    assert excinfo.value.code == "musicxml_invalid"
+    assert excinfo.value.member == "score.xml"
+
+
+def test_mxl_with_out_of_range_container_offset_falls_back(tmp_path: Path) -> None:
+    target = make_mxl(
+        tmp_path / "offset.mxl",
+        {
+            "META-INF/container.xml": CONTAINER_XML.format(path="score.xml"),
+            "score.xml": (FIXTURES / "valid-partwise.musicxml").read_bytes(),
+        },
+    )
+    data = _with_zip64_header_offset(target.read_bytes(), "META-INF/container.xml", 2**64 - 1)
+    target.write_bytes(data)
+
+    document = load_musicxml(target)
+    assert document.archive_member == "score.xml"
+    assert warning_codes(document) == ["musicxml_mxl_container_invalid"]
 
 
 def test_mxl_with_damaged_container_entry_falls_back(tmp_path: Path) -> None:

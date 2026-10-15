@@ -39,10 +39,12 @@ except ImportError:  # pragma: no cover - depends on the Python build
 
 # Errors raised while decompressing a damaged member: zlib and lzma errors are not
 # OSError subclasses, so they are listed explicitly. ValueError covers the
-# UnicodeDecodeError from a local header that sets the UTF-8 flag on a non-UTF-8 name.
+# UnicodeDecodeError from a local header that sets the UTF-8 flag on a non-UTF-8 name;
+# OverflowError a ZIP64 header offset too large to seek to.
 _EXTRACT_ERRORS = (
     zipfile.BadZipFile,
     ValueError,
+    OverflowError,
     RuntimeError,
     OSError,
     EOFError,
