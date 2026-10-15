@@ -382,6 +382,34 @@ def test_parameter_entity_reference_in_internal_subset_is_refused(doctype: bytes
     assert "Parameter entity reference" in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    "subset",
+    [b"", b"<!-- note -->", b"<!ELEMENT x ANY>", b"<!ATTLIST x y CDATA #IMPLIED>"],
+)
+@pytest.mark.parametrize(
+    "external_id",
+    [
+        b'PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" '
+        b'"http://www.musicxml.org/dtds/partwise.dtd"',
+        b'SYSTEM "partwise.dtd"',
+    ],
+)
+def test_external_dtd_with_harmless_internal_subset_loads(
+    external_id: bytes, subset: bytes, no_network: None
+) -> None:
+    data = (
+        b"<!DOCTYPE score-partwise "
+        + external_id
+        + b" [ "
+        + subset
+        + b" ]>"
+        + MINIMAL_BODY.format(name="Voice").encode()
+    )
+    document = parse_musicxml_bytes(data)
+    assert document.metadata.parts[0].name == "Voice"
+    assert document.warnings == ()
+
+
 def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     dtd = tmp_path / "partwise.dtd"
     dtd.write_text('<!ENTITY name "from external dtd">', encoding="utf-8")
