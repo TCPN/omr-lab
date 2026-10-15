@@ -586,6 +586,19 @@ def test_mxl_with_corrupt_member_data(tmp_path: Path, compression: int) -> None:
     assert excinfo.value.member == "score.xml"
 
 
+def test_mxl_with_invalid_utf8_entry_name(tmp_path: Path) -> None:
+    target = tmp_path / "names.mxl"
+    with zipfile.ZipFile(target, "w") as archive:
+        archive.writestr("s\u00e9.xml", "<x/>")  # non-ASCII name sets the UTF-8 flag
+    data = target.read_bytes()
+    assert data.count("\u00e9".encode()) == 2  # local and central headers
+    target.write_bytes(data.replace("\u00e9".encode(), b"\xff\xa9"))
+
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target)
+    assert excinfo.value.code == "musicxml_invalid"
+
+
 def test_mxl_member_over_size_limit(tmp_path: Path) -> None:
     score = (FIXTURES / "valid-partwise.musicxml").read_bytes()
     archive = make_mxl(

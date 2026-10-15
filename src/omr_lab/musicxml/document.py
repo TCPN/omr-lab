@@ -577,7 +577,9 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
         )
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as exc:
+    except (zipfile.BadZipFile, ValueError) as exc:
+        # ValueError covers UnicodeDecodeError from an entry flagged as UTF-8 whose
+        # name is not valid UTF-8 (some tools write legacy-encoded CJK names).
         raise MusicXmlError(
             "musicxml_invalid",
             f"{path} is not a valid compressed MusicXML (.mxl) file: {exc}. An .mxl file "
