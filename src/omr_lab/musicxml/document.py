@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import io
 import posixpath
-import struct
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
@@ -47,17 +46,12 @@ _EXTRACT_ERRORS = (
     _LZMAError,
 )
 
-MAX_CENTRAL_DIRECTORY_BYTES = 1024 * 1024
-"""Limit on an .mxl central directory. ``zipfile`` builds a ZipInfo for every entry up
-front, so an archive packed with empty entries could exhaust memory before any member
-size check runs. A MusicXML archive has a handful of entries; 1 MiB allows thousands."""
+MAX_ARCHIVE_ENTRIES = 10_000
+"""Limit on the entries an .mxl may declare. ``zipfile`` builds a ZipInfo for every
+central-directory entry before any member size check runs, so an archive packed with
+empty entries could exhaust memory. A MusicXML archive has a handful of entries."""
 
-_EOCD = struct.Struct("<4s4H2LH")
-_EOCD_SIGNATURE = b"PK\x05\x06"
-_ZIP64_LOCATOR_SIGNATURE = b"PK\x06\x07"
-_ZIP64_LOCATOR_SIZE = 20
-_ZIP64_EOCD = struct.Struct("<4sQ2H2L4Q")
-_ZIP64_EOCD_SIGNATURE = b"PK\x06\x06"
+_CENTRAL_DIRECTORY_SIGNATURE = b"PK\x01\x02"
 CONTAINER_PATH = "META-INF/container.xml"
 
 # Child elements of <score-partwise> defined by the MusicXML 4.0 schema, in order.
@@ -538,52 +532,16 @@ def _read_member(
     return data
 
 
-def _central_directory_size(data: bytes) -> int | None:
-    """Return the central directory size an .mxl claims, as ``zipfile`` will read it.
-
-    Mirrors how ``zipfile`` locates the end-of-central-directory record (at the very
-    end, else the last signature within the maximum comment length) and its ZIP64
-    variant. Returns None when there is no such record; ``zipfile`` then rejects the
-    archive itself.
-    """
-    start = len(data) - _EOCD.size
-    if start < 0:
-        return None
-    if data[start : start + 4] != _EOCD_SIGNATURE or data[-2:] != b"\x00\x00":
-        start = data.rfind(
-            _EOCD_SIGNATURE, max(0, len(data) - _EOCD.size - zipfile.ZIP_MAX_COMMENT)
-        )
-        if start < 0 or start + _EOCD.size > len(data):
-            return None
-    size = _EOCD.unpack_from(data, start)[5]
-    locator = start - _ZIP64_LOCATOR_SIZE
-    record = locator - _ZIP64_EOCD.size
-    if (
-        record >= 0
-        and data[locator : locator + 4] == _ZIP64_LOCATOR_SIGNATURE
-        and data[record : record + 4] == _ZIP64_EOCD_SIGNATURE
-    ):
-        size = max(size, _ZIP64_EOCD.unpack_from(data, record)[8])
-    return size
-
-
 def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
-    directory_size = _central_directory_size(data)
-    if directory_size is None:
-        # Fail closed: if this mirror of zipfile's lookup finds no end record, do not
-        # let zipfile parse an archive whose central directory size was not checked.
-        raise MusicXmlError(
-            "musicxml_invalid",
-            f"{path} is not a valid compressed MusicXML (.mxl) file: no end of central "
-            "directory record was found. An .mxl file must be a zip archive.",
-            path=path,
-        )
-    if directory_size > MAX_CENTRAL_DIRECTORY_BYTES:
+    # zipfile requires every central-directory entry to start with this signature, so
+    # its count bounds the ZipInfo objects zipfile can create, whatever end-record or
+    # ZIP64 layout it reads. Counting avoids mirroring zipfile's private record lookup.
+    entry_bound = data.count(_CENTRAL_DIRECTORY_SIGNATURE)
+    if entry_bound > MAX_ARCHIVE_ENTRIES:
         raise MusicXmlError(
             "musicxml_unreadable",
-            f"The .mxl archive {path} has a {directory_size}-byte central directory, "
-            f"larger than the {MAX_CENTRAL_DIRECTORY_BYTES}-byte limit; a MusicXML "
-            "archive needs only a few entries.",
+            f"The .mxl archive {path} may declare up to {entry_bound} entries, more than "
+            f"the {MAX_ARCHIVE_ENTRIES}-entry limit; a MusicXML archive needs only a few.",
             path=path,
         )
     try:

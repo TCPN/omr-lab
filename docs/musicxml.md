@@ -51,9 +51,9 @@ surrounding whitespace.
   `.musicxml` entry outside `META-INF/` (sorted by name) and warns.
 - `max_bytes` (default 64 MiB) caps the file size and the decompressed size of each
   archive entry read, which bounds memory use for zip bombs.
-- An `.mxl` whose central directory is larger than 1 MiB is refused before `zipfile`
-  opens it, because `zipfile` creates an object per entry up front; a MusicXML archive
-  has only a few entries.
+- An `.mxl` that may declare more than 10,000 entries (counted by central-directory
+  entry signatures) is refused before `zipfile` opens it, because `zipfile` creates an
+  object per entry up front; a MusicXML archive has only a few entries.
 - XML is parsed with namespace processing, as ElementTree does: an unbound prefix is a
   syntax error, and namespaced names use Clark notation (`{http://www.w3.org/1999/xlink}href`).
   MusicXML score elements are not in a namespace, so their tags stay plain.
@@ -66,7 +66,7 @@ known, `path`, `member` (archive entry), and 1-based `line`/`column`.
 | Code | Meaning |
 | --- | --- |
 | `musicxml_missing` | Path does not exist or is not a regular file. |
-| `musicxml_unreadable` | File could not be read (permissions, I/O), exceeds `max_bytes`, or has an oversized `.mxl` central directory. |
+| `musicxml_unreadable` | File could not be read (permissions, I/O), exceeds `max_bytes`, or is an `.mxl` with too many entries. |
 | `musicxml_invalid` | Not well-formed XML, including unbound namespace prefixes (with line/column), root is not a MusicXML element, corrupt/empty/encrypted `.mxl`, container rootfile missing from the archive, or no `<part-list>` / `<part>`. |
 | `musicxml_unsupported` | Well-formed but not handled: `score-timewise`, `opus`, or DTD entity declarations. |
 
