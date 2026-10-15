@@ -6,7 +6,7 @@ Local-first, modular Optical Music Recognition (OMR) pipeline:
 
 ## Status
 - Phase 1: Local OMR Foundation
-- Initial engine candidate: Audiveris (verify version, CLI, and license before use/distribution)
+- Initial engine candidate: Audiveris, adapter in `omr_lab.engines.AudiverisEngine`; setup, verified CLI, and AGPL notes in `docs/engines/audiveris.md` (license policy pending decision #30)
 - Second candidate: homr
 - Interchange format: MusicXML
 - Python, uv, pytest, Ruff
@@ -21,7 +21,7 @@ uv run ruff check .
 uv run omr-lab --help
 ```
 
-The bootstrap project does not require Java or an OMR engine. Real recognition is a later milestone.
+Installing and testing the project does not require Java or an OMR engine. With Audiveris installed, `AudiverisEngine.recognize()` already runs real recognition; the CLI and pipeline integration come later in milestone M1.
 
 ## Test selection
 Tests that need more than a plain Python environment carry a pytest marker:
@@ -47,11 +47,12 @@ uv run pytest -m ""                     # everything, marked or not
 ## Source of truth
 - `AGENTS.md`: coding-agent rules (`CLAUDE.md` imports it for Claude Code)
 - `docs/architecture.md`: boundaries and data flow
-- `docs/json-schema.md`: normalized result contract draft
+- `docs/json-schema.md`: normalized run document contract (schema in `src/omr_lab/schemas/`)
 - `docs/musicxml.md`: MusicXML loading, validation errors/warnings, and XML safety
 - `docs/governance/`: roles, workflow, milestones and labels
 - `docs/issues/`: proposed issue bodies (not yet live GitHub Issues)
 - `docs/research/`: research notes and sources
+- `docs/engines/`: per-engine setup, verified CLI behavior, and license notes
 - `src/omr_lab/`: Python package
 - `tests/`: automated tests
 

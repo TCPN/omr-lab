@@ -6,7 +6,7 @@ The following tasks have been created as open GitHub Issues:
 
 - OMR-001 — [#3 Initialize Python project and CI](https://github.com/TCPN/omr-lab/issues/3)
 - OMR-002 — [#4 Define architecture and engine interface](https://github.com/TCPN/omr-lab/issues/4)
-- OMR-003 — [#5 Define score JSON schema and validation](https://github.com/TCPN/omr-lab/issues/5)
+- OMR-003 — [#5 Define run document JSON schema and validation](https://github.com/TCPN/omr-lab/issues/5)
 - OMR-004 — [#6 Implement pipeline with mock engine](https://github.com/TCPN/omr-lab/issues/6)
 - OMR-005 — [#7 Implement Audiveris environment check and adapter](https://github.com/TCPN/omr-lab/issues/7)
 - OMR-006 — [#8 Parse and validate MusicXML output](https://github.com/TCPN/omr-lab/issues/8)

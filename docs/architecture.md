@@ -7,13 +7,14 @@
 4. Store raw artifacts in the run output directory.
 5. Validate and parse MusicXML.
 6. Normalize available information into project JSON.
-7. Write a run record with provenance and timing.
+7. Write a run record with provenance and timing, validated against `schemas/run-*.schema.json` before writing.
 
 ## Boundaries
 - engines/: engine-specific availability and process invocation; shared contracts live in engines/base.py.
 - preprocess/: optional, independently testable image transforms.
 - musicxml/: loading, safe parsing, and structural validation of MusicXML artifacts (including .mxl) plus metadata extraction, independent of engine. A document that loads is parseable, not correctly recognized. Details: docs/musicxml.md.
 - conversion/: normalized JSON mapping.
+- schemas/: checked-in JSON Schemas and validation; no dependency on engines or the pipeline.
 - pipeline.py: orchestration only.
 - reporting/: run metadata and benchmark reports.
 

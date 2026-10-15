@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1.0",
+  "status": "succeeded",
+  "input": {
+    "filename": "score.png",
+    "media_type": "image/png"
+  },
+  "engine": {
+    "name": "audiveris",
+    "version": null
+  },
+  "options": {},
+  "artifacts": {
+    "musicxml": "result.musicxml"
+  },
+  "timing": {
+    "duration_seconds": -1
+  },
+  "score": null,
+  "warnings": [],
+  "error": null
+}

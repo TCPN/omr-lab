@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omr-lab:schema:run:0.1.0",
+  "title": "OMR Lab run document",
+  "description": "Normalized record of one OMR pipeline run (the run envelope). Records only facts supported by the pipeline and engine output; see docs/json-schema.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "input",
+    "engine",
+    "options",
+    "artifacts",
+    "timing",
+    "score",
+    "warnings",
+    "error"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Version of this contract. Changes to the contract require a new schema file and version.",
+      "const": "0.1.0"
+    },
+    "status": {
+      "description": "Outcome of the run. 'succeeded' means the pipeline completed; it is not a claim that the music was recognized correctly.",
+      "enum": ["succeeded", "failed"]
+    },
+    "input": {
+      "description": "The source document given to the pipeline.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "media_type"],
+      "properties": {
+        "filename": {
+          "description": "Base name of the input file (no directory components).",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\]+$"
+        },
+        "media_type": {
+          "description": "IANA media type of the input, or null when it was not determined.",
+          "type": ["string", "null"],
+          "pattern": "^[a-z]+/[A-Za-z0-9.+-]+$"
+        },
+        "sha256": {
+          "description": "Optional lowercase hex SHA-256 digest of the input bytes, or null when not computed.",
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "engine": {
+      "description": "Provenance of the OMR engine that was selected for the run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {
+          "description": "Stable engine identifier (Engine.name).",
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "description": "Engine version as reported by the engine, or null when unknown. Never guessed.",
+          "type": ["string", "null"],
+          "minLength": 1
+        }
+      }
+    },
+    "options": {
+      "$comment": "Placeholder for engine options (issue #21). Keys are option names; values are the effective JSON values. Empty when no options were given.",
+      "description": "Effective run/engine options recorded for provenance.",
+      "type": "object",
+      "propertyNames": {"minLength": 1}
+    },
+    "artifacts": {
+      "description": "Raw engine and pipeline artifacts, keyed by artifact kind (e.g. 'musicxml'). Values are POSIX-style paths relative to the run output directory (no absolute paths, backslashes, control characters such as newlines, or '..' segments). Kept separate from normalized content.",
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+      "additionalProperties": {"$ref": "#/$defs/relativePosixPath"}
+    },
+    "timing": {
+      "description": "Wall-clock timing of the run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_seconds"],
+      "properties": {
+        "duration_seconds": {
+          "description": "Total elapsed time of the run in seconds.",
+          "type": "number",
+          "minimum": 0
+        },
+        "started_at": {
+          "description": "Optional RFC 3339 timestamp at which the run started, or null.",
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "score": {
+      "$comment": "Placeholder: the normalized score content model is defined by issue #19 and will be introduced in a later schema version. In 0.1.0 score is always null.",
+      "description": "Normalized musical content. null means no normalized musical content is available; it is not an empty or recognized score.",
+      "type": "null"
+    },
+    "warnings": {
+      "description": "Non-fatal problems observed during the run, in order of occurrence.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "description": "Stable snake_case warning identifier.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "message": {
+            "description": "Human-readable explanation.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "error": {
+      "description": "Failure details. Required to be an object when status is 'failed' and null when status is 'succeeded'.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "description": "Stable snake_case error identifier (see docs/json-schema.md for known codes).",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "message": {
+          "description": "Actionable, human-readable explanation.",
+          "type": "string",
+          "minLength": 1
+        },
+        "returncode": {
+          "description": "Engine process return code when the failure came from an external process, otherwise null.",
+          "type": ["integer", "null"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativePosixPath": {
+      "$comment": "One rule per entry so a violation names the broken rule. Control characters are rejected first; the other patterns can then assume a single line.",
+      "description": "A POSIX-style path relative to the run output directory.",
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "description": "must not contain control characters such as newlines or tabs",
+          "not": {"pattern": "[\\u0000-\\u001F\\u007F]"}
+        },
+        {
+          "description": "must be relative, not start with '/'",
+          "not": {"pattern": "^/"}
+        },
+        {
+          "description": "must not start with a Windows drive prefix such as 'C:'",
+          "not": {"pattern": "^[A-Za-z]:"}
+        },
+        {
+          "description": "must use '/' as the separator, not '\\'",
+          "not": {"pattern": "\\\\"}
+        },
+        {
+          "description": "must not contain a '..' segment",
+          "not": {"pattern": "(^|/)\\.\\.(/|$)"}
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "failed"}}, "required": ["status"]},
+      "then": {"properties": {"error": {"type": "object"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "succeeded"}}, "required": ["status"]},
+      "then": {"properties": {"error": {"type": "null"}}}
+    }
+  ]
+}

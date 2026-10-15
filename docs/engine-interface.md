@@ -1,14 +1,25 @@
 # OMR Engine Interface
 
-This contract separates pipeline orchestration from engine-specific behavior. Adapters for Audiveris and homr should implement the same protocol; this issue does not add either production adapter.
+This contract separates pipeline orchestration from engine-specific behavior. Every engine adapter implements this protocol.
+
+- Implemented: Audiveris (`omr_lab.engines.AudiverisEngine`), see [engines/audiveris.md](engines/audiveris.md).
+- Planned: homr (issue #11, OMR-011).
 
 ## Contract
 
 - Engine.name: stable engine identifier.
 - Engine.check_available(): local prerequisite check, returning EngineAvailability with availability, optional version, and an actionable message when unavailable.
 - Engine.recognize(input_path, output_dir, *, timeout_seconds, options=None): run recognition and return an EngineResult. See [Engine options](#engine-options).
-- EngineResult: success/failure, engine name/version, raw artifact paths, diagnostics, process return code, an optional error message, and the effective options (`options`, `{}` by default).
+- EngineResult: success/failure, engine name/version, raw artifact paths (see [Artifact keys](#artifact-keys)), diagnostics, process return code, an optional error message, and the effective options (`options`, `{}` by default).
 - run_command(...): shared subprocess helper that passes an argument sequence without a shell, captures stdout/stderr, enforces a timeout, and normalizes launch/timeout failures. See [Process execution](#process-execution).
+
+## Artifact keys
+
+`EngineResult.artifacts` maps keys to raw files written by the engine. All adapters use the same keys so that the pipeline does not depend on how many files an engine wrote:
+
+- `"musicxml"`: always present when at least one MusicXML file was written, and always the **primary** MusicXML file. Each adapter documents how it picks the primary file (for Audiveris: `<stem>.mxl`/`.xml`/`.musicxml` if present, otherwise the first file in sorted order).
+- `"musicxml:<relative path>"`: every additional MusicXML file (for example further movements), keyed by its path relative to the directory the engine wrote to, in POSIX form (`/` separators).
+- Writing one more file never changes the key of the primary file. Other artifact kinds follow the same pattern with their own prefix when an adapter needs them.
 
 ## Engine options
 
@@ -30,6 +41,7 @@ Engine-specific settings (for example `device` = `"cpu"`/`"cuda"`, a model varia
 - Process tree on timeout: the command starts in its own process group so that a wrapper script and the processes it launches (for example `java` behind the Audiveris launcher) are terminated together.
   - POSIX: the child starts in a new session (`start_new_session=True`); on timeout the whole process group receives `SIGKILL` via `os.killpg`.
   - Windows: the child starts with `CREATE_NEW_PROCESS_GROUP`; on timeout `taskkill /T /F /PID <pid>` terminates the child and its descendants, then the direct child is killed as a fallback.
+- Batch files on Windows: run_command refuses to start a program whose path ends in `.bat` or `.cmd` (any case) when running on Windows, because `CreateProcess` runs it through `cmd.exe`, which re-parses the arguments; it returns a CommandResult with `error` set and starts nothing.
 - Partial output written before a timeout is returned in `stdout`/`stderr`; `returncode` stays `None` for a timed-out command.
 - Known limitations: on POSIX, a descendant that moves itself into another session or process group (for example a daemonizing process) escapes the group kill. On Windows, `taskkill /T` follows parent process ids, so a descendant whose parent already exited is not found; a job object would close this gap and is not implemented. If such an escaped process keeps the output pipes open, run_command stops collecting output after a bounded drain period instead of hanging. On Windows the output pipes are then left open to the reader threads of `communicate()` (closing them while a read is blocked would hang); they finish once the escaped process exits.
 
