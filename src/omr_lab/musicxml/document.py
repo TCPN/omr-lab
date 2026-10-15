@@ -13,6 +13,7 @@ import posixpath
 import struct
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -28,6 +29,23 @@ DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 """Default size limit for a MusicXML document (after decompression for ``.mxl``)."""
 
 ZIP_MAGIC = b"PK\x03\x04"
+
+try:  # lzma can be missing from a Python build; zipfile then cannot read LZMA entries.
+    from lzma import LZMAError as _LZMAError
+except ImportError:  # pragma: no cover - depends on the Python build
+    _LZMAError = OSError
+
+# Errors raised while decompressing a damaged member: zlib and lzma errors are not
+# OSError subclasses, so they are listed explicitly.
+_EXTRACT_ERRORS = (
+    zipfile.BadZipFile,
+    RuntimeError,
+    OSError,
+    EOFError,
+    NotImplementedError,
+    zlib.error,
+    _LZMAError,
+)
 
 MAX_CENTRAL_DIRECTORY_BYTES = 1024 * 1024
 """Limit on an .mxl central directory. ``zipfile`` builds a ZipInfo for every entry up
@@ -501,7 +519,7 @@ def _read_member(
         with archive.open(info) as handle:
             # Read one byte past the limit so a lying size header is still caught.
             data = handle.read(max_bytes + 1)
-    except (zipfile.BadZipFile, RuntimeError, OSError, EOFError, NotImplementedError) as exc:
+    except _EXTRACT_ERRORS as exc:
         raise MusicXmlError(
             "musicxml_invalid",
             f"Could not extract {info.filename!r} from {path}: {exc}. The .mxl archive "

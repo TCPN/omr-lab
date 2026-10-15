@@ -562,6 +562,30 @@ def test_corrupt_mxl(tmp_path: Path, content: bytes) -> None:
     assert ".mxl" in str(excinfo.value)
 
 
+@pytest.mark.parametrize(
+    "compression", [zipfile.ZIP_DEFLATED, zipfile.ZIP_LZMA], ids=["deflate", "lzma"]
+)
+def test_mxl_with_corrupt_member_data(tmp_path: Path, compression: int) -> None:
+    # Headers stay intact; only the member's compressed stream is damaged, as in a
+    # truncated download or an engine that crashed while writing.
+    target = tmp_path / "damaged.mxl"
+    score = (FIXTURES / "valid-partwise.musicxml").read_bytes()
+    with zipfile.ZipFile(target, "w", compression=compression) as archive:
+        archive.writestr("score.xml", score)
+    data = bytearray(target.read_bytes())
+    with zipfile.ZipFile(target) as archive:
+        info = archive.getinfo("score.xml")
+    start = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+    for offset in range(start + 8, start + min(info.compress_size, 64)):
+        data[offset] ^= 0xFF
+    target.write_bytes(bytes(data))
+
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target)
+    assert excinfo.value.code == "musicxml_invalid"
+    assert excinfo.value.member == "score.xml"
+
+
 def test_mxl_member_over_size_limit(tmp_path: Path) -> None:
     score = (FIXTURES / "valid-partwise.musicxml").read_bytes()
     archive = make_mxl(
