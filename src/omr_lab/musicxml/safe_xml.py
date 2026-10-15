@@ -92,6 +92,7 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
     skipped: dict[str, None] = {}
     first_child_lines: dict[str, int] = {}
     depth = 0
+    in_internal_subset = False
 
     def position() -> tuple[int, int]:
         return parser.CurrentLineNumber, parser.CurrentColumnNumber + 1
@@ -108,9 +109,9 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
 
     def start(name: str, attrs: dict[str, str]) -> None:
         nonlocal depth
-        # Without an external DTD an undefined reference is a syntax error, so only a
-        # document that names one can have references expat dropped from attributes.
-        if attrs and (doctype.get("system_id") or doctype.get("public_id")):
+        # Without a DOCTYPE an undefined reference is a syntax error, so only a document
+        # with one can have references expat dropped from attribute values.
+        if attrs and doctype:
             record_attribute_references(parser.CurrentByteIndex)
         tag = _clark(name)
         builder.start(tag, {_clark(key): value for key, value in attrs.items()})
@@ -134,9 +135,15 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
                 skipped.setdefault(entity)
 
     def start_doctype(
-        name: str, system_id: str | None, public_id: str | None, _has_internal_subset: int
+        name: str, system_id: str | None, public_id: str | None, has_internal_subset: int
     ) -> None:
+        nonlocal in_internal_subset
         doctype.update(name=name, system_id=system_id, public_id=public_id)
+        in_internal_subset = bool(has_internal_subset)
+
+    def end_doctype() -> None:
+        nonlocal in_internal_subset
+        in_internal_subset = False
 
     def entity_decl(name: str, is_parameter: int, *_args: object) -> None:
         kind = "Parameter entity" if is_parameter else "Entity"
@@ -153,14 +160,25 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
         if not is_parameter:
             skipped.setdefault(name)
 
+    def not_standalone() -> int:
+        # Expat calls this once for an external DTD (normal for MusicXML), before the
+        # DOCTYPE start handler, and again for each parameter-entity reference such as
+        # "%pe;" inside the internal subset. Such a reference makes expat ignore later
+        # entity declarations instead of reporting them, so it is refused like one.
+        if in_internal_subset:
+            forbid("Parameter entity reference in the internal DTD subset")
+        return 1
+
     parser.StartElementHandler = start
     parser.EndElementHandler = end
     parser.CharacterDataHandler = builder.data
     parser.StartDoctypeDeclHandler = start_doctype
+    parser.EndDoctypeDeclHandler = end_doctype
     parser.EntityDeclHandler = entity_decl
     parser.UnparsedEntityDeclHandler = unparsed_entity_decl
     parser.ExternalEntityRefHandler = external_entity_ref
     parser.SkippedEntityHandler = skipped_entity
+    parser.NotStandaloneHandler = not_standalone
 
     try:
         parser.Parse(data, True)

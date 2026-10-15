@@ -366,6 +366,22 @@ def test_parameter_entity_is_refused(tmp_path: Path) -> None:
     assert excinfo.value.code == "musicxml_unsupported"
 
 
+@pytest.mark.parametrize(
+    "doctype",
+    [
+        b'<!DOCTYPE score-partwise [ %pe; <!ENTITY a "x"> ]>',
+        b'<!DOCTYPE score-partwise SYSTEM "partwise.dtd" [ %pe; <!ENTITY a "x"> ]>',
+    ],
+)
+def test_parameter_entity_reference_in_internal_subset_is_refused(doctype: bytes) -> None:
+    # Expat would otherwise ignore the later declaration instead of reporting it.
+    data = doctype + MINIMAL_BODY.format(name="&a;").encode()
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(data)
+    assert excinfo.value.code == "musicxml_unsupported"
+    assert "Parameter entity reference" in str(excinfo.value)
+
+
 def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     dtd = tmp_path / "partwise.dtd"
     dtd.write_text('<!ENTITY name "from external dtd">', encoding="utf-8")

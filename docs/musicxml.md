@@ -105,7 +105,8 @@ Engine output is untrusted input. The loader uses only the standard library: it 
 - The DTD named in `<!DOCTYPE score-partwise PUBLIC ... "http://www.musicxml.org/...">`
   is never loaded or fetched: parameter-entity parsing is disabled
   (`XML_PARAM_ENTITY_PARSING_NEVER`), and expat performs no network I/O.
-- Any entity declaration (internal, external, parameter, or unparsed) is refused with
+- Any entity declaration (internal, external, parameter, or unparsed), and any
+  parameter-entity reference such as `%pe;` in the internal DTD subset, is refused with
   `musicxml_unsupported`, which blocks external-entity file reads (XXE) and entity
   expansion ("billion laughs"). An external-entity handler that raises is installed as
   a second guard. MusicXML does not need entity declarations.
