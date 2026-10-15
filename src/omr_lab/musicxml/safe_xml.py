@@ -11,11 +11,13 @@ module drives ``pyexpat`` directly and feeds an ``ElementTree.TreeBuilder``:
 - An external-entity reference handler that raises is installed as a second guard.
 - References to entities that are not defined in the document (for example ``&nbsp;``
   from an unread external DTD) are skipped by expat; their names are recorded so the
-  caller can warn instead of losing text silently.
+  caller can warn instead of losing text silently. Expat drops such references inside
+  attribute values without reporting them, so start tags are scanned for them too.
 """
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from xml.parsers import expat
@@ -59,6 +61,14 @@ class ParsedXml:
     distinct tags rather than the number of children."""
 
 
+_PREDEFINED_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
+
+# A start tag in an ASCII-compatible encoding, and the named references inside it.
+# Quoted values may contain ">", so they are matched as a whole.
+_START_TAG = re.compile(rb"""<[^\s/>]+(?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*/?>""")
+_ENTITY_REFERENCE = re.compile(rb"&([^\s&;#<>\"']+);")
+
+
 def _clark(name: str) -> str:
     """Turn expat's ``uri}local`` into ElementTree's ``{uri}local``."""
     return "{" + name if "}" in name else name
@@ -98,6 +108,10 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
 
     def start(name: str, attrs: dict[str, str]) -> None:
         nonlocal depth
+        # Without an external DTD an undefined reference is a syntax error, so only a
+        # document that names one can have references expat dropped from attributes.
+        if attrs and (doctype.get("system_id") or doctype.get("public_id")):
+            record_attribute_references(parser.CurrentByteIndex)
         tag = _clark(name)
         builder.start(tag, {_clark(key): value for key, value in attrs.items()})
         depth += 1
@@ -108,6 +122,16 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
         nonlocal depth
         builder.end(_clark(name))
         depth -= 1
+
+    def record_attribute_references(offset: int) -> None:
+        # UTF-16 input does not match the byte pattern and is not scanned.
+        tag = _START_TAG.match(data, offset)
+        if tag is None:
+            return
+        for reference in _ENTITY_REFERENCE.finditer(tag.group()):
+            entity = reference.group(1).decode("utf-8", errors="replace")
+            if entity not in _PREDEFINED_ENTITIES:
+                skipped.setdefault(entity)
 
     def start_doctype(
         name: str, system_id: str | None, public_id: str | None, _has_internal_subset: int

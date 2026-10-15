@@ -85,7 +85,7 @@ full tree stays available in `document.root`.
 | Code | Meaning |
 | --- | --- |
 | `musicxml_unknown_element` | A direct child of `<score-partwise>` not in the MusicXML 4.0 schema (kept in the tree). One warning per distinct tag, with the count and first line. |
-| `musicxml_unresolved_entity` | An entity reference (e.g. `&nbsp;`) not defined in the document; its text is omitted because external DTDs are never loaded. |
+| `musicxml_unresolved_entity` | An entity reference (e.g. `&nbsp;`) not defined in the document, in text or in an attribute value; its text is omitted because external DTDs are never loaded. Attribute values of UTF-16 documents are not checked. |
 | `musicxml_part_missing` | A `<score-part>` with no matching `<part>`. |
 | `musicxml_part_undeclared` | A `<part>` not declared in `<part-list>`. |
 | `musicxml_part_without_id` | A `<part>` or `<score-part>` without an `id`. |

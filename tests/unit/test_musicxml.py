@@ -377,6 +377,22 @@ def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     assert "&name;" in document.warnings[0].message
 
 
+def test_unresolved_entity_in_attribute_is_warned() -> None:
+    data = (
+        b'<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" '
+        b'"http://www.musicxml.org/dtds/partwise.dtd">'
+        b'<score-partwise version="4.0" data-x="1 &gt; 0 &amp; &#65;">'
+        b'<part-list><score-part id="P1" data-y="a>&nbsp;b">'
+        b"<part-name>Voice</part-name></score-part></part-list>"
+        b'<part id="P1"><measure number="1"/></part></score-partwise>'
+    )
+    parsed = parse_xml_bytes(data)
+    assert parsed.skipped_entities == ["nbsp"]
+    document = parse_musicxml_bytes(data)
+    assert warning_codes(document) == ["musicxml_unresolved_entity"]
+    assert "&nbsp;" in document.warnings[0].message
+
+
 def test_repeated_unresolved_entity_is_recorded_once(tmp_path: Path, no_network: None) -> None:
     dtd = tmp_path / "partwise.dtd"
     dtd.write_text("", encoding="utf-8")
