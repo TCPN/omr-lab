@@ -239,7 +239,7 @@ def test_file_over_size_limit(tmp_path: Path) -> None:
     target.write_bytes((FIXTURES / "minimal-partwise.xml").read_bytes())
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(target, max_bytes=10)
-    assert excinfo.value.code == "musicxml_unreadable"
+    assert excinfo.value.code == "musicxml_too_large"
     assert "max_bytes" in str(excinfo.value)
 
 
@@ -411,6 +411,50 @@ def test_external_dtd_with_harmless_internal_subset_loads(
     assert document.warnings == ()
 
 
+XLINK_SCORE = (
+    "<score-partwise{decl}><credit page='1'><credit-image xlink:href='a.png' "
+    "type='image/png'/></credit><part-list><score-part id='P1'><part-name>Voice"
+    "</part-name></score-part></part-list><part id='P1'><measure number='1'/></part>"
+    "</score-partwise>"
+)
+
+
+def test_undeclared_xlink_prefix_is_assumed_with_warning() -> None:
+    doctype = (
+        '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" '
+        '"http://www.musicxml.org/dtds/partwise.dtd">'
+    )
+    data = (doctype + XLINK_SCORE.format(decl=" version='4.0'")).encode()
+    document = parse_musicxml_bytes(data)
+    image = document.root.find("credit/credit-image")
+    assert image is not None
+    assert image.get("{http://www.w3.org/1999/xlink}href") == "a.png"
+    assert document.metadata.version == "4.0"
+    assert warning_codes(document) == ["musicxml_xlink_namespace_assumed"]
+
+
+def test_declared_xlink_prefix_loads_without_warning() -> None:
+    decl = " xmlns:xlink='http://www.w3.org/1999/xlink'"
+    document = parse_musicxml_bytes(XLINK_SCORE.format(decl=decl).encode())
+    assert document.warnings == ()
+
+
+def test_other_unbound_prefix_is_still_invalid() -> None:
+    data = XLINK_SCORE.format(decl="").replace("xlink:href", "foo:href").encode()
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(data)
+    assert excinfo.value.code == "musicxml_invalid"
+    assert "unbound prefix" in str(excinfo.value)
+
+
+def test_undeclared_xlink_with_another_error_reports_the_original_error() -> None:
+    data = XLINK_SCORE.format(decl="").replace("</score-partwise>", "").encode()
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(data)
+    assert excinfo.value.code == "musicxml_invalid"
+    assert "unbound prefix" in str(excinfo.value)
+
+
 def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     dtd = tmp_path / "partwise.dtd"
     dtd.write_text('<!ENTITY name "from external dtd">', encoding="utf-8")
@@ -515,7 +559,7 @@ def test_mxl_with_too_many_entries_is_refused(
     monkeypatch.setattr(document_module, "MAX_ARCHIVE_ENTRIES", 20)
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(archive)
-    assert excinfo.value.code == "musicxml_unreadable"
+    assert excinfo.value.code == "musicxml_too_large"
     assert "entry limit" in str(excinfo.value)
 
 
@@ -539,7 +583,7 @@ def test_zip64_archive_with_many_entries_is_refused(
 
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(archive)
-    assert excinfo.value.code == "musicxml_unreadable"
+    assert excinfo.value.code == "musicxml_too_large"
     assert "entry limit" in str(excinfo.value)
 
 
@@ -865,7 +909,7 @@ def test_mxl_member_over_size_limit(tmp_path: Path) -> None:
     )
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(archive, max_bytes=20_000)
-    assert excinfo.value.code == "musicxml_unreadable"
+    assert excinfo.value.code == "musicxml_too_large"
     assert excinfo.value.member == "score.xml"
 
 
@@ -893,4 +937,4 @@ def test_file_growing_after_stat_is_still_bounded(
     monkeypatch.setattr(Path, "stat", small_stat)
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(target, max_bytes=10)
-    assert excinfo.value.code == "musicxml_unreadable"
+    assert excinfo.value.code == "musicxml_too_large"

@@ -26,7 +26,9 @@ else:
 ```
 
 - `load_musicxml(path, *, max_bytes=DEFAULT_MAX_BYTES) -> MusicXmlDocument`
-- `parse_musicxml_bytes(data, *, path=None) -> MusicXmlDocument` for in-memory data.
+- `parse_musicxml_bytes(data, *, path=None) -> MusicXmlDocument` for in-memory data. It
+  applies no size limit; callers must bound in-memory input themselves.
+- `ErrorCode` and `WarningCode` are `Literal` types listing every code below.
 - `MusicXmlDocument`: `path`, `root` (the full parsed `ElementTree.Element`, unmodified),
   `metadata`, `container` (`"musicxml"` or `"mxl"`), `archive_member` (score entry inside
   an `.mxl`), `doctype_public_id`, and `warnings`.
@@ -60,6 +62,9 @@ surrounding whitespace.
   object per entry up front; a MusicXML archive has only a few entries.
 - XML is parsed with namespace processing, as ElementTree does: an unbound prefix is a
   syntax error, and namespaced names use Clark notation (`{http://www.w3.org/1999/xlink}href`).
+  The one exception is an undeclared `xlink:` prefix, which the MusicXML DTD declares as
+  `#FIXED`: it is assumed with a `musicxml_xlink_namespace_assumed` warning. This retry
+  does not apply to UTF-16 input.
   MusicXML score elements are not in a namespace, so their tags stay plain.
 
 ## Errors
@@ -70,7 +75,8 @@ known, `path`, `member` (archive entry), and 1-based `line`/`column`.
 | Code | Meaning |
 | --- | --- |
 | `musicxml_missing` | Path does not exist or is not a regular file. |
-| `musicxml_unreadable` | File could not be read (permissions, I/O), exceeds `max_bytes`, or is an `.mxl` with too many entries. |
+| `musicxml_unreadable` | File could not be read (permissions, I/O). |
+| `musicxml_too_large` | The file or an `.mxl` entry exceeds `max_bytes`, or an `.mxl` may declare more than 10,000 entries. Raise `max_bytes` or reject the input. |
 | `musicxml_invalid` | Not well-formed XML, including unbound namespace prefixes (with line/column), root is not a MusicXML element, corrupt/empty/encrypted `.mxl`, container rootfile missing from the archive, or no `<part-list>` / `<part>`. |
 | `musicxml_unsupported` | Not handled: `score-timewise`, `opus`, DTD entity declarations, or a declared encoding the parser cannot decode (e.g. Big5, GBK; re-export as UTF-8). |
 
@@ -86,6 +92,7 @@ full tree stays available in `document.root`.
 | Code | Meaning |
 | --- | --- |
 | `musicxml_unknown_element` | A direct child of `<score-partwise>` not in the MusicXML 4.0 schema (kept in the tree). One warning per distinct tag, with the count and first line. |
+| `musicxml_xlink_namespace_assumed` | The document uses `xlink:` without declaring it. The MusicXML DTD fixes the prefix to `http://www.w3.org/1999/xlink`; because the DTD is never loaded, the document was parsed again with that declaration added to the root. |
 | `musicxml_unresolved_entity` | An entity reference (e.g. `&nbsp;`) not defined in the document, in text or in an attribute value; its text is omitted because external DTDs are never loaded. Attribute values of UTF-16 documents are not checked. |
 | `musicxml_part_missing` | A `<score-part>` with no matching `<part>`. |
 | `musicxml_part_undeclared` | A `<part>` not declared in `<part-list>`. |

@@ -54,6 +54,8 @@ class ParsedXml:
     doctype_public_id: str | None = None
     doctype_system_id: str | None = None
     skipped_entities: list[str] = field(default_factory=list)
+    xlink_namespace_assumed: bool = False
+    """True when ``xmlns:xlink`` was added because the document used it undeclared."""
     first_child_lines: dict[str, int] = field(default_factory=dict)
     """1-based start line of the first direct child of the root with each tag.
 
@@ -66,6 +68,7 @@ _PREDEFINED_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
 # A start tag in an ASCII-compatible encoding, and the named references inside it.
 # Quoted values may contain ">", so they are matched as a whole.
 _START_TAG = re.compile(rb"""<[^\s/>]+(?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*/?>""")
+_ROOT_NAME = re.compile(rb"<[^\s/>]+")
 _ENTITY_REFERENCE = re.compile(rb"&([^\s&;#<>\"']+);")
 
 
@@ -74,12 +77,76 @@ def _clark(name: str) -> str:
     return "{" + name if "}" in name else name
 
 
+XLINK_NAMESPACE = "http://www.w3.org/1999/xlink"
+_XLINK_DECLARATION = f' xmlns:xlink="{XLINK_NAMESPACE}"'.encode()
+
+
 def parse_xml_bytes(data: bytes) -> ParsedXml:
     """Parse ``data`` into an ElementTree, refusing DTD entity declarations.
+
+    The MusicXML DTD declares ``xmlns:xlink`` as a ``#FIXED`` attribute, so a DTD-valid
+    score may use ``xlink:href`` without declaring the prefix. The DTD is never loaded,
+    so when such a document fails only because of an unbound prefix, it is parsed once
+    more with ``xmlns:xlink`` added to the root element, and ``xlink_namespace_assumed``
+    is set on the result.
 
     Raises :class:`XmlSyntaxError` for malformed XML and
     :class:`ForbiddenXmlConstructError` for entity declarations.
     """
+    try:
+        return _parse_once(data)
+    except UnsupportedEncodingError:
+        raise
+    except XmlSyntaxError as exc:
+        if (
+            expat.errors.XML_ERROR_UNBOUND_PREFIX not in str(exc)
+            or b"xlink:" not in data
+            or b"xmlns:xlink" in data
+        ):
+            raise
+        patched = _with_root_xlink_declaration(data)
+        if patched is None:
+            raise
+        try:
+            parsed = _parse_once(patched)
+        except XmlSyntaxError:
+            raise exc from None
+        parsed.xlink_namespace_assumed = True
+        return parsed
+
+
+class _RootFound(Exception):
+    def __init__(self, offset: int) -> None:
+        self.offset = offset
+
+
+def _with_root_xlink_declaration(data: bytes) -> bytes | None:
+    """Return ``data`` with ``xmlns:xlink`` declared on the root, or None if not found.
+
+    Only called after a full parse got past the prolog, so the DOCTYPE has already been
+    checked for forbidden constructs; this probe stops at the root start tag.
+    """
+    probe = expat.ParserCreate()
+    probe.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+
+    def start(_name: str, _attrs: dict[str, str]) -> None:
+        raise _RootFound(probe.CurrentByteIndex)
+
+    probe.StartElementHandler = start
+    try:
+        probe.Parse(data, True)
+    except _RootFound as found:
+        # UTF-16 input does not match the byte pattern and is left unpatched.
+        name = _ROOT_NAME.match(data, found.offset)
+        if name is None:
+            return None
+        return data[: name.end()] + _XLINK_DECLARATION + data[name.end() :]
+    except (expat.ExpatError, ValueError, LookupError):
+        return None
+    return None
+
+
+def _parse_once(data: bytes) -> ParsedXml:
     builder = ET.TreeBuilder()
     # Namespace processing makes unbound prefixes a syntax error and yields the same
     # Clark-notation names (``{uri}local``) as ElementTree's own parser.

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from omr_lab.musicxml.safe_xml import (
+    XLINK_NAMESPACE,
     ForbiddenXmlConstructError,
     ParsedXml,
     UnsupportedEncodingError,
@@ -61,7 +62,7 @@ empty entries could exhaust memory. A MusicXML archive has a handful of entries.
 _CENTRAL_DIRECTORY_SIGNATURE = b"PK\x01\x02"
 CONTAINER_PATH = "META-INF/container.xml"
 
-# Child elements of <score-partwise> defined by the MusicXML 4.0 schema, in order.
+# Child elements of <score-partwise> defined by the MusicXML 4.0 schema.
 KNOWN_PARTWISE_CHILDREN = frozenset(
     {
         "work",
@@ -78,8 +79,21 @@ KNOWN_PARTWISE_CHILDREN = frozenset(
 ErrorCode = Literal[
     "musicxml_missing",
     "musicxml_unreadable",
+    "musicxml_too_large",
     "musicxml_invalid",
     "musicxml_unsupported",
+]
+
+WarningCode = Literal[
+    "musicxml_unknown_element",
+    "musicxml_unresolved_entity",
+    "musicxml_xlink_namespace_assumed",
+    "musicxml_part_missing",
+    "musicxml_part_undeclared",
+    "musicxml_part_without_id",
+    "musicxml_duplicate_part",
+    "musicxml_mxl_container_missing",
+    "musicxml_mxl_container_invalid",
 ]
 
 
@@ -91,7 +105,9 @@ class MusicXmlError(Exception):
 
     - ``musicxml_missing``: the path does not exist or is not a file.
     - ``musicxml_unreadable``: the file exists but could not be read (permissions,
-      I/O error) or exceeds the size limit.
+      I/O error).
+    - ``musicxml_too_large``: the file, an archive entry, or the number of ``.mxl``
+      entries exceeds a limit. Raise ``max_bytes`` or reject the input.
     - ``musicxml_invalid``: not well-formed XML, not a MusicXML score, a corrupt or
       empty ``.mxl`` archive, or required structure (``part-list``, ``part``) missing.
     - ``musicxml_unsupported``: well-formed but uses something this loader does not
@@ -124,7 +140,7 @@ class MusicXmlError(Exception):
 class MusicXmlWarning:
     """A non-fatal problem; same ``code``/``message`` shape as run-document warnings."""
 
-    code: str
+    code: WarningCode
     message: str
 
 
@@ -241,7 +257,7 @@ def load_musicxml(path: str | Path, *, max_bytes: int = DEFAULT_MAX_BYTES) -> Mu
         size = path.stat().st_size
         if size > max_bytes:
             raise MusicXmlError(
-                "musicxml_unreadable",
+                "musicxml_too_large",
                 f"MusicXML file {path} is {size} bytes, larger than the {max_bytes}-byte "
                 "limit. Raise max_bytes if this file is expected.",
                 path=path,
@@ -251,7 +267,7 @@ def load_musicxml(path: str | Path, *, max_bytes: int = DEFAULT_MAX_BYTES) -> Mu
             data = handle.read(max_bytes + 1)
         if len(data) > max_bytes:
             raise MusicXmlError(
-                "musicxml_unreadable",
+                "musicxml_too_large",
                 f"MusicXML file {path} is larger than the {max_bytes}-byte limit. "
                 "Raise max_bytes if this file is expected.",
                 path=path,
@@ -265,18 +281,25 @@ def load_musicxml(path: str | Path, *, max_bytes: int = DEFAULT_MAX_BYTES) -> Mu
 
     if data.startswith(ZIP_MAGIC) or path.suffix.lower() == ".mxl":
         return _load_mxl(data, path=path, max_bytes=max_bytes)
-    return parse_musicxml_bytes(data, path=path)
+    return _parse_document(data, path=path)
 
 
-def parse_musicxml_bytes(
+def parse_musicxml_bytes(data: bytes, *, path: Path | None = None) -> MusicXmlDocument:
+    """Parse uncompressed MusicXML bytes. ``path`` is used only in messages.
+
+    No size limit is applied: callers passing in-memory data must bound it themselves.
+    """
+    return _parse_document(data, path=path)
+
+
+def _parse_document(
     data: bytes,
     *,
-    path: Path | None = None,
+    path: Path | None,
     container: Literal["musicxml", "mxl"] = "musicxml",
     archive_member: str | None = None,
     warnings: list[MusicXmlWarning] | None = None,
 ) -> MusicXmlDocument:
-    """Parse uncompressed MusicXML bytes. ``path`` is used only in messages."""
     warnings = list(warnings or [])
     where = _describe(path, archive_member)
     parsed = _parse_safely(data, where=where, path=path, member=archive_member)
@@ -308,6 +331,14 @@ def parse_musicxml_bytes(
             member=archive_member,
         )
 
+    if parsed.xlink_namespace_assumed:
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_xlink_namespace_assumed",
+                f"{where} uses the xlink: prefix without declaring it. The MusicXML DTD "
+                f"fixes it to {XLINK_NAMESPACE}, so that namespace was assumed.",
+            )
+        )
     if parsed.skipped_entities:
         names = ", ".join(f"&{name};" for name in parsed.skipped_entities)
         warnings.append(
@@ -537,7 +568,7 @@ def _read_member(
 ) -> bytes:
     if info.file_size > max_bytes:
         raise MusicXmlError(
-            "musicxml_unreadable",
+            "musicxml_too_large",
             f"Archive entry {info.filename!r} in {path} is {info.file_size} bytes "
             f"uncompressed, larger than the {max_bytes}-byte limit.",
             path=path,
@@ -557,7 +588,7 @@ def _read_member(
         ) from exc
     if len(data) > max_bytes:
         raise MusicXmlError(
-            "musicxml_unreadable",
+            "musicxml_too_large",
             f"Archive entry {info.filename!r} in {path} exceeds the {max_bytes}-byte "
             "limit when decompressed.",
             path=path,
@@ -573,7 +604,7 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
     entry_bound = data.count(_CENTRAL_DIRECTORY_SIGNATURE)
     if entry_bound > MAX_ARCHIVE_ENTRIES:
         raise MusicXmlError(
-            "musicxml_unreadable",
+            "musicxml_too_large",
             f"The .mxl archive {path} may declare up to {entry_bound} entries, more than "
             f"the {MAX_ARCHIVE_ENTRIES}-entry limit; a MusicXML archive needs only a few.",
             path=path,
@@ -632,7 +663,7 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
         assert info is not None  # the rootfile lookup and the fallback both checked it
         score_bytes = _read_member(archive, info, path=path, max_bytes=max_bytes)
 
-    return parse_musicxml_bytes(
+    return _parse_document(
         score_bytes, path=path, container="mxl", archive_member=member, warnings=warnings
     )
 
@@ -710,11 +741,11 @@ def _rootfile_from_container(
         for rootfile in group
         if _local_name(rootfile.tag) == "rootfile"
     ]
-    if not rootfiles or not rootfiles[0].get("full-path"):
-        return None, f"{CONTAINER_PATH} names no rootfile with a full-path"
     # MusicXML 4.0: the first rootfile is the main score; others (e.g. PDF renderings)
     # are ignored.
-    member = rootfiles[0].get("full-path", "")
+    member = rootfiles[0].get("full-path") if rootfiles else None
+    if not member:
+        return None, f"{CONTAINER_PATH} names no rootfile with a full-path"
     if _find_entry(entries, member) is None:
         raise MusicXmlError(
             "musicxml_invalid",
