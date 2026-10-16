@@ -751,7 +751,9 @@ def _find_entry(entries: dict[str, zipfile.ZipInfo], name: str) -> zipfile.ZipIn
             return candidate
         if candidate.flag_bits & 0x800:
             continue
-        raw = candidate.filename.encode("cp437", errors="replace")
+        # orig_filename: on Windows, zipfile turns "\\" into "/" in filename, which
+        # corrupts Big5 names whose trail byte is 0x5C (e.g. 許 is B3 5C).
+        raw = candidate.orig_filename.encode("cp437", errors="replace")
         for encoding in _LEGACY_NAME_ENCODINGS:
             try:
                 decoded = raw.decode(encoding)

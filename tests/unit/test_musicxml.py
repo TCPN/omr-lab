@@ -817,6 +817,28 @@ def test_mxl_rootfile_name_without_utf8_flag_is_found(tmp_path: Path, encoding: 
     assert document.warnings == ()
 
 
+def test_mxl_big5_name_with_backslash_trail_byte_is_found_on_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 許 is B3 5C in Big5; on Windows zipfile rewrites the 0x5C ("\\") in filename.
+    name = "許.musicxml"
+    encoded = name.encode("cp950")
+    assert b"\\" in encoded
+    placeholder = "Q" * len(encoded)
+    target = make_mxl(
+        tmp_path / "song.mxl",
+        {
+            "META-INF/container.xml": CONTAINER_XML.format(path=name),
+            placeholder: (FIXTURES / "valid-partwise.musicxml").read_bytes(),
+        },
+    )
+    target.write_bytes(target.read_bytes().replace(placeholder.encode(), encoded))
+    monkeypatch.setattr(zipfile.os, "sep", "\\")
+
+    document = load_musicxml(target)
+    assert document.archive_member == name
+
+
 @pytest.mark.parametrize("utf8_flag", [True, False])
 def test_mxl_rootfile_name_in_nfd_is_found(tmp_path: Path, utf8_flag: bool) -> None:
     # The container names the score in NFC; macOS tools may store the entry in NFD.
