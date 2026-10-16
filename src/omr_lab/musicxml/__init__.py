@@ -6,6 +6,7 @@ not evidence that the recognized music is correct.
 
 from omr_lab.musicxml.document import (
     DEFAULT_MAX_BYTES,
+    DEFAULT_MAX_ELEMENTS,
     Creator,
     ErrorCode,
     MusicXmlDocument,
@@ -20,6 +21,7 @@ from omr_lab.musicxml.document import (
 
 __all__ = [
     "DEFAULT_MAX_BYTES",
+    "DEFAULT_MAX_ELEMENTS",
     "Creator",
     "ErrorCode",
     "MusicXmlDocument",

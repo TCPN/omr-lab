@@ -20,9 +20,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from omr_lab.musicxml.safe_xml import (
+    DEFAULT_MAX_ELEMENTS,
     XLINK_NAMESPACE,
     ForbiddenXmlConstructError,
     ParsedXml,
+    TooManyElementsError,
     UnsupportedEncodingError,
     XmlSyntaxError,
     parse_xml_bytes,
@@ -107,8 +109,9 @@ class MusicXmlError(Exception):
     - ``musicxml_missing``: the path does not exist or is not a file.
     - ``musicxml_unreadable``: the file exists but could not be read (permissions,
       I/O error).
-    - ``musicxml_too_large``: the file, an archive entry, or the number of ``.mxl``
-      entries exceeds a limit. Raise ``max_bytes`` or reject the input.
+    - ``musicxml_too_large``: the file, an archive entry, the number of ``.mxl``
+      entries, or the number of XML elements exceeds a limit. Raise ``max_bytes`` or
+      ``max_elements``, or reject the input.
     - ``musicxml_invalid``: not well-formed XML, not a MusicXML score, a corrupt or
       empty ``.mxl`` archive, or required structure (``part-list``, ``part``) missing.
     - ``musicxml_unsupported``: well-formed but uses something this loader does not
@@ -221,13 +224,19 @@ class MusicXmlDocument:
     warnings: tuple[MusicXmlWarning, ...] = field(default=())
 
 
-def load_musicxml(path: str | Path, *, max_bytes: int = DEFAULT_MAX_BYTES) -> MusicXmlDocument:
+def load_musicxml(
+    path: str | Path,
+    *,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    max_elements: int = DEFAULT_MAX_ELEMENTS,
+) -> MusicXmlDocument:
     """Load and validate a MusicXML file.
 
     Compressed MusicXML is detected by content (zip signature), so an ``.mxl`` saved
     with a ``.musicxml`` extension still loads, and a non-zip ``.mxl`` is reported as
     invalid. ``max_bytes`` limits the file size and, for ``.mxl``, the decompressed size
-    of each entry read.
+    of each entry read. ``max_elements`` limits the number of XML elements, which
+    bounds the memory of the parsed tree.
 
     Raises :class:`MusicXmlError` with an actionable message on failure.
     """
@@ -282,16 +291,19 @@ def load_musicxml(path: str | Path, *, max_bytes: int = DEFAULT_MAX_BYTES) -> Mu
         ) from exc
 
     if data.startswith(ZIP_MAGIC) or path.suffix.lower() == ".mxl":
-        return _load_mxl(data, path=path, max_bytes=max_bytes)
-    return _parse_document(data, path=path)
+        return _load_mxl(data, path=path, max_bytes=max_bytes, max_elements=max_elements)
+    return _parse_document(data, path=path, max_elements=max_elements)
 
 
-def parse_musicxml_bytes(data: bytes, *, path: Path | None = None) -> MusicXmlDocument:
+def parse_musicxml_bytes(
+    data: bytes, *, path: Path | None = None, max_elements: int = DEFAULT_MAX_ELEMENTS
+) -> MusicXmlDocument:
     """Parse uncompressed MusicXML bytes. ``path`` is used only in messages.
 
     No size limit is applied: callers passing in-memory data must bound it themselves.
+    ``max_elements`` limits the number of XML elements, as in :func:`load_musicxml`.
     """
-    return _parse_document(data, path=path)
+    return _parse_document(data, path=path, max_elements=max_elements)
 
 
 def _parse_document(
@@ -301,10 +313,13 @@ def _parse_document(
     container: Literal["musicxml", "mxl"] = "musicxml",
     archive_member: str | None = None,
     warnings: list[MusicXmlWarning] | None = None,
+    max_elements: int = DEFAULT_MAX_ELEMENTS,
 ) -> MusicXmlDocument:
     warnings = list(warnings or [])
     where = _describe(path, archive_member)
-    parsed = _parse_safely(data, where=where, path=path, member=archive_member)
+    parsed = _parse_safely(
+        data, where=where, path=path, member=archive_member, max_elements=max_elements
+    )
     root = parsed.root
 
     if root.tag == "score-timewise":
@@ -415,9 +430,11 @@ def _describe(path: Path | None, member: str | None) -> str:
     return f"{base} (archive entry {member!r})" if member else base
 
 
-def _parse_safely(data: bytes, *, where: str, path: Path | None, member: str | None) -> ParsedXml:
+def _parse_safely(
+    data: bytes, *, where: str, path: Path | None, member: str | None, max_elements: int
+) -> ParsedXml:
     try:
-        return parse_xml_bytes(data)
+        return parse_xml_bytes(data, max_elements=max_elements)
     except UnsupportedEncodingError as exc:
         raise MusicXmlError(
             "musicxml_unsupported",
@@ -443,6 +460,15 @@ def _parse_safely(data: bytes, *, where: str, path: Path | None, member: str | N
         raise MusicXmlError(
             "musicxml_unsupported",
             f"{where}: {exc}",
+            path=path,
+            member=member,
+            line=exc.line,
+            column=exc.column,
+        ) from exc
+    except TooManyElementsError as exc:
+        raise MusicXmlError(
+            "musicxml_too_large",
+            f"{where}: {exc} Raise max_elements if this file is expected.",
             path=path,
             member=member,
             line=exc.line,
@@ -666,7 +692,7 @@ def _read_member(
     return data
 
 
-def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
+def _load_mxl(data: bytes, *, path: Path, max_bytes: int, max_elements: int) -> MusicXmlDocument:
     # zipfile requires every central-directory entry to start with this signature, so
     # its count bounds the ZipInfo objects zipfile can create, whatever end-record or
     # ZIP64 layout it reads. Counting avoids mirroring zipfile's private record lookup.
@@ -738,7 +764,12 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
         score_bytes = _read_member(archive, info, path=path, max_bytes=max_bytes, name=member)
 
     return _parse_document(
-        score_bytes, path=path, container="mxl", archive_member=member, warnings=warnings
+        score_bytes,
+        path=path,
+        container="mxl",
+        archive_member=member,
+        warnings=warnings,
+        max_elements=max_elements,
     )
 
 
@@ -805,7 +836,7 @@ def _rootfile_from_container(
         return None, f"{CONTAINER_PATH} could not be read ({exc})"
     try:
         container = parse_xml_bytes(raw).root
-    except (XmlSyntaxError, ForbiddenXmlConstructError) as exc:
+    except (XmlSyntaxError, ForbiddenXmlConstructError, TooManyElementsError) as exc:
         return None, f"{CONTAINER_PATH} could not be parsed ({exc})"
 
     # Match local names: containers normally declare the OCF namespace, either as the

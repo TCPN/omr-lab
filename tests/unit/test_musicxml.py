@@ -1,3 +1,4 @@
+import inspect
 import json
 import os
 import socket
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from omr_lab.musicxml import (
+    DEFAULT_MAX_ELEMENTS,
     Creator,
     MusicXmlError,
     PartInfo,
@@ -17,7 +19,7 @@ from omr_lab.musicxml import (
     parse_musicxml_bytes,
 )
 from omr_lab.musicxml import document as document_module
-from omr_lab.musicxml.safe_xml import parse_xml_bytes
+from omr_lab.musicxml.safe_xml import TooManyElementsError, parse_xml_bytes
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "musicxml"
 
@@ -1128,3 +1130,68 @@ def test_file_growing_after_stat_is_still_bounded(
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(target, max_bytes=10)
     assert excinfo.value.code == "musicxml_too_large"
+
+
+# Element limit: max_bytes bounds input bytes, not the parsed tree
+
+
+def _flat_score(children: int) -> bytes:
+    return (
+        b"<score-partwise><part-list><score-part id='P1'><part-name>x</part-name>"
+        b"</score-part></part-list><part id='P1'>"
+        + b"<x/>" * children
+        + b"</part></score-partwise>"
+    )
+
+
+def test_element_limit_counts_every_element() -> None:
+    # score-partwise, part-list, score-part, part-name, part: 5 elements plus children.
+    assert len(parse_xml_bytes(_flat_score(5), max_elements=10).root) == 2
+    with pytest.raises(TooManyElementsError) as excinfo:
+        parse_xml_bytes(_flat_score(6), max_elements=10)
+    assert excinfo.value.line == 1
+
+
+def test_parse_bytes_too_many_elements_is_too_large() -> None:
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(_flat_score(100), max_elements=50)
+    assert excinfo.value.code == "musicxml_too_large"
+    assert "max_elements" in str(excinfo.value)
+
+
+def test_element_limit_is_on_by_default() -> None:
+    for function in (load_musicxml, parse_musicxml_bytes, parse_xml_bytes):
+        default = inspect.signature(function).parameters["max_elements"].default
+        assert default == DEFAULT_MAX_ELEMENTS
+
+
+def test_mxl_element_bomb_is_refused(tmp_path: Path) -> None:
+    # Repeated <x/> compresses about 1000:1, so a small .mxl stays far below max_bytes
+    # while its tree would not. Parsing must stop at the element limit.
+    data = _flat_score(200_000)
+    archive = make_mxl(tmp_path / "bomb.mxl", {"score.musicxml": data})
+    assert archive.stat().st_size * 100 < len(data)
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(archive, max_elements=1_000)
+    assert excinfo.value.code == "musicxml_too_large"
+    assert excinfo.value.member == "score.musicxml"
+
+
+def test_load_musicxml_passes_element_limit(tmp_path: Path) -> None:
+    score = tmp_path / "score.musicxml"
+    score.write_bytes(_flat_score(10))
+    assert load_musicxml(score, max_elements=15).root.tag == "score-partwise"
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(score, max_elements=14)
+    assert excinfo.value.code == "musicxml_too_large"
+
+
+def test_container_with_too_many_elements_falls_back(tmp_path: Path) -> None:
+    container = "<container><rootfiles>" + "<x/>" * 20 + "</rootfiles></container>"
+    archive = make_mxl(
+        tmp_path / "score.mxl",
+        {"META-INF/container.xml": container, "score.musicxml": MINIMAL_BODY.format(name="A")},
+    )
+    document = load_musicxml(archive, max_elements=10)
+    assert document.archive_member == "score.musicxml"
+    assert "musicxml_mxl_container_invalid" in warning_codes(document)

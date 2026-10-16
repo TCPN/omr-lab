@@ -25,9 +25,10 @@ else:
         print(warning.code, warning.message)
 ```
 
-- `load_musicxml(path, *, max_bytes=DEFAULT_MAX_BYTES) -> MusicXmlDocument`
-- `parse_musicxml_bytes(data, *, path=None) -> MusicXmlDocument` for in-memory data. It
-  applies no size limit; callers must bound in-memory input themselves.
+- `load_musicxml(path, *, max_bytes=DEFAULT_MAX_BYTES, max_elements=DEFAULT_MAX_ELEMENTS) -> MusicXmlDocument`
+- `parse_musicxml_bytes(data, *, path=None, max_elements=DEFAULT_MAX_ELEMENTS) -> MusicXmlDocument`
+  for in-memory data. It applies no size limit; callers must bound in-memory input
+  themselves. The element limit still applies.
 - `ErrorCode` and `WarningCode` are `Literal` types listing every code below.
 - `MusicXmlDocument`: `path`, `root` (the full parsed `ElementTree.Element`; comments and
   processing instructions are not kept),
@@ -57,7 +58,10 @@ surrounding whitespace.
   entry outside `META-INF/` (any case), then the first `.xml` entry, each sorted by name
   (macOS `__MACOSX/` and `._*` entries are skipped), and warns.
 - `max_bytes` (default 64 MiB) caps the file size and the decompressed size of each
-  archive entry read, which bounds memory use for zip bombs.
+  archive entry read. That bounds the input bytes, not the parsed tree: each element
+  costs about 100 bytes in memory, so `<x/>` repeated to 64 MiB would need well over
+  1 GiB. `max_elements` (default 2,000,000, about 200 MiB of tree) stops parsing past
+  that many elements. Large real scores have a few hundred thousand elements.
 - An `.mxl` that may declare more than 10,000 entries (counted by central-directory
   entry signatures) is refused before `zipfile` opens it, because `zipfile` creates an
   object per entry up front; a MusicXML archive has only a few entries.
@@ -77,7 +81,7 @@ known, `path`, `member` (archive entry), and 1-based `line`/`column`.
 | --- | --- |
 | `musicxml_missing` | Path does not exist or is not a regular file. |
 | `musicxml_unreadable` | File could not be read (permissions, I/O). |
-| `musicxml_too_large` | The file or an `.mxl` entry exceeds `max_bytes`, or an `.mxl` may declare more than 10,000 entries. Raise `max_bytes` or reject the input. |
+| `musicxml_too_large` | The file or an `.mxl` entry exceeds `max_bytes`, the document has more than `max_elements` elements, or an `.mxl` may declare more than 10,000 entries. Raise the limit or reject the input. |
 | `musicxml_invalid` | Not well-formed XML, including unbound namespace prefixes (with line/column), root is not a MusicXML element, corrupt/empty/encrypted `.mxl`, container rootfile missing from the archive, or no `<part-list>` / `<part>`. |
 | `musicxml_unsupported` | Not handled: `score-timewise`, `opus`, DTD entity declarations, `<!ATTLIST>` defaults, or a declared encoding the parser cannot decode (e.g. Big5, GBK; re-export as UTF-8). |
 

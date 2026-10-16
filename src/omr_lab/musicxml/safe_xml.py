@@ -45,6 +45,15 @@ class UnsupportedEncodingError(XmlSyntaxError):
     """The document declares an encoding expat cannot decode (e.g. Big5 or GBK)."""
 
 
+class TooManyElementsError(Exception):
+    """The document has more elements than the parse limit allows."""
+
+    def __init__(self, message: str, line: int | None, column: int | None) -> None:
+        super().__init__(message)
+        self.line = line
+        self.column = column
+
+
 @dataclass
 class ParsedXml:
     """Result of :func:`parse_xml_bytes`."""
@@ -56,9 +65,9 @@ class ParsedXml:
     skipped_entities: list[str] = field(default_factory=list)
     """Distinct undefined entity names, in first-seen order, at most 20."""
     skipped_entity_references: int = 0
+    """Total references to undefined entities, including repeats and names past the cap."""
     skipped_entities_truncated: bool = False
     """True when more distinct names were seen than ``skipped_entities`` keeps."""
-    """Total references to undefined entities, including repeats and names past the cap."""
     xlink_namespace_assumed: bool = False
     """True when ``xmlns:xlink`` was added because the document used it undeclared."""
     processing_instructions: int = 0
@@ -93,11 +102,16 @@ def _clark(name: str) -> str:
     return "{" + name if "}" in name else name
 
 
+DEFAULT_MAX_ELEMENTS = 2_000_000
+"""Default element limit. Each element costs about 100 bytes in the tree, so input of
+a few bytes per element (``<x/>``) would otherwise use 20x or more its size in memory.
+Large real scores have a few hundred thousand elements."""
+
 XLINK_NAMESPACE = "http://www.w3.org/1999/xlink"
 _XLINK_DECLARATION = f' xmlns:xlink="{XLINK_NAMESPACE}"'.encode()
 
 
-def parse_xml_bytes(data: bytes) -> ParsedXml:
+def parse_xml_bytes(data: bytes, *, max_elements: int = DEFAULT_MAX_ELEMENTS) -> ParsedXml:
     """Parse ``data`` into an ElementTree, refusing DTD entity declarations.
 
     The MusicXML DTD declares ``xmlns:xlink`` as a ``#FIXED`` attribute, so a DTD-valid
@@ -106,11 +120,13 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
     more with ``xmlns:xlink`` added to the root element, and ``xlink_namespace_assumed``
     is set on the result.
 
-    Raises :class:`XmlSyntaxError` for malformed XML and
-    :class:`ForbiddenXmlConstructError` for entity declarations.
+    Raises :class:`XmlSyntaxError` for malformed XML,
+    :class:`ForbiddenXmlConstructError` for entity declarations, and
+    :class:`TooManyElementsError` when the document has more than ``max_elements``
+    elements; parsing stops there, before the rest of the tree is built.
     """
     try:
-        return _parse_once(data)
+        return _parse_once(data, max_elements=max_elements)
     except UnsupportedEncodingError:
         raise
     except XmlSyntaxError as exc:
@@ -120,7 +136,7 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
         if patched is None:
             raise
         try:
-            parsed = _parse_once(patched)
+            parsed = _parse_once(patched, max_elements=max_elements)
         except XmlSyntaxError:
             raise exc from None
         parsed.xlink_namespace_assumed = True
@@ -158,7 +174,7 @@ def _with_root_xlink_declaration(data: bytes) -> bytes | None:
     return None
 
 
-def _parse_once(data: bytes) -> ParsedXml:
+def _parse_once(data: bytes, *, max_elements: int) -> ParsedXml:
     builder = ET.TreeBuilder()
     # Namespace processing makes unbound prefixes a syntax error and yields the same
     # Clark-notation names (``{uri}local``) as ElementTree's own parser.
@@ -180,6 +196,7 @@ def _parse_once(data: bytes) -> ParsedXml:
     first_child_lines: dict[str, int] = {}
     pi_targets: dict[str, int] = {}
     depth = 0
+    elements = 0
     in_internal_subset = False
 
     def position() -> tuple[int, int]:
@@ -196,7 +213,16 @@ def _parse_once(data: bytes) -> ParsedXml:
         )
 
     def start(name: str, attrs: dict[str, str]) -> None:
-        nonlocal depth
+        nonlocal depth, elements
+        elements += 1
+        if elements > max_elements:
+            line, column = position()
+            raise TooManyElementsError(
+                f"More than {max_elements} elements (stopped at line {line}, column "
+                f"{column}); the parsed tree would use far more memory than the input size.",
+                line,
+                column,
+            )
         # Without a DOCTYPE an undefined reference is a syntax error, so only a document
         # with one can have references expat dropped from attribute values.
         if attrs and doctype:
