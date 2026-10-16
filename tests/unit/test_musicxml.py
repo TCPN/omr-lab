@@ -549,6 +549,29 @@ def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     assert "&name;" in document.warnings[0].message
 
 
+def test_many_distinct_unresolved_entities_give_one_short_warning(no_network: None) -> None:
+    refs = "".join(f"&e{i};" for i in range(10_000))
+    data = (
+        '<!DOCTYPE score-partwise SYSTEM "partwise.dtd">' + MINIMAL_BODY.format(name=refs + "&e1;")
+    ).encode()
+    parsed = parse_xml_bytes(data)
+    assert len(parsed.skipped_entities) == 20
+    assert parsed.skipped_entity_references == 10_001
+    document = parse_musicxml_bytes(data)
+    assert warning_codes(document) == ["musicxml_unresolved_entity"]
+    assert len(document.warnings[0].message) < 500
+    assert "10001 reference(s)" in document.warnings[0].message
+
+
+def test_many_distinct_unknown_elements_give_bounded_warnings() -> None:
+    unknown = "".join(f"<x{i}/>" for i in range(10_000))
+    data = MINIMAL_BODY.replace("<part-list>", unknown + "<part-list>")
+    document = parse_musicxml_bytes(data.format(name="Voice").encode())
+    assert warning_codes(document) == ["musicxml_unknown_element"] * 6
+    assert "9995 more distinct unknown elements" in document.warnings[5].message
+    assert all(len(w.message) < 500 for w in document.warnings)
+
+
 def test_unresolved_entity_in_attribute_is_warned() -> None:
     data = (
         b'<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" '

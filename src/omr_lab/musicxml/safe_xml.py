@@ -54,6 +54,9 @@ class ParsedXml:
     doctype_public_id: str | None = None
     doctype_system_id: str | None = None
     skipped_entities: list[str] = field(default_factory=list)
+    """Distinct undefined entity names, in first-seen order, at most 20."""
+    skipped_entity_references: int = 0
+    """Total references to undefined entities, including repeats and names past the cap."""
     xlink_namespace_assumed: bool = False
     """True when ``xmlns:xlink`` was added because the document used it undeclared."""
     processing_instruction_targets: dict[str, int] = field(default_factory=dict)
@@ -74,6 +77,7 @@ _PREDEFINED_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
 # Quoted values may contain ">", so they are matched as a whole.
 _START_TAG = re.compile(rb"""<[^\s/>]+(?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*/?>""")
 _MAX_PI_TARGETS = 20
+_MAX_SKIPPED_NAMES = 20
 _ROOT_NAME = re.compile(rb"<[^\s/>]+")
 _ENTITY_REFERENCE = re.compile(rb"&([^\s&;#<>\"']+);")
 
@@ -163,6 +167,7 @@ def _parse_once(data: bytes) -> ParsedXml:
     doctype: dict[str, str | None] = {}
     # Distinct names in first-seen order; a file can repeat one reference many times.
     skipped: dict[str, None] = {}
+    skipped_references = 0
     first_child_lines: dict[str, int] = {}
     pi_targets: dict[str, int] = {}
     depth = 0
@@ -206,7 +211,7 @@ def _parse_once(data: bytes) -> ParsedXml:
         for reference in _ENTITY_REFERENCE.finditer(tag.group()):
             entity = reference.group(1).decode("utf-8", errors="replace")
             if entity not in _PREDEFINED_ENTITIES:
-                skipped.setdefault(entity)
+                record_skipped(entity)
 
     def start_doctype(
         name: str, system_id: str | None, public_id: str | None, has_internal_subset: int
@@ -245,9 +250,16 @@ def _parse_once(data: bytes) -> ParsedXml:
         if target in pi_targets or len(pi_targets) < _MAX_PI_TARGETS:
             pi_targets[target] = pi_targets.get(target, 0) + 1
 
+    def record_skipped(name: str) -> None:
+        # Names are capped like PI targets; the reference count keeps the total.
+        nonlocal skipped_references
+        skipped_references += 1
+        if name in skipped or len(skipped) < _MAX_SKIPPED_NAMES:
+            skipped.setdefault(name)
+
     def skipped_entity(name: str, is_parameter: int) -> None:
         if not is_parameter:
-            skipped.setdefault(name)
+            record_skipped(name)
 
     def not_standalone() -> int:
         # Expat calls this once for an external DTD (normal for MusicXML), before the
@@ -301,6 +313,7 @@ def _parse_once(data: bytes) -> ParsedXml:
         doctype_public_id=doctype.get("public_id"),
         doctype_system_id=doctype.get("system_id"),
         skipped_entities=list(skipped),
+        skipped_entity_references=skipped_references,
         first_child_lines=first_child_lines,
         processing_instruction_targets=pi_targets,
     )

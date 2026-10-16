@@ -92,10 +92,10 @@ full tree stays available in `document.root`.
 
 | Code | Meaning |
 | --- | --- |
-| `musicxml_unknown_element` | A direct child of `<score-partwise>` not in the MusicXML 4.0 schema (kept in the tree). One warning per distinct tag, with the count and first line. |
+| `musicxml_unknown_element` | A direct child of `<score-partwise>` not in the MusicXML 4.0 schema (kept in the tree). One warning per distinct tag, with the count and first line, for the first five tags; one more warning lists the rest. |
 | `musicxml_xlink_namespace_assumed` | The document uses `xlink:` without declaring it. The MusicXML DTD fixes the prefix to `http://www.w3.org/1999/xlink`; because the DTD is never loaded, the document was parsed again with that declaration added to the root. |
 | `musicxml_processing_instructions_dropped` | The document contains `<?target ...?>` processing instructions (for example `<?DoletSibelius ...?>` exporter data). They are not kept in `root`; the warning counts them per target. Comments are dropped without a warning. |
-| `musicxml_unresolved_entity` | An entity reference (e.g. `&nbsp;`) not defined in the document, in text or in an attribute value; its text is omitted because external DTDs are never loaded. Attribute values of UTF-16 documents are not checked. |
+| `musicxml_unresolved_entity` | An entity reference (e.g. `&nbsp;`) not defined in the document, in text or in an attribute value; its text is omitted because external DTDs are never loaded. One warning with the total number of references and up to 20 distinct names. Attribute values of UTF-16 documents are not checked. |
 | `musicxml_part_missing` | A `<score-part>` with no matching `<part>`. |
 | `musicxml_part_undeclared` | A `<part>` not declared in `<part-list>`. |
 | `musicxml_part_without_id` | A `<part>` or `<score-part>` without an `id`. |

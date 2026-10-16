@@ -354,12 +354,13 @@ def _parse_document(
             )
         )
     if parsed.skipped_entities:
-        names = ", ".join(f"&{name};" for name in parsed.skipped_entities)
+        names = _listing([f"&{name};" for name in parsed.skipped_entities])
         warnings.append(
             MusicXmlWarning(
                 "musicxml_unresolved_entity",
-                f"{where} references entities that are not defined in the document "
-                f"({names}); external DTDs are never loaded, so their text was omitted.",
+                f"{where} has {parsed.skipped_entity_references} reference(s) to entities "
+                f"that are not defined in the document ({names}); external DTDs are "
+                "never loaded, so their text was omitted.",
             )
         )
 
@@ -369,7 +370,7 @@ def _parse_document(
     for child in root:
         if isinstance(child.tag, str) and child.tag not in KNOWN_PARTWISE_CHILDREN:
             unknown_counts[child.tag] = unknown_counts.get(child.tag, 0) + 1
-    for tag, count in unknown_counts.items():
+    for tag, count in list(unknown_counts.items())[:_LISTING_LIMIT]:
         line = parsed.first_child_lines.get(tag)
         times = f" ({count} times)" if count > 1 else ""
         first = "first " if count > 1 else ""
@@ -379,6 +380,16 @@ def _parse_document(
                 "musicxml_unknown_element",
                 f"Unknown element <{tag}> under <score-partwise>{times}{at} in {where}; "
                 "it is kept in the parsed tree but not interpreted.",
+            )
+        )
+    others = list(unknown_counts)[_LISTING_LIMIT:]
+    if others:
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_unknown_element",
+                f"{len(others)} more distinct unknown elements under <score-partwise> in "
+                f"{where} ({_listing([f'<{tag}>' for tag in others])}); they are kept in the "
+                "parsed tree but not interpreted.",
             )
         )
 
