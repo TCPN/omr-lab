@@ -856,6 +856,8 @@ def test_mxl_big5_name_with_backslash_trail_byte_is_found_on_windows(
         },
     )
     target.write_bytes(target.read_bytes().replace(placeholder.encode(), encoded))
+    # zipfile.os is the global os module, so this changes os.sep process-wide until the
+    # test ends; ZipInfo has no narrower hook on every supported Python version.
     monkeypatch.setattr(zipfile.os, "sep", "\\")
 
     document = load_musicxml(target)
