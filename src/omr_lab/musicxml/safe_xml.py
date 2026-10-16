@@ -55,6 +55,11 @@ class ParsedXml:
     doctype_system_id: str | None = None
     skipped_entities: list[str] = field(default_factory=list)
     xlink_namespace_assumed: bool = False
+    processing_instruction_targets: dict[str, int] = field(default_factory=dict)
+    """Count of dropped ``<?target ...?>`` processing instructions, by target.
+
+    Comments and processing instructions are not kept in the tree.
+    """
     """True when ``xmlns:xlink`` was added because the document used it undeclared."""
     first_child_lines: dict[str, int] = field(default_factory=dict)
     """1-based start line of the first direct child of the root with each tag.
@@ -68,6 +73,7 @@ _PREDEFINED_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
 # A start tag in an ASCII-compatible encoding, and the named references inside it.
 # Quoted values may contain ">", so they are matched as a whole.
 _START_TAG = re.compile(rb"""<[^\s/>]+(?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*/?>""")
+_MAX_PI_TARGETS = 20
 _ROOT_NAME = re.compile(rb"<[^\s/>]+")
 _ENTITY_REFERENCE = re.compile(rb"&([^\s&;#<>\"']+);")
 
@@ -162,6 +168,7 @@ def _parse_once(data: bytes) -> ParsedXml:
     # Distinct names in first-seen order; a file can repeat one reference many times.
     skipped: dict[str, None] = {}
     first_child_lines: dict[str, int] = {}
+    pi_targets: dict[str, int] = {}
     depth = 0
     in_internal_subset = False
 
@@ -236,6 +243,12 @@ def _parse_once(data: bytes) -> ParsedXml:
         forbid(f"External entity reference {context!r}")
         return 0  # pragma: no cover - forbid() always raises
 
+    def processing_instruction(target: str, _data: str) -> None:
+        # Not kept in the tree; counted (one key per distinct target, capped) so the
+        # caller can warn that exporter data such as <?DoletSibelius ...?> was dropped.
+        if target in pi_targets or len(pi_targets) < _MAX_PI_TARGETS:
+            pi_targets[target] = pi_targets.get(target, 0) + 1
+
     def skipped_entity(name: str, is_parameter: int) -> None:
         if not is_parameter:
             skipped.setdefault(name)
@@ -259,6 +272,7 @@ def _parse_once(data: bytes) -> ParsedXml:
     parser.UnparsedEntityDeclHandler = unparsed_entity_decl
     parser.ExternalEntityRefHandler = external_entity_ref
     parser.SkippedEntityHandler = skipped_entity
+    parser.ProcessingInstructionHandler = processing_instruction
     parser.NotStandaloneHandler = not_standalone
 
     try:
@@ -292,4 +306,5 @@ def _parse_once(data: bytes) -> ParsedXml:
         doctype_system_id=doctype.get("system_id"),
         skipped_entities=list(skipped),
         first_child_lines=first_child_lines,
+        processing_instruction_targets=pi_targets,
     )

@@ -87,6 +87,7 @@ ErrorCode = Literal[
 WarningCode = Literal[
     "musicxml_unknown_element",
     "musicxml_unresolved_entity",
+    "musicxml_processing_instructions_dropped",
     "musicxml_xlink_namespace_assumed",
     "musicxml_part_missing",
     "musicxml_part_undeclared",
@@ -205,9 +206,10 @@ class MusicXmlMetadata:
 class MusicXmlDocument:
     """A loaded MusicXML document.
 
-    ``root`` is the parsed ``<score-partwise>`` element (the full tree, unmodified, for
-    later conversion). ``container`` is ``"mxl"`` for compressed input, in which case
-    ``archive_member`` is the path of the score inside the archive.
+    ``root`` is the parsed ``<score-partwise>`` element (the full element tree, for
+    later conversion; comments and processing instructions are not kept). ``container``
+    is ``"mxl"`` for compressed input, in which case ``archive_member`` is the path of
+    the score inside the archive.
     """
 
     path: Path | None
@@ -337,6 +339,18 @@ def _parse_document(
                 "musicxml_xlink_namespace_assumed",
                 f"{where} uses the xlink: prefix without declaring it. The MusicXML DTD "
                 f"fixes it to {XLINK_NAMESPACE}, so that namespace was assumed.",
+            )
+        )
+    if parsed.processing_instruction_targets:
+        targets = ", ".join(
+            f"<?{target}?> x{count}"
+            for target, count in parsed.processing_instruction_targets.items()
+        )
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_processing_instructions_dropped",
+                f"{where} contains processing instructions ({targets}); they are not kept "
+                "in the parsed tree.",
             )
         )
     if parsed.skipped_entities:

@@ -29,7 +29,8 @@ else:
 - `parse_musicxml_bytes(data, *, path=None) -> MusicXmlDocument` for in-memory data. It
   applies no size limit; callers must bound in-memory input themselves.
 - `ErrorCode` and `WarningCode` are `Literal` types listing every code below.
-- `MusicXmlDocument`: `path`, `root` (the full parsed `ElementTree.Element`, unmodified),
+- `MusicXmlDocument`: `path`, `root` (the full parsed `ElementTree.Element`; comments and
+  processing instructions are not kept),
   `metadata`, `container` (`"musicxml"` or `"mxl"`), `archive_member` (score entry inside
   an `.mxl`), `doctype_public_id`, and `warnings`.
 - `MusicXmlMetadata`: `version`, `work_title`, `work_number`, `movement_title`,
@@ -93,6 +94,7 @@ full tree stays available in `document.root`.
 | --- | --- |
 | `musicxml_unknown_element` | A direct child of `<score-partwise>` not in the MusicXML 4.0 schema (kept in the tree). One warning per distinct tag, with the count and first line. |
 | `musicxml_xlink_namespace_assumed` | The document uses `xlink:` without declaring it. The MusicXML DTD fixes the prefix to `http://www.w3.org/1999/xlink`; because the DTD is never loaded, the document was parsed again with that declaration added to the root. |
+| `musicxml_processing_instructions_dropped` | The document contains `<?target ...?>` processing instructions (for example `<?DoletSibelius ...?>` exporter data). They are not kept in `root`; the warning counts them per target. Comments are dropped without a warning. |
 | `musicxml_unresolved_entity` | An entity reference (e.g. `&nbsp;`) not defined in the document, in text or in an attribute value; its text is omitted because external DTDs are never loaded. Attribute values of UTF-16 documents are not checked. |
 | `musicxml_part_missing` | A `<score-part>` with no matching `<part>`. |
 | `musicxml_part_undeclared` | A `<part>` not declared in `<part-list>`. |
@@ -120,7 +122,7 @@ Engine output is untrusted input. The loader uses only the standard library: it 
 - An `<!ATTLIST>` declaration with a default value (including `#FIXED`) is refused with
   `musicxml_unsupported`: expat would copy or at least process each default on every
   matching element, which can exhaust memory or time. Only attributes written in the
-  file reach the tree, so `root` stays unmodified. `#IMPLIED` / `#REQUIRED` declarations
+  file reach the tree. `#IMPLIED` / `#REQUIRED` declarations
   are accepted and have no effect.
 - `META-INF/container.xml` inside an `.mxl` is parsed with the same parser. Archive
   entries are read into memory by name and never extracted to disk.

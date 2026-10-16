@@ -481,6 +481,27 @@ def test_attlist_defaults_are_refused(declaration: bytes) -> None:
     assert "<!ATTLIST>" in str(excinfo.value)
 
 
+def test_processing_instructions_are_dropped_with_a_warning() -> None:
+    data = (
+        b'<?xml version="1.0"?><!-- exported --><score-partwise><part-list>'
+        b"<score-part id='P1'><part-name>Voice</part-name></score-part></part-list>"
+        b"<part id='P1'><measure number='1'><?DoletSibelius a?><!-- c -->"
+        b"<?DoletSibelius b?></measure></part></score-partwise>"
+    )
+    document = parse_musicxml_bytes(data)
+    measure = document.root.find("part/measure")
+    assert measure is not None and len(measure) == 0
+    assert warning_codes(document) == ["musicxml_processing_instructions_dropped"]
+    assert "<?DoletSibelius?> x2" in document.warnings[0].message
+
+
+def test_processing_instruction_targets_are_capped() -> None:
+    pis = "".join(f"<?t{i} x?>" for i in range(1000))
+    data = MINIMAL_BODY.replace("<measure number='1'/>", f"<measure number='1'>{pis}</measure>")
+    parsed = parse_xml_bytes(data.format(name="Voice").encode())
+    assert len(parsed.processing_instruction_targets) == 20
+
+
 def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     dtd = tmp_path / "partwise.dtd"
     dtd.write_text('<!ENTITY name "from external dtd">', encoding="utf-8")
