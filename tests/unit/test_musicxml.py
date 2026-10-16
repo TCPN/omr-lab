@@ -1186,15 +1186,25 @@ def test_load_musicxml_passes_element_limit(tmp_path: Path) -> None:
     assert excinfo.value.code == "musicxml_too_large"
 
 
-def test_container_with_too_many_elements_falls_back(tmp_path: Path) -> None:
-    container = "<container><rootfiles>" + "<x/>" * 20 + "</rootfiles></container>"
-    archive = make_mxl(
-        tmp_path / "score.mxl",
-        {"META-INF/container.xml": container, "score.musicxml": MINIMAL_BODY.format(name="A")},
+def test_container_uses_the_callers_element_limit(tmp_path: Path) -> None:
+    # A valid rootfile, so only the element limit can make the loader fall back.
+    container = (
+        "<container><rootfiles><rootfile full-path='score.xml'/>"
+        + "<x/>" * 20
+        + "</rootfiles></container>"
     )
+    entries = {
+        "META-INF/container.xml": container,
+        "score.xml": MINIMAL_BODY.format(name="Main"),
+        "fallback.musicxml": MINIMAL_BODY.format(name="Fallback"),
+    }
+    archive = make_mxl(tmp_path / "score.mxl", entries)
+    assert load_musicxml(archive, max_elements=30).archive_member == "score.xml"
+
     document = load_musicxml(archive, max_elements=10)
-    assert document.archive_member == "score.musicxml"
-    assert "musicxml_mxl_container_invalid" in warning_codes(document)
+    assert document.archive_member == "fallback.musicxml"
+    assert warning_codes(document) == ["musicxml_mxl_container_invalid"]
+    assert "More than 10 elements" in document.warnings[0].message
 
 
 def test_lowercase_container_path_is_used(tmp_path: Path) -> None:

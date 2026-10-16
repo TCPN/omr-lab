@@ -722,7 +722,9 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int, max_elements: int) -> 
         if not entries:
             raise MusicXmlError("musicxml_invalid", f"The .mxl archive {path} is empty.", path=path)
 
-        member, problem = _rootfile_from_container(archive, entries, path=path, max_bytes=max_bytes)
+        member, problem = _rootfile_from_container(
+            archive, entries, path=path, max_bytes=max_bytes, max_elements=max_elements
+        )
         if member is None:
             # Some zip tools write "meta-inf/", so the prefix check ignores case.
             # .musicxml entries rank before .xml ones, which may be sidecar files.
@@ -832,6 +834,7 @@ def _rootfile_from_container(
     *,
     path: Path,
     max_bytes: int,
+    max_elements: int,
 ) -> tuple[str | None, str | None]:
     """Return ``(member, None)`` for the first rootfile in META-INF/container.xml.
 
@@ -847,7 +850,7 @@ def _rootfile_from_container(
         # A damaged or oversized container must not hide an intact score.
         return None, f"{CONTAINER_PATH} could not be read ({exc})"
     try:
-        container = parse_xml_bytes(raw).root
+        container = parse_xml_bytes(raw, max_elements=max_elements).root
     except (XmlSyntaxError, ForbiddenXmlConstructError, TooManyElementsError) as exc:
         return None, f"{CONTAINER_PATH} could not be parsed ({exc})"
 
