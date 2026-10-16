@@ -145,6 +145,10 @@ OUTPUT_ENCODING = "utf-8"
 # keep the pipes open; this keeps run_command from hanging on it.
 _DRAIN_TIMEOUT_SECONDS = 5.0
 
+# On Windows, CreateProcess runs .bat/.cmd files through cmd.exe even without
+# shell=True, and cmd.exe re-parses the arguments, so they are not passed safely.
+_WINDOWS_BATCH_SUFFIXES = frozenset({".bat", ".cmd"})
+
 
 def _as_text(value: str | bytes | None) -> str:
     if value is None:
@@ -244,6 +248,10 @@ def run_command(
     killed so that grandchildren (for example ``java`` started by a wrapper
     script) do not outlive it. The caller interprets non-zero exits and maps the
     outcome to an EngineResult.
+
+    On Windows, a ``.bat``/``.cmd`` program is refused without being started,
+    because cmd.exe would re-parse its arguments; the refusal is reported in
+    CommandResult.error.
     """
     if not args:
         raise ValueError("args must contain an executable")
@@ -251,6 +259,15 @@ def run_command(
         raise ValueError("timeout_seconds must be greater than zero")
 
     command = tuple(str(arg) for arg in args)
+    if sys.platform == "win32" and Path(command[0]).suffix.lower() in _WINDOWS_BATCH_SUFFIXES:
+        return CommandResult(
+            args=command,
+            error=(
+                f"Refusing to run batch file {command[0]!r}: Windows runs .bat/.cmd files "
+                "through cmd.exe, which re-parses the arguments, so they would not be "
+                "passed safely. Run the underlying executable instead."
+            ),
+        )
     try:
         process = subprocess.Popen(
             command,

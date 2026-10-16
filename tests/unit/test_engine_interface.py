@@ -419,3 +419,38 @@ def test_run_command_validates_arguments() -> None:
         run_command([], timeout_seconds=1)
     with pytest.raises(ValueError, match="greater than zero"):
         run_command(["tool"], timeout_seconds=0)
+
+
+@pytest.mark.parametrize("program", ["tool.bat", "C:/Tools/Audiveris.CMD", "run.Bat"])
+def test_run_command_refuses_batch_files_on_windows(
+    monkeypatch: pytest.MonkeyPatch, program: str
+) -> None:
+    from omr_lab.engines import base
+
+    def no_popen(*args: object, **kwargs: object) -> None:
+        raise AssertionError("a batch file must not be started")
+
+    monkeypatch.setattr(base.sys, "platform", "win32")
+    monkeypatch.setattr("omr_lab.engines.base.subprocess.Popen", no_popen)
+
+    result = run_command([program, "input file.png"], timeout_seconds=5)
+
+    assert result.succeeded is False
+    assert result.returncode is None
+    assert result.args == (program, "input file.png")
+    assert "cmd.exe" in (result.error or "")
+    assert "re-parses" in (result.error or "")
+
+
+def test_run_command_runs_batch_named_programs_outside_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from omr_lab.engines import base
+
+    monkeypatch.setattr(base.sys, "platform", "linux")
+    created = _install_fake_popen(monkeypatch, output=b"ok")
+
+    result = run_command(["tool.bat"], timeout_seconds=5)
+
+    assert "process" in created
+    assert result.succeeded is True
