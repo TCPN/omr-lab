@@ -56,9 +56,15 @@ class ParsedXml:
     skipped_entities: list[str] = field(default_factory=list)
     """Distinct undefined entity names, in first-seen order, at most 20."""
     skipped_entity_references: int = 0
+    skipped_entities_truncated: bool = False
+    """True when more distinct names were seen than ``skipped_entities`` keeps."""
     """Total references to undefined entities, including repeats and names past the cap."""
     xlink_namespace_assumed: bool = False
     """True when ``xmlns:xlink`` was added because the document used it undeclared."""
+    processing_instructions: int = 0
+    """Total number of dropped processing instructions."""
+    processing_instruction_targets_truncated: bool = False
+    """True when more distinct targets were seen than ``processing_instruction_targets`` keeps."""
     processing_instruction_targets: dict[str, int] = field(default_factory=dict)
     """Count of dropped ``<?target ...?>`` processing instructions, by target.
 
@@ -168,6 +174,9 @@ def _parse_once(data: bytes) -> ParsedXml:
     # Distinct names in first-seen order; a file can repeat one reference many times.
     skipped: dict[str, None] = {}
     skipped_references = 0
+    pi_count = 0
+    skipped_truncated = False
+    pi_truncated = False
     first_child_lines: dict[str, int] = {}
     pi_targets: dict[str, int] = {}
     depth = 0
@@ -247,15 +256,21 @@ def _parse_once(data: bytes) -> ParsedXml:
     def processing_instruction(target: str, _data: str) -> None:
         # Not kept in the tree; counted (one key per distinct target, capped) so the
         # caller can warn that exporter data such as <?DoletSibelius ...?> was dropped.
+        nonlocal pi_count, pi_truncated
+        pi_count += 1
         if target in pi_targets or len(pi_targets) < _MAX_PI_TARGETS:
             pi_targets[target] = pi_targets.get(target, 0) + 1
+        else:
+            pi_truncated = True
 
     def record_skipped(name: str) -> None:
         # Names are capped like PI targets; the reference count keeps the total.
-        nonlocal skipped_references
+        nonlocal skipped_references, skipped_truncated
         skipped_references += 1
         if name in skipped or len(skipped) < _MAX_SKIPPED_NAMES:
             skipped.setdefault(name)
+        else:
+            skipped_truncated = True
 
     def skipped_entity(name: str, is_parameter: int) -> None:
         if not is_parameter:
@@ -314,6 +329,9 @@ def _parse_once(data: bytes) -> ParsedXml:
         doctype_system_id=doctype.get("system_id"),
         skipped_entities=list(skipped),
         skipped_entity_references=skipped_references,
+        skipped_entities_truncated=skipped_truncated,
+        processing_instructions=pi_count,
+        processing_instruction_targets_truncated=pi_truncated,
         first_child_lines=first_child_lines,
         processing_instruction_targets=pi_targets,
     )

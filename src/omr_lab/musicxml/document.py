@@ -342,19 +342,22 @@ def _parse_document(
             )
         )
     if parsed.processing_instruction_targets:
-        targets = ", ".join(
-            f"<?{target}?> x{count}"
-            for target, count in parsed.processing_instruction_targets.items()
+        targets = _listing(
+            [f"<?{t}?> x{n}" for t, n in parsed.processing_instruction_targets.items()]
         )
+        if parsed.processing_instruction_targets_truncated:
+            targets += "; further targets not recorded"
         warnings.append(
             MusicXmlWarning(
                 "musicxml_processing_instructions_dropped",
-                f"{where} contains processing instructions ({targets}); they are not kept "
-                "in the parsed tree.",
+                f"{where} contains {parsed.processing_instructions} processing "
+                f"instruction(s) ({targets}); they are not kept in the parsed tree.",
             )
         )
     if parsed.skipped_entities:
         names = _listing([f"&{name};" for name in parsed.skipped_entities])
+        if parsed.skipped_entities_truncated:
+            names += "; further names not recorded"
         warnings.append(
             MusicXmlWarning(
                 "musicxml_unresolved_entity",

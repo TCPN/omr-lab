@@ -528,6 +528,7 @@ def test_processing_instructions_are_dropped_with_a_warning() -> None:
     assert measure is not None and len(measure) == 0
     assert warning_codes(document) == ["musicxml_processing_instructions_dropped"]
     assert "<?DoletSibelius?> x2" in document.warnings[0].message
+    assert "not recorded" not in document.warnings[0].message
 
 
 def test_processing_instruction_targets_are_capped() -> None:
@@ -535,6 +536,13 @@ def test_processing_instruction_targets_are_capped() -> None:
     data = MINIMAL_BODY.replace("<measure number='1'/>", f"<measure number='1'>{pis}</measure>")
     parsed = parse_xml_bytes(data.format(name="Voice").encode())
     assert len(parsed.processing_instruction_targets) == 20
+    assert parsed.processing_instructions == 1000
+    assert parsed.processing_instruction_targets_truncated
+    document = parse_musicxml_bytes(data.format(name="Voice").encode())
+    message = document.warnings[0].message
+    assert "1000 processing instruction(s)" in message
+    assert "and 15 more; further targets not recorded" in message
+    assert len(message) < 500
 
 
 def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
@@ -561,6 +569,15 @@ def test_many_distinct_unresolved_entities_give_one_short_warning(no_network: No
     assert warning_codes(document) == ["musicxml_unresolved_entity"]
     assert len(document.warnings[0].message) < 500
     assert "10001 reference(s)" in document.warnings[0].message
+    assert "further names not recorded" in document.warnings[0].message
+
+
+def test_twenty_or_fewer_unresolved_entities_are_not_marked_truncated(no_network: None) -> None:
+    refs = "".join(f"&e{i};" for i in range(20))
+    data = '<!DOCTYPE score-partwise SYSTEM "partwise.dtd">' + MINIMAL_BODY.format(name=refs)
+    document = parse_musicxml_bytes(data.encode())
+    assert "and 15 more" in document.warnings[0].message
+    assert "not recorded" not in document.warnings[0].message
 
 
 def test_many_distinct_unknown_elements_give_bounded_warnings() -> None:
