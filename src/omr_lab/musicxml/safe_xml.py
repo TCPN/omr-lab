@@ -152,6 +152,10 @@ def _parse_once(data: bytes) -> ParsedXml:
     # Clark-notation names (``{uri}local``) as ElementTree's own parser.
     parser = expat.ParserCreate(namespace_separator="}")
     parser.buffer_text = True
+    # Report only attributes written in the start tag. Otherwise expat copies DTD
+    # <!ATTLIST> defaults into every matching element, which adds data that is not in
+    # the file and can grow memory far beyond the input size.
+    parser.specified_attributes = True
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
 
     doctype: dict[str, str | None] = {}

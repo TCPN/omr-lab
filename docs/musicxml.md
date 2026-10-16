@@ -117,6 +117,9 @@ Engine output is untrusted input. The loader uses only the standard library: it 
   `musicxml_unsupported`, which blocks external-entity file reads (XXE) and entity
   expansion ("billion laughs"). An external-entity handler that raises is installed as
   a second guard. MusicXML does not need entity declarations.
+- Attribute defaults declared with `<!ATTLIST>` are not applied: only attributes written
+  in the file reach the tree, so `root` stays unmodified and a default cannot be copied
+  into every element to exhaust memory.
 - `META-INF/container.xml` inside an `.mxl` is parsed with the same parser. Archive
   entries are read into memory by name and never extracted to disk.
 

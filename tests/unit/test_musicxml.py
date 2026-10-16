@@ -455,6 +455,21 @@ def test_undeclared_xlink_with_another_error_reports_the_original_error() -> Non
     assert "unbound prefix" in str(excinfo.value)
 
 
+def test_attlist_defaults_are_not_applied() -> None:
+    data = (
+        b'<!DOCTYPE score-partwise [<!ATTLIST score-part id CDATA "P1">'
+        b'<!ATTLIST measure big CDATA "' + b"x" * 1000 + b'">]>'
+        b"<score-partwise><part-list><score-part><part-name>Voice</part-name>"
+        b"</score-part></part-list><part id='P1'>" + b"<measure/>" * 1000 + b"</part>"
+        b"</score-partwise>"
+    )
+    document = parse_musicxml_bytes(data)
+    score_part = document.root.find("part-list/score-part")
+    assert score_part is not None and "id" not in score_part.attrib
+    assert all("big" not in m.attrib for m in document.root.iter("measure"))
+    assert "musicxml_part_without_id" in warning_codes(document)
+
+
 def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
     dtd = tmp_path / "partwise.dtd"
     dtd.write_text('<!ENTITY name "from external dtd">', encoding="utf-8")
