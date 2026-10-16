@@ -1025,7 +1025,7 @@ def test_mxl_member_errors_use_the_container_name(tmp_path: Path) -> None:
     assert name in str(excinfo.value)
 
 
-@pytest.mark.parametrize("other", ["meta-inf/container.xml", "a-layout.xml"])
+@pytest.mark.parametrize("other", ["meta-inf/manifest.xml", "a-layout.xml"])
 def test_mxl_fallback_skips_lowercase_meta_inf_and_prefers_musicxml(
     tmp_path: Path, other: str
 ) -> None:
@@ -1195,3 +1195,28 @@ def test_container_with_too_many_elements_falls_back(tmp_path: Path) -> None:
     document = load_musicxml(archive, max_elements=10)
     assert document.archive_member == "score.musicxml"
     assert "musicxml_mxl_container_invalid" in warning_codes(document)
+
+
+def test_lowercase_container_path_is_used(tmp_path: Path) -> None:
+    archive = make_mxl(
+        tmp_path / "score.mxl",
+        {
+            "meta-inf/container.xml": CONTAINER_XML.format(path="score.xml"),
+            "score.xml": MINIMAL_BODY.format(name="Main"),
+            "notes.musicxml": MINIMAL_BODY.format(name="Sidecar"),
+        },
+    )
+    document = load_musicxml(archive)
+    assert document.archive_member == "score.xml"
+    assert warning_codes(document) == []
+
+
+def test_attribute_default_error_gives_its_own_reason() -> None:
+    data = (
+        "<!DOCTYPE score-partwise [<!ATTLIST part-name print-object CDATA 'no'>]>"
+        + MINIMAL_BODY.format(name="A")
+    ).encode()
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(data)
+    assert "attribute defaults are never applied" in str(excinfo.value)
+    assert "XXE" not in str(excinfo.value)

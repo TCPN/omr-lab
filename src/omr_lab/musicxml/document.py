@@ -748,7 +748,7 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int, max_elements: int) -> 
             member = candidates[0]
             code = (
                 "musicxml_mxl_container_missing"
-                if CONTAINER_PATH not in entries
+                if _container_entry(entries) is None
                 else "musicxml_mxl_container_invalid"
             )
             others = f" out of {len(candidates)} candidates" if len(candidates) > 1 else ""
@@ -814,6 +814,18 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
+def _container_entry(entries: dict[str, zipfile.ZipInfo]) -> zipfile.ZipInfo | None:
+    """Return META-INF/container.xml, matched without regard to case if not exact.
+
+    Some zip tools write ``meta-inf/``; the fallback skips that prefix in any case too.
+    """
+    info = entries.get(CONTAINER_PATH)
+    if info is not None:
+        return info
+    wanted = CONTAINER_PATH.casefold()
+    return next((i for name, i in entries.items() if name.casefold() == wanted), None)
+
+
 def _rootfile_from_container(
     archive: zipfile.ZipFile,
     entries: dict[str, zipfile.ZipInfo],
@@ -826,7 +838,7 @@ def _rootfile_from_container(
     Returns ``(None, reason)`` when the container is absent or unusable so the caller can
     fall back and warn. A rootfile that names a missing entry is an error.
     """
-    info = entries.get(CONTAINER_PATH)
+    info = _container_entry(entries)
     if info is None:
         return None, f"no {CONTAINER_PATH}"
     try:

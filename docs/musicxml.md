@@ -50,7 +50,7 @@ surrounding whitespace.
 - Uncompressed `.musicxml` / `.xml`: any encoding expat supports via the XML declaration
   or BOM (UTF-8, UTF-16, ...).
 - Compressed `.mxl`: detected by the zip signature, so an `.mxl` with the wrong extension
-  still loads. The score is the first `<rootfile full-path>` in `META-INF/container.xml`.
+  still loads. The score is the first `<rootfile full-path>` in `META-INF/container.xml` (matched in any case, since some tools write `meta-inf/`).
   Entry names stored without the zip UTF-8 flag (macOS Archive Utility, older Windows
   tools) are also matched by re-decoding them as UTF-8, CP950 (Big5) or GBK, and names
   are compared in Unicode NFC so decomposed (NFD) names from macOS still match.

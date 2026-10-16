@@ -91,6 +91,10 @@ _PREDEFINED_ENTITIES = frozenset({"amp", "lt", "gt", "quot", "apos"})
 # A start tag in an ASCII-compatible encoding, and the named references inside it.
 # Quoted values may contain ">", so they are matched as a whole.
 _START_TAG = re.compile(rb"""<[^\s/>]+(?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*/?>""")
+_ENTITY_REASON = (
+    "entity declarations and external entities are refused to prevent external-entity "
+    "(XXE) and entity-expansion attacks. MusicXML does not need them."
+)
 _MAX_PI_TARGETS = 20
 _MAX_SKIPPED_NAMES = 20
 _ROOT_NAME = re.compile(rb"<[^\s/>]+")
@@ -202,12 +206,10 @@ def _parse_once(data: bytes, *, max_elements: int) -> ParsedXml:
     def position() -> tuple[int, int]:
         return parser.CurrentLineNumber, parser.CurrentColumnNumber + 1
 
-    def forbid(what: str) -> None:
+    def forbid(what: str, reason: str = _ENTITY_REASON) -> None:
         line, column = position()
         raise ForbiddenXmlConstructError(
-            f"{what} at line {line}, column {column} is not allowed: entity declarations "
-            "and external entities are refused to prevent external-entity (XXE) and "
-            "entity-expansion attacks. MusicXML does not need them.",
+            f"{what} at line {line}, column {column} is not allowed: {reason}",
             line,
             column,
         )
@@ -270,7 +272,11 @@ def _parse_once(data: bytes, *, max_elements: int) -> ParsedXml:
         # even with specified_attributes, so many defaults times many elements can
         # take hours. Defaults are never applied here, so refusing them loses nothing.
         if default is not None:
-            forbid(f"Attribute default for {element}/@{attribute} in an <!ATTLIST> declaration")
+            forbid(
+                f"Attribute default for {element}/@{attribute} in an <!ATTLIST> declaration",
+                "attribute defaults are never applied and can exhaust time or memory. "
+                "MusicXML does not need them in the internal subset.",
+            )
 
     def unparsed_entity_decl(name: str, *_args: object) -> None:
         forbid(f"Unparsed entity declaration {name!r}")
