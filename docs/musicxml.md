@@ -78,7 +78,7 @@ known, `path`, `member` (archive entry), and 1-based `line`/`column`.
 | `musicxml_unreadable` | File could not be read (permissions, I/O). |
 | `musicxml_too_large` | The file or an `.mxl` entry exceeds `max_bytes`, or an `.mxl` may declare more than 10,000 entries. Raise `max_bytes` or reject the input. |
 | `musicxml_invalid` | Not well-formed XML, including unbound namespace prefixes (with line/column), root is not a MusicXML element, corrupt/empty/encrypted `.mxl`, container rootfile missing from the archive, or no `<part-list>` / `<part>`. |
-| `musicxml_unsupported` | Not handled: `score-timewise`, `opus`, DTD entity declarations, or a declared encoding the parser cannot decode (e.g. Big5, GBK; re-export as UTF-8). |
+| `musicxml_unsupported` | Not handled: `score-timewise`, `opus`, DTD entity declarations, `<!ATTLIST>` defaults, or a declared encoding the parser cannot decode (e.g. Big5, GBK; re-export as UTF-8). |
 
 The run document (issue #5) currently lists only `musicxml_invalid`; the pipeline
 (issue #6) decides whether to record these finer codes or map them to it.
@@ -117,9 +117,11 @@ Engine output is untrusted input. The loader uses only the standard library: it 
   `musicxml_unsupported`, which blocks external-entity file reads (XXE) and entity
   expansion ("billion laughs"). An external-entity handler that raises is installed as
   a second guard. MusicXML does not need entity declarations.
-- Attribute defaults declared with `<!ATTLIST>` are not applied: only attributes written
-  in the file reach the tree, so `root` stays unmodified and a default cannot be copied
-  into every element to exhaust memory.
+- An `<!ATTLIST>` declaration with a default value (including `#FIXED`) is refused with
+  `musicxml_unsupported`: expat would copy or at least process each default on every
+  matching element, which can exhaust memory or time. Only attributes written in the
+  file reach the tree, so `root` stays unmodified. `#IMPLIED` / `#REQUIRED` declarations
+  are accepted and have no effect.
 - `META-INF/container.xml` inside an `.mxl` is parsed with the same parser. Archive
   entries are read into memory by name and never extracted to disk.
 

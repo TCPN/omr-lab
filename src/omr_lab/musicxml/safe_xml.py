@@ -220,6 +220,15 @@ def _parse_once(data: bytes) -> ParsedXml:
         kind = "Parameter entity" if is_parameter else "Entity"
         forbid(f"{kind} declaration {name!r}")
 
+    def attlist_decl(
+        element: str, attribute: str, _type: str | None, default: str | None, _required: int
+    ) -> None:
+        # Expat walks every declared default on each start tag of that element type,
+        # even with specified_attributes, so many defaults times many elements can
+        # take hours. Defaults are never applied here, so refusing them loses nothing.
+        if default is not None:
+            forbid(f"Attribute default for {element}/@{attribute} in an <!ATTLIST> declaration")
+
     def unparsed_entity_decl(name: str, *_args: object) -> None:
         forbid(f"Unparsed entity declaration {name!r}")
 
@@ -246,6 +255,7 @@ def _parse_once(data: bytes) -> ParsedXml:
     parser.StartDoctypeDeclHandler = start_doctype
     parser.EndDoctypeDeclHandler = end_doctype
     parser.EntityDeclHandler = entity_decl
+    parser.AttlistDeclHandler = attlist_decl
     parser.UnparsedEntityDeclHandler = unparsed_entity_decl
     parser.ExternalEntityRefHandler = external_entity_ref
     parser.SkippedEntityHandler = skipped_entity

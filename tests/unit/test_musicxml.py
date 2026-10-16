@@ -385,7 +385,12 @@ def test_parameter_entity_reference_in_internal_subset_is_refused(doctype: bytes
 
 @pytest.mark.parametrize(
     "subset",
-    [b"", b"<!-- note -->", b"<!ELEMENT x ANY>", b"<!ATTLIST x y CDATA #IMPLIED>"],
+    [
+        b"",
+        b"<!-- note -->",
+        b"<!ELEMENT x ANY>",
+        b"<!ATTLIST x y CDATA #IMPLIED z CDATA #REQUIRED>",
+    ],
 )
 @pytest.mark.parametrize(
     "external_id",
@@ -455,19 +460,25 @@ def test_undeclared_xlink_with_another_error_reports_the_original_error() -> Non
     assert "unbound prefix" in str(excinfo.value)
 
 
-def test_attlist_defaults_are_not_applied() -> None:
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        b'<!ATTLIST score-part id CDATA "P1">',
+        b"<!ATTLIST measure a1 CDATA 'x' a2 CDATA 'x'>",
+        b"<!ATTLIST score-partwise xmlns:xlink CDATA #FIXED 'http://www.w3.org/1999/xlink'>",
+    ],
+)
+def test_attlist_defaults_are_refused(declaration: bytes) -> None:
     data = (
-        b'<!DOCTYPE score-partwise [<!ATTLIST score-part id CDATA "P1">'
-        b'<!ATTLIST measure big CDATA "' + b"x" * 1000 + b'">]>'
-        b"<score-partwise><part-list><score-part><part-name>Voice</part-name>"
-        b"</score-part></part-list><part id='P1'>" + b"<measure/>" * 1000 + b"</part>"
-        b"</score-partwise>"
+        b"<!DOCTYPE score-partwise ["
+        + declaration
+        + b"]>"
+        + MINIMAL_BODY.format(name="Voice").encode()
     )
-    document = parse_musicxml_bytes(data)
-    score_part = document.root.find("part-list/score-part")
-    assert score_part is not None and "id" not in score_part.attrib
-    assert all("big" not in m.attrib for m in document.root.iter("measure"))
-    assert "musicxml_part_without_id" in warning_codes(document)
+    with pytest.raises(MusicXmlError) as excinfo:
+        parse_musicxml_bytes(data)
+    assert excinfo.value.code == "musicxml_unsupported"
+    assert "<!ATTLIST>" in str(excinfo.value)
 
 
 def test_external_dtd_is_not_loaded(tmp_path: Path, no_network: None) -> None:
