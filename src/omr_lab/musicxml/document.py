@@ -564,15 +564,22 @@ def _extract_metadata(
 
 
 def _read_member(
-    archive: zipfile.ZipFile, info: zipfile.ZipInfo, *, path: Path, max_bytes: int
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    *,
+    path: Path,
+    max_bytes: int,
+    name: str | None = None,
 ) -> bytes:
+    """Read one entry. ``name`` is how messages refer to it (default: zipfile's name)."""
+    name = name or info.filename
     if info.file_size > max_bytes:
         raise MusicXmlError(
             "musicxml_too_large",
-            f"Archive entry {info.filename!r} in {path} is {info.file_size} bytes "
+            f"Archive entry {name!r} in {path} is {info.file_size} bytes "
             f"uncompressed, larger than the {max_bytes}-byte limit.",
             path=path,
-            member=info.filename,
+            member=name,
         )
     try:
         with archive.open(info) as handle:
@@ -581,18 +588,18 @@ def _read_member(
     except _EXTRACT_ERRORS as exc:
         raise MusicXmlError(
             "musicxml_invalid",
-            f"Could not extract {info.filename!r} from {path}: {exc}. The .mxl archive "
+            f"Could not extract {name!r} from {path}: {exc}. The .mxl archive "
             "may be corrupt, encrypted, or use an unsupported compression method.",
             path=path,
-            member=info.filename,
+            member=name,
         ) from exc
     if len(data) > max_bytes:
         raise MusicXmlError(
             "musicxml_too_large",
-            f"Archive entry {info.filename!r} in {path} exceeds the {max_bytes}-byte "
+            f"Archive entry {name!r} in {path} exceeds the {max_bytes}-byte "
             "limit when decompressed.",
             path=path,
-            member=info.filename,
+            member=name,
         )
     return data
 
@@ -661,7 +668,7 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
             )
         info = _find_entry(entries, member)
         assert info is not None  # the rootfile lookup and the fallback both checked it
-        score_bytes = _read_member(archive, info, path=path, max_bytes=max_bytes)
+        score_bytes = _read_member(archive, info, path=path, max_bytes=max_bytes, name=member)
 
     return _parse_document(
         score_bytes, path=path, container="mxl", archive_member=member, warnings=warnings

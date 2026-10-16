@@ -864,6 +864,33 @@ def test_mxl_with_damaged_container_entry_falls_back(tmp_path: Path) -> None:
     assert "could not be read" in document.warnings[0].message
 
 
+def test_mxl_member_errors_use_the_container_name(tmp_path: Path) -> None:
+    # The entry is matched through its legacy-encoded name; errors must still use the
+    # readable name from container.xml, as archive_member does on success.
+    name = "月亮代表我的心.musicxml"
+    placeholder = "Q" * len(name.encode())
+    target = make_mxl(
+        tmp_path / "song.mxl",
+        {
+            "META-INF/container.xml": CONTAINER_XML.format(path=name),
+            placeholder: (FIXTURES / "valid-partwise.musicxml").read_bytes(),
+        },
+    )
+    data = bytearray(target.read_bytes().replace(placeholder.encode(), name.encode()))
+    with zipfile.ZipFile(target) as archive:
+        info = archive.getinfo(placeholder)
+    start = info.header_offset + 30 + len(name.encode()) + len(info.extra)
+    for offset in range(start + 8, start + min(info.compress_size, 64)):
+        data[offset] ^= 0xFF  # damage only the compressed stream
+    target.write_bytes(bytes(data))
+
+    with pytest.raises(MusicXmlError) as excinfo:
+        load_musicxml(target)
+    assert excinfo.value.code == "musicxml_invalid"
+    assert excinfo.value.member == name
+    assert name in str(excinfo.value)
+
+
 def test_mxl_with_invalid_utf8_entry_name(tmp_path: Path) -> None:
     target = tmp_path / "names.mxl"
     with zipfile.ZipFile(target, "w") as archive:
