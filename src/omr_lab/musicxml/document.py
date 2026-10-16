@@ -572,7 +572,7 @@ def _extract_metadata(
             MusicXmlWarning(
                 "musicxml_part_without_id",
                 f"{len(parts_without_id)} <part> element(s) in {where} have no id attribute "
-                f"(part number {numbers}); they cannot be matched to the part list.",
+                f"(at positions {numbers}); they cannot be matched to the part list.",
             )
         )
     if repeated_score_parts:

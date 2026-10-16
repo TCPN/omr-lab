@@ -104,7 +104,7 @@ full tree stays available in `document.root`.
 | `musicxml_mxl_container_invalid` | `container.xml` damaged, oversized, unparseable or without a rootfile; fallback entry used. |
 
 The four part warnings are aggregated: at most one warning per code and element kind
-(`<part>` or `<score-part>`), with a count and the first five ids or part numbers.
+(`<part>` or `<score-part>`), with a count and the first five ids or 1-based `<part>` positions.
 
 Only the top level is checked for unknown elements. Element-level coverage of notes,
 lyrics, and harmony belongs to the score model conversion (issue #19).
