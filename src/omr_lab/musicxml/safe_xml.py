@@ -55,12 +55,12 @@ class ParsedXml:
     doctype_system_id: str | None = None
     skipped_entities: list[str] = field(default_factory=list)
     xlink_namespace_assumed: bool = False
+    """True when ``xmlns:xlink`` was added because the document used it undeclared."""
     processing_instruction_targets: dict[str, int] = field(default_factory=dict)
     """Count of dropped ``<?target ...?>`` processing instructions, by target.
 
     Comments and processing instructions are not kept in the tree.
     """
-    """True when ``xmlns:xlink`` was added because the document used it undeclared."""
     first_child_lines: dict[str, int] = field(default_factory=dict)
     """1-based start line of the first direct child of the root with each tag.
 
