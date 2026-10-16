@@ -443,6 +443,20 @@ def _text(element: ET.Element | None) -> str | None:
     return value or None
 
 
+_LISTING_LIMIT = 5
+
+
+def _listing(items: list[str]) -> str:
+    """Join the first few items for a message, noting how many were left out."""
+    shown = ", ".join(items[:_LISTING_LIMIT])
+    hidden = len(items) - _LISTING_LIMIT
+    return f"{shown}, and {hidden} more" if hidden > 0 else shown
+
+
+def _counted(counts: dict[str, int]) -> list[str]:
+    return [f"{part_id!r} ({count} times)" for part_id, count in counts.items()]
+
+
 def _extract_metadata(
     root: ET.Element,
     *,
@@ -484,59 +498,36 @@ def _extract_metadata(
             software = [s for s in (_text(e) for e in encoding.findall("software")) if s]
             encoding_date = _text(encoding.find("encoding-date"))
 
+    # Problems are collected first and reported once per kind, so a document with many
+    # id-less or repeated parts cannot flood the warnings (or memory).
     measure_counts: dict[str, int] = {}
+    parts_without_id: list[int] = []
+    repeated_parts: dict[str, int] = {}
     for index, part in enumerate(part_elements, start=1):
         part_id = part.get("id")
         if not part_id:
-            warnings.append(
-                MusicXmlWarning(
-                    "musicxml_part_without_id",
-                    f"<part> number {index} in {where} has no id attribute; it cannot be "
-                    "matched to the part list.",
-                )
-            )
-            continue
-        if part_id in measure_counts:
-            warnings.append(
-                MusicXmlWarning(
-                    "musicxml_duplicate_part",
-                    f"<part id={part_id!r}> appears more than once in {where}; only the "
-                    "first is counted.",
-                )
-            )
-            continue
-        measure_counts[part_id] = len(part.findall("measure"))
+            parts_without_id.append(index)
+        elif part_id in measure_counts:
+            repeated_parts[part_id] = repeated_parts.get(part_id, 1) + 1
+        else:
+            measure_counts[part_id] = len(part.findall("measure"))
 
     parts: list[PartInfo] = []
     declared: set[str] = set()
+    score_parts_without_id = 0
+    repeated_score_parts: dict[str, int] = {}
+    missing: list[str] = []
     for score_part in part_list.findall("score-part"):
         part_id = score_part.get("id")
         if not part_id:
-            warnings.append(
-                MusicXmlWarning(
-                    "musicxml_part_without_id",
-                    f"A <score-part> in {where} has no id attribute and is skipped.",
-                )
-            )
+            score_parts_without_id += 1
             continue
         if part_id in declared:
-            warnings.append(
-                MusicXmlWarning(
-                    "musicxml_duplicate_part",
-                    f"<score-part id={part_id!r}> is declared more than once in {where}; "
-                    "only the first is reported.",
-                )
-            )
+            repeated_score_parts[part_id] = repeated_score_parts.get(part_id, 1) + 1
             continue
         declared.add(part_id)
         if part_id not in measure_counts:
-            warnings.append(
-                MusicXmlWarning(
-                    "musicxml_part_missing",
-                    f"Part {part_id!r} is declared in <part-list> of {where} but has no "
-                    "<part> element.",
-                )
-            )
+            missing.append(part_id)
         parts.append(
             PartInfo(
                 id=part_id,
@@ -545,24 +536,67 @@ def _extract_metadata(
                 measure_count=measure_counts.get(part_id),
             )
         )
-    for part_id in measure_counts:
-        if part_id not in declared:
-            warnings.append(
-                MusicXmlWarning(
-                    "musicxml_part_undeclared",
-                    f"<part id={part_id!r}> in {where} is not declared in <part-list>; "
-                    "it is reported without a name.",
-                )
+    undeclared = [part_id for part_id in measure_counts if part_id not in declared]
+    for part_id in undeclared:
+        parts.append(
+            PartInfo(
+                id=part_id,
+                name=None,
+                abbreviation=None,
+                measure_count=measure_counts[part_id],
             )
-            parts.append(
-                PartInfo(
-                    id=part_id,
-                    name=None,
-                    abbreviation=None,
-                    measure_count=measure_counts[part_id],
-                )
-            )
+        )
 
+    if repeated_parts:
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_duplicate_part",
+                f"<part> ids used more than once in {where}: "
+                f"{_listing(_counted(repeated_parts))}; only the first of each is counted.",
+            )
+        )
+    if parts_without_id:
+        numbers = _listing([str(n) for n in parts_without_id])
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_part_without_id",
+                f"{len(parts_without_id)} <part> element(s) in {where} have no id attribute "
+                f"(part number {numbers}); they cannot be matched to the part list.",
+            )
+        )
+    if repeated_score_parts:
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_duplicate_part",
+                f"<score-part> ids declared more than once in {where}: "
+                f"{_listing(_counted(repeated_score_parts))}; only the first of each is "
+                "reported.",
+            )
+        )
+    if score_parts_without_id:
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_part_without_id",
+                f"{score_parts_without_id} <score-part> element(s) in {where} have no id "
+                "attribute and are skipped.",
+            )
+        )
+    if missing:
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_part_missing",
+                f"{len(missing)} part(s) declared in <part-list> of {where} have no <part> "
+                f"element: {_listing([repr(i) for i in missing])}.",
+            )
+        )
+    if undeclared:
+        warnings.append(
+            MusicXmlWarning(
+                "musicxml_part_undeclared",
+                f"{len(undeclared)} <part> id(s) in {where} are not declared in <part-list> "
+                f"and are reported without a name: {_listing([repr(i) for i in undeclared])}.",
+            )
+        )
     return MusicXmlMetadata(
         version=root.get("version"),
         work_title=_text(root.find("work/work-title")),

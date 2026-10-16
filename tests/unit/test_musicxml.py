@@ -160,6 +160,27 @@ def test_repeated_unknown_elements_give_one_warning_per_tag() -> None:
     assert len(document.root.findall("x")) == 5001  # still kept in the tree
 
 
+def test_repeated_part_problems_give_one_warning_per_kind() -> None:
+    score_parts = "<score-part id='P1'/>" * 1000 + "<score-part/>" * 1000
+    score_parts += "".join(f"<score-part id='M{i}'/>" for i in range(1000))
+    parts = "<part id='P1'/>" * 1000 + "<part/>" * 1000
+    parts += "".join(f"<part id='U{i}'/>" for i in range(1000))
+    data = f"<score-partwise><part-list>{score_parts}</part-list>{parts}</score-partwise>"
+    document = parse_musicxml_bytes(data.encode())
+    assert warning_codes(document) == [
+        "musicxml_duplicate_part",
+        "musicxml_part_without_id",
+        "musicxml_duplicate_part",
+        "musicxml_part_without_id",
+        "musicxml_part_missing",
+        "musicxml_part_undeclared",
+    ]
+    assert all(len(w.message) < 500 for w in document.warnings)
+    assert "'P1' (1000 times)" in document.warnings[0].message
+    assert "1000 <part> element(s)" in document.warnings[1].message
+    assert "and 995 more" in document.warnings[1].message
+
+
 def test_duplicate_and_unidentified_parts_are_warned() -> None:
     data = b"""<score-partwise>
       <part-list>
