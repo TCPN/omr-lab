@@ -104,11 +104,7 @@ def parse_xml_bytes(data: bytes) -> ParsedXml:
     except UnsupportedEncodingError:
         raise
     except XmlSyntaxError as exc:
-        if (
-            expat.errors.XML_ERROR_UNBOUND_PREFIX not in str(exc)
-            or b"xlink:" not in data
-            or b"xmlns:xlink" in data
-        ):
+        if expat.errors.XML_ERROR_UNBOUND_PREFIX not in str(exc) or b"xlink:" not in data:
             raise
         patched = _with_root_xlink_declaration(data)
         if patched is None:

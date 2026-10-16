@@ -444,6 +444,20 @@ def test_declared_xlink_prefix_loads_without_warning() -> None:
     assert document.warnings == ()
 
 
+def test_undeclared_xlink_next_to_a_local_declaration_is_assumed() -> None:
+    local = (
+        "<credit page='1' xmlns:xlink='http://www.w3.org/1999/xlink'>"
+        "<credit-image xlink:href='b.png' type='image/png'/></credit>"
+    )
+    data = XLINK_SCORE.format(decl="").replace("<credit page", local + "<credit page", 1)
+    document = parse_musicxml_bytes(("<!-- xmlns:xlink -->" + data).encode())
+    hrefs = [
+        e.get("{http://www.w3.org/1999/xlink}href") for e in document.root.iter("credit-image")
+    ]
+    assert hrefs == ["b.png", "a.png"]
+    assert warning_codes(document) == ["musicxml_xlink_namespace_assumed"]
+
+
 def test_other_unbound_prefix_is_still_invalid() -> None:
     data = XLINK_SCORE.format(decl="").replace("xlink:href", "foo:href").encode()
     with pytest.raises(MusicXmlError) as excinfo:
@@ -655,7 +669,8 @@ def test_mxl_without_container_falls_back_with_warning(tmp_path: Path) -> None:
         },
     )
     document = load_musicxml(archive)
-    assert document.archive_member == "a.xml"
+    # .musicxml entries rank before .xml ones; within a suffix, the order is by name.
+    assert document.archive_member == "b.musicxml"
     assert warning_codes(document) == ["musicxml_mxl_container_missing"]
     assert "out of 2 candidates" in document.warnings[0].message
 
@@ -921,6 +936,22 @@ def test_mxl_member_errors_use_the_container_name(tmp_path: Path) -> None:
     assert excinfo.value.code == "musicxml_invalid"
     assert excinfo.value.member == name
     assert name in str(excinfo.value)
+
+
+@pytest.mark.parametrize("other", ["meta-inf/container.xml", "a-layout.xml"])
+def test_mxl_fallback_skips_lowercase_meta_inf_and_prefers_musicxml(
+    tmp_path: Path, other: str
+) -> None:
+    target = make_mxl(
+        tmp_path / "song.mxl",
+        {
+            other: CONTAINER_XML.format(path="score.musicxml"),
+            "score.musicxml": (FIXTURES / "valid-partwise.musicxml").read_bytes(),
+        },
+    )
+    document = load_musicxml(target)
+    assert document.archive_member == "score.musicxml"
+    assert warning_codes(document) == ["musicxml_mxl_container_missing"]
 
 
 def test_mxl_with_invalid_utf8_entry_name(tmp_path: Path) -> None:

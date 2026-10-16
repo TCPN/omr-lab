@@ -650,13 +650,18 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
 
         member, problem = _rootfile_from_container(archive, entries, path=path, max_bytes=max_bytes)
         if member is None:
+            # Some zip tools write "meta-inf/", so the prefix check ignores case.
+            # .musicxml entries rank before .xml ones, which may be sidecar files.
             candidates = sorted(
-                name
-                for name in entries
-                if not name.startswith(("META-INF/", "__MACOSX/"))
-                # macOS AppleDouble resource forks ("._score.musicxml") are not scores.
-                and not posixpath.basename(name).startswith("._")
-                and posixpath.splitext(name)[1].lower() in {".xml", ".musicxml"}
+                (
+                    name
+                    for name in entries
+                    if not name.upper().startswith(("META-INF/", "__MACOSX/"))
+                    # macOS AppleDouble resource forks ("._score.musicxml") are not scores.
+                    and not posixpath.basename(name).startswith("._")
+                    and posixpath.splitext(name)[1].lower() in {".xml", ".musicxml"}
+                ),
+                key=lambda name: (posixpath.splitext(name)[1].lower() != ".musicxml", name),
             )
             if not candidates:
                 raise MusicXmlError(
@@ -676,8 +681,8 @@ def _load_mxl(data: bytes, *, path: Path, max_bytes: int) -> MusicXmlDocument:
             warnings.append(
                 MusicXmlWarning(
                     code,
-                    f"{path}: {problem}; loaded {member!r}, the first .xml/.musicxml entry "
-                    f"outside META-INF/ by name{others}.",
+                    f"{path}: {problem}; loaded {member!r}, the first entry outside "
+                    f"META-INF/ by name, preferring .musicxml over .xml{others}.",
                 )
             )
         info = _find_entry(entries, member)
