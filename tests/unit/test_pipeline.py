@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -792,3 +793,26 @@ def test_key_with_trailing_newline_is_not_kept_as_a_kind(score: Path, tmp_path: 
     document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
 
     assert document["artifacts"] == {"musicxml": "raw/a.xml", "musicxml_2": "raw/b.xml"}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows file names are always Unicode")
+def test_input_name_that_is_not_utf8_is_rejected(tmp_path: Path) -> None:
+    name = os.fsdecode(b"\xa6\xb1score.png")  # Big5 bytes, decoded with surrogateescape
+    with pytest.raises(ValueError, match="not valid UTF-8"):
+        run_pipeline(tmp_path / name, tmp_path / "run", MockEngine())
+    assert not (tmp_path / "run").exists()
+
+
+def test_surrogate_in_diagnostic_falls_back_instead_of_raising(score: Path, tmp_path: Path) -> None:
+    bad = os.fsdecode(b"stderr \xff")
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult(
+            "scripted", success=False, returncode=1, error="crash", diagnostics=(bad,)
+        )
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"] == {"code": "engine_failed", "message": "crash", "returncode": 1}
+    assert [w["code"] for w in document["warnings"]] == ["run_document_incomplete"]
+    assert not (tmp_path / "run" / f".{RUN_DOCUMENT_FILENAME}.tmp").exists()

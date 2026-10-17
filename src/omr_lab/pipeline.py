@@ -199,7 +199,11 @@ def _fallback_document(
         media_type=state.media_type,
         sha256=state.sha256,
         engine_version=state.engine_version,
-        warnings=[w for w in state.warnings if w["code"] != "score_not_normalized"],
+        warnings=[
+            w
+            for w in state.warnings
+            if w["code"] != "score_not_normalized" and _is_utf8_encodable(w["message"])
+        ],
         error=state.error,
     )
     if reduced.error is None:
@@ -215,6 +219,14 @@ def _fallback_document(
     minimal.fail("internal_error", reason)
     document = build(minimal)
     return document, _serialize(document)
+
+
+def _is_utf8_encodable(text: str) -> bool:
+    try:
+        text.encode("utf-8")
+    except (UnicodeEncodeError, AttributeError):
+        return False
+    return True
 
 
 def _run(
@@ -422,6 +434,9 @@ def _build_document(
 def _serialize(document: dict[str, Any]) -> str:
     """Return the JSON text of a document after checking it round-trips and validates."""
     text = json.dumps(document, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    # Lone surrogates (undecodable bytes kept by surrogateescape) survive json.dumps but
+    # cannot be written as UTF-8; UnicodeEncodeError is a ValueError, so it falls back.
+    text.encode("utf-8")
     validate_run_document(json.loads(text))
     return text
 
@@ -433,6 +448,15 @@ def _recordable_filename(input_path: Path) -> str:
             f"Input path {str(input_path)!r} has no file name that can be recorded "
             "(empty, or containing a backslash or control character)."
         )
+    try:
+        name.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        # On POSIX, a name in a legacy encoding (e.g. Big5 from a Windows zip) arrives
+        # with surrogate escapes, which run.json cannot store.
+        raise ValueError(
+            f"Input file name {name!r} is not valid UTF-8 (perhaps Big5 or GBK). "
+            "Rename the file to a UTF-8 name."
+        ) from exc
     return name
 
 
