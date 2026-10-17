@@ -816,3 +816,21 @@ def test_surrogate_in_diagnostic_falls_back_instead_of_raising(score: Path, tmp_
     assert document["error"] == {"code": "engine_failed", "message": "crash", "returncode": 1}
     assert [w["code"] for w in document["warnings"]] == ["run_document_incomplete"]
     assert not (tmp_path / "run" / f".{RUN_DOCUMENT_FILENAME}.tmp").exists()
+
+
+def test_output_dir_created_concurrently_is_rejected(
+    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_dir = tmp_path / "run"
+    original_mkdir = Path.mkdir
+
+    def mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        if self == output_dir and not self.exists():
+            original_mkdir(self)  # another run wins the race after the exists() check
+        original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+
+    with pytest.raises(OutputDirectoryError, match="cannot be used"):
+        run_pipeline(score, output_dir, MockEngine())
+    assert list(output_dir.iterdir()) == []

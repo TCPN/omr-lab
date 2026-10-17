@@ -472,7 +472,10 @@ def _prepare_output_dir(output_dir: Path) -> None:
                     f"Output directory {str(output_dir)!r} is not empty. Use a new or empty "
                     "directory per run so earlier results are not overwritten or mixed."
                 )
-        output_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            # exist_ok=False: if another run creates the directory between the check
+            # and here, FileExistsError stops this run instead of sharing raw/.
+            output_dir.mkdir(parents=True, exist_ok=False)
     except OSError as exc:
         raise OutputDirectoryError(
             f"Output path {str(output_dir)!r} cannot be used: {exc.strerror or exc}."

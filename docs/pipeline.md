@@ -20,7 +20,7 @@ result.document_path  # runs/0001/run.json
   raw/       raw engine artifacts; the engine's output_dir
 ```
 
-- `output_dir` is created (with parents) if missing. It must not exist or be an empty directory; otherwise `OutputDirectoryError` (a `ValueError`) is raised before anything is written, so earlier results are never overwritten or mixed with a new run. This also keeps the input file's own directory from being used as the output directory.
+- `output_dir` is created (with parents) if missing; it is created exclusively, so a run that loses a race with another run creating the same directory gets `OutputDirectoryError` instead of sharing it. An empty directory that already exists is not protected against that race. It must not exist or be an empty directory; otherwise `OutputDirectoryError` (a `ValueError`) is raised before anything is written, so earlier results are never overwritten or mixed with a new run. This also keeps the input file's own directory from being used as the output directory.
 - The input file is only read (for its SHA-256 and by the engine); it is never modified, moved, or copied.
 - `run.json` is UTF-8 (non-ASCII text such as Chinese lyrics in diagnostics is written as-is), validated with `validate_run_document()` before it is written, and written through a temporary file that is then renamed.
 
