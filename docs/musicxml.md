@@ -45,6 +45,16 @@ even though the MusicXML specification defines the default as 1.0, and a part de
 in `<part-list>` without a `<part>` element has `measure_count=None`. Text is stripped of
 surrounding whitespace.
 
+Import from `omr_lab.musicxml`; the submodules are internal and may change:
+
+| Module | Contents |
+| --- | --- |
+| `document.py` | `load_musicxml`, `parse_musicxml_bytes`, `MusicXmlDocument`, root and top-level checks |
+| `errors.py` | `MusicXmlError`, `MusicXmlWarning`, `ErrorCode`, `WarningCode` |
+| `metadata.py` | `MusicXmlMetadata`, `Creator`, `PartInfo` and part-list checks |
+| `mxl.py` | `.mxl` archive limits, container lookup, fallback and entry-name matching |
+| `safe_xml.py` | Hardened `pyexpat` parser |
+
 ## Input formats
 
 - Uncompressed `.musicxml` / `.xml`: any encoding expat supports via the XML declaration
