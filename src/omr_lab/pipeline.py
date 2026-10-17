@@ -61,6 +61,8 @@ SUPPORTED_MEDIA_TYPES: Mapping[str, str] = {
 
 _KIND_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
+# Raised by _serialize() for a document that cannot be written as valid JSON.
+_SERIALIZE_ERRORS = (RunDocumentValidationError, TypeError, ValueError)
 
 _SCORE_NOT_NORMALIZED_MESSAGE = (
     f"Normalized score content is not produced by run schema {CURRENT_RUN_SCHEMA_VERSION}; "
@@ -146,7 +148,13 @@ def run_pipeline(
         _run(state, input_path, output_dir, engine, timeout_seconds, options)
     except Exception as exc:  # Recorded in the run document and logged, not swallowed.
         logger.exception("Pipeline run failed unexpectedly")
-        state.fail("internal_error", f"Unexpected {type(exc).__name__} during the run: {exc}")
+        message = f"Unexpected {type(exc).__name__} during the run: {exc}"
+        if state.error is None:
+            state.fail("internal_error", message)
+        else:
+            # Keep the failure already recorded (e.g. engine_failed); it is the cause
+            # the user needs, and this error came while reading the rest of the result.
+            state.warn("unexpected_error", message)
     if state.error is None:
         state.warn("score_not_normalized", _SCORE_NOT_NORMALIZED_MESSAGE)
     duration = time.perf_counter() - start
@@ -170,9 +178,6 @@ def run_pipeline(
     document_path = output_dir / RUN_DOCUMENT_FILENAME
     _write_atomically(document_path, text)
     return PipelineResult(document=document, document_path=document_path, output_dir=output_dir)
-
-
-_SERIALIZE_ERRORS = (RunDocumentValidationError, TypeError, ValueError)
 
 
 def _fallback_document(
@@ -244,14 +249,14 @@ def _check_input(state: _RunState, input_path: Path) -> bool:
     # One stat() in a try: on Python 3.11-3.13 exists() and is_file() raise
     # PermissionError for an input in a directory that cannot be searched.
     try:
-        mode = input_path.stat().st_mode
+        info = input_path.stat()
     except (FileNotFoundError, NotADirectoryError):
         state.fail("invalid_input", f"Input file {input_path.name!r} does not exist.")
         return False
     except OSError as exc:
         state.fail("invalid_input", f"Input file {input_path.name!r} cannot be read: {exc}")
         return False
-    if not stat.S_ISREG(mode):
+    if not stat.S_ISREG(info.st_mode):
         state.fail("invalid_input", f"Input {input_path.name!r} is not a regular file.")
         return False
     if state.media_type is None:
@@ -262,24 +267,22 @@ def _check_input(state: _RunState, input_path: Path) -> bool:
             f"{input_path.suffix!r}. Supported extensions: {supported}.",
         )
         return False
+    if info.st_size == 0:
+        state.fail("invalid_input", f"Input file {input_path.name!r} is empty.")
+        return False
     try:
-        size = input_path.stat().st_size
-        digest = _sha256(input_path) if size else None
+        state.sha256 = _sha256(input_path)
     except OSError as exc:
         state.fail("invalid_input", f"Input file {input_path.name!r} cannot be read: {exc}")
         return False
-    if digest is None:
-        state.fail("invalid_input", f"Input file {input_path.name!r} is empty.")
-        return False
-    state.sha256 = digest
     return True
 
 
 def _record_result(
     state: _RunState, result: EngineResult, engine_name: str, output_dir: Path
 ) -> None:
-    # The failure is recorded first, so an unexpected error in the rest of the result
-    # (diagnostics, options, artifacts) cannot replace the engine's own message.
+    # The failure is recorded first, so run_pipeline keeps it (and adds a warning) if
+    # reading the rest of the result (options, diagnostics, artifacts) raises.
     if not result.success:
         message = result.error or (
             f"Engine {engine_name!r} reported a failure without an error message "

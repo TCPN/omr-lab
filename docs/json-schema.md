@@ -93,6 +93,7 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `engine_diagnostic` | warning | One entry of `EngineResult.diagnostics`, copied verbatim. |
 | `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the engine's `raw/` directory, missing, or an unrepresentable path). |
 | `engine_diagnostic_not_recorded` | warning | An `EngineResult.diagnostics` entry was not a string and was left out. |
+| `unexpected_error` | warning | An unexpected exception after a failure was already recorded; the original `error` is kept. |
 | `run_document_incomplete` | warning | The full run document did not validate, so `options` and `artifacts` were left out; the original `error` is kept. |
 
 The pipeline's use of these codes is described in [pipeline.md](pipeline.md). `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed`.

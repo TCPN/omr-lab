@@ -682,3 +682,17 @@ def test_non_string_diagnostic_keeps_engine_failure(
         "engine_diagnostic",
         "engine_diagnostic_not_recorded",
     ]
+
+
+def test_error_after_engine_failure_keeps_engine_failed(score: Path, tmp_path: Path) -> None:
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult(
+            "scripted", success=False, returncode=3, error="crash", options=None
+        )
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"] == {"code": "engine_failed", "message": "crash", "returncode": 3}
+    assert [w["code"] for w in document["warnings"]] == ["unexpected_error"]
+    assert "TypeError" in document["warnings"][0]["message"]
