@@ -60,7 +60,8 @@ SUPPORTED_MEDIA_TYPES: Mapping[str, str] = {
 }
 """Accepted input file extensions (case-insensitive) and the media type recorded for each."""
 
-_KIND_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+# fullmatch, not match with "$": Python's "$" also matches before a final newline.
+_KIND_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 # Raised by _serialize() for a document that cannot be written as valid JSON.
 _SERIALIZE_ERRORS = (RunDocumentValidationError, TypeError, ValueError)
@@ -378,7 +379,7 @@ def _artifact_kinds(keys: list[str]) -> dict[str, str]:
     first ':' (``musicxml:sub/a.musicxml`` -> ``musicxml``), lowercased with other
     characters replaced by '_'; collisions get ``_2``, ``_3``, ... in sorted key order.
     """
-    kinds = {key: key for key in keys if _KIND_PATTERN.match(key)}
+    kinds = {key: key for key in keys if _KIND_PATTERN.fullmatch(key)}
     taken = set(kinds.values())
     for key in sorted(key for key in keys if key not in kinds):
         base = re.sub(r"[^a-z0-9]+", "_", key.split(":", 1)[0].lower()).strip("_")

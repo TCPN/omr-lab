@@ -777,3 +777,18 @@ def test_directory_artifact_is_not_recorded(score: Path, tmp_path: Path) -> None
     assert document["artifacts"] == {"engine_log": "raw/book/score.musicxml"}
     messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
     assert messages == ["Engine artifact 'musicxml' was not recorded: it is not a regular file."]
+
+
+def test_key_with_trailing_newline_is_not_kept_as_a_kind(score: Path, tmp_path: Path) -> None:
+    def build(raw: Path) -> EngineResult:
+        (raw / "a.xml").write_text("x", encoding="utf-8")
+        (raw / "b.xml").write_text("x", encoding="utf-8")
+        return EngineResult(
+            "scripted",
+            success=True,
+            artifacts={"musicxml": raw / "a.xml", "musicxml\n": raw / "b.xml"},
+        )
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["artifacts"] == {"musicxml": "raw/a.xml", "musicxml_2": "raw/b.xml"}
