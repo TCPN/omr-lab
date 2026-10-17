@@ -1,0 +1,145 @@
+# MusicXML Loading and Validation
+
+`omr_lab.musicxml` loads a MusicXML artifact written by an engine, checks that it is a
+readable, well-formed `score-partwise` document, and extracts the metadata it declares.
+It is engine-independent and does not interpret notes, lyrics, or harmony; mapping the
+musical content to the normalized score model is issue #19.
+
+**A document that loads without errors is not evidence of correct recognition.** It only
+means the file is parseable and structurally plausible MusicXML. Wrong pitches, missing
+measures, or garbled lyrics all load fine. Recognition accuracy is measured separately
+(see `docs/benchmark-protocol.md`).
+
+## API
+
+```python
+from omr_lab.musicxml import MusicXmlError, load_musicxml
+
+try:
+    document = load_musicxml("runs/001/score.mxl")
+except MusicXmlError as error:
+    print(error.code, error.message, error.line, error.column)
+else:
+    print(document.metadata.to_dict())
+    for warning in document.warnings:
+        print(warning.code, warning.message)
+```
+
+- `load_musicxml(path, *, max_bytes=DEFAULT_MAX_BYTES, max_elements=DEFAULT_MAX_ELEMENTS) -> MusicXmlDocument`
+- `parse_musicxml_bytes(data, *, path=None, max_elements=DEFAULT_MAX_ELEMENTS) -> MusicXmlDocument`
+  for in-memory data. It applies no size limit; callers must bound in-memory input
+  themselves. The element limit still applies.
+- `ErrorCode` and `WarningCode` are `Literal` types listing every code below.
+- `MusicXmlDocument`: `path`, `root` (the full parsed `ElementTree.Element`; comments and
+  processing instructions are not kept),
+  `metadata`, `container` (`"musicxml"` or `"mxl"`), `archive_member` (score entry inside
+  an `.mxl`), `doctype_public_id`, and `warnings`.
+- `MusicXmlMetadata`: `version`, `work_title`, `work_number`, `movement_title`,
+  `movement_number`, `creators` (`Creator(name, type)`), `rights`, `encoding_software`,
+  `encoding_date`, and `parts` (`PartInfo(id, name, abbreviation, measure_count)`).
+  `to_dict()` returns a JSON-serializable dict.
+
+Metadata is reported only where present. Absent or empty elements become `None` or an
+empty tuple; nothing is guessed. For example, a missing `version` attribute is `None`
+even though the MusicXML specification defines the default as 1.0, and a part declared
+in `<part-list>` without a `<part>` element has `measure_count=None`. Text is stripped of
+surrounding whitespace.
+
+## Input formats
+
+- Uncompressed `.musicxml` / `.xml`: any encoding expat supports via the XML declaration
+  or BOM (UTF-8, UTF-16, ...).
+- Compressed `.mxl`: detected by the zip signature, so an `.mxl` with the wrong extension
+  still loads. The score is the first `<rootfile full-path>` in `META-INF/container.xml` (matched in any case, since some tools write `meta-inf/`).
+  Entry names stored without the zip UTF-8 flag (macOS Archive Utility, older Windows
+  tools) are also matched by re-decoding them as UTF-8, CP950 (Big5) or GBK, and names
+  are compared in Unicode NFC so decomposed (NFD) names from macOS still match.
+  If the container is absent or unusable, the loader falls back to the first `.musicxml`
+  entry outside `META-INF/` (any case), then the first `.xml` entry, each sorted by name
+  (macOS `__MACOSX/` and `._*` entries are skipped), and warns.
+- `max_bytes` (default 64 MiB) caps the file size and the decompressed size of each
+  archive entry read. That bounds the input bytes, not the parsed tree: each element
+  costs about 100 bytes in memory, so `<x/>` repeated to 64 MiB would need well over
+  1 GiB. `max_elements` (default 2,000,000, about 200 MiB of tree) stops parsing past
+  that many elements. Large real scores have a few hundred thousand elements.
+- An `.mxl` that may declare more than 10,000 entries (counted by central-directory
+  entry signatures) is refused before `zipfile` opens it, because `zipfile` creates an
+  object per entry up front; a MusicXML archive has only a few entries.
+- XML is parsed with namespace processing, as ElementTree does: an unbound prefix is a
+  syntax error, and namespaced names use Clark notation (`{http://www.w3.org/1999/xlink}href`).
+  The one exception is an undeclared `xlink:` prefix, which the MusicXML DTD declares as
+  `#FIXED`: it is assumed with a `musicxml_xlink_namespace_assumed` warning. This retry
+  does not apply to UTF-16 input.
+  MusicXML score elements are not in a namespace, so their tags stay plain.
+
+## Errors
+
+`MusicXmlError` carries a stable snake_case `code`, an actionable `message`, and, when
+known, `path`, `member` (archive entry), and 1-based `line`/`column`.
+
+| Code | Meaning |
+| --- | --- |
+| `musicxml_missing` | Path does not exist or is not a regular file. |
+| `musicxml_unreadable` | File could not be read (permissions, I/O). |
+| `musicxml_too_large` | The file or an `.mxl` entry exceeds `max_bytes`, the document has more than `max_elements` elements, or an `.mxl` may declare more than 10,000 entries. Raise the limit or reject the input. |
+| `musicxml_invalid` | Not well-formed XML, including unbound namespace prefixes (with line/column), root is not a MusicXML element, corrupt/empty/encrypted `.mxl`, container rootfile missing from the archive, or no `<part-list>` / `<part>`. |
+| `musicxml_unsupported` | Not handled: `score-timewise`, `opus`, DTD entity declarations, `<!ATTLIST>` defaults, or a declared encoding the parser cannot decode (e.g. Big5, GBK; re-export as UTF-8). |
+
+The run document (issue #5) currently lists only `musicxml_invalid`; the pipeline
+(issue #6) decides whether to record these finer codes or map them to it.
+
+## Warnings
+
+Non-fatal problems are returned as `MusicXmlWarning(code, message)`, the same shape as
+run-document warnings. Constructs are warned about rather than silently dropped, and the
+full tree stays available in `document.root`.
+
+| Code | Meaning |
+| --- | --- |
+| `musicxml_unknown_element` | A direct child of `<score-partwise>` not in the MusicXML 4.0 schema (kept in the tree). One warning per distinct tag, with the count and first line, for the first five tags; one more warning lists the rest. |
+| `musicxml_xlink_namespace_assumed` | The document uses `xlink:` without declaring it. The MusicXML DTD fixes the prefix to `http://www.w3.org/1999/xlink`; because the DTD is never loaded, the document was parsed again with that declaration added to the root. |
+| `musicxml_processing_instructions_dropped` | The document contains `<?target ...?>` processing instructions (for example `<?DoletSibelius ...?>` exporter data). They are not kept in `root`; the warning counts them per target. Comments are dropped without a warning. |
+| `musicxml_unresolved_entity` | An entity reference (e.g. `&nbsp;`) not defined in the document, in text or in an attribute value; its text is omitted because external DTDs are never loaded. One warning with the total number of references and up to 20 distinct names. Attribute values of UTF-16 documents are not checked. |
+| `musicxml_part_missing` | A `<score-part>` with no matching `<part>`. |
+| `musicxml_part_undeclared` | A `<part>` not declared in `<part-list>`. |
+| `musicxml_part_without_id` | A `<part>` or `<score-part>` without an `id`. |
+| `musicxml_duplicate_part` | A part id declared or used more than once (first one wins). |
+| `musicxml_mxl_container_missing` | `.mxl` without `META-INF/container.xml`; fallback entry used. |
+| `musicxml_mxl_container_invalid` | `container.xml` damaged, oversized, unparseable or without a rootfile; fallback entry used. |
+
+The four part warnings are aggregated: at most one warning per code and element kind
+(`<part>` or `<score-part>`), with a count and the first five ids or 1-based `<part>` positions.
+
+Only the top level is checked for unknown elements. Element-level coverage of notes,
+lyrics, and harmony belongs to the score model conversion (issue #19).
+
+## XML safety
+
+Engine output is untrusted input. The loader uses only the standard library: it drives
+`pyexpat` directly and builds an `ElementTree` (see `src/omr_lab/musicxml/safe_xml.py`).
+
+- The DTD named in `<!DOCTYPE score-partwise PUBLIC ... "http://www.musicxml.org/...">`
+  is never loaded or fetched: parameter-entity parsing is disabled
+  (`XML_PARAM_ENTITY_PARSING_NEVER`), and expat performs no network I/O.
+- Any entity declaration (internal, external, parameter, or unparsed), and any
+  parameter-entity reference such as `%pe;` in the internal DTD subset, is refused with
+  `musicxml_unsupported`, which blocks external-entity file reads (XXE) and entity
+  expansion ("billion laughs"). An external-entity handler that raises is installed as
+  a second guard. MusicXML does not need entity declarations.
+- An `<!ATTLIST>` declaration with a default value (including `#FIXED`) is refused with
+  `musicxml_unsupported`: expat would copy or at least process each default on every
+  matching element, which can exhaust memory or time. Only attributes written in the
+  file reach the tree. `#IMPLIED` / `#REQUIRED` declarations
+  are accepted and have no effect.
+- `META-INF/container.xml` inside an `.mxl` is parsed with the same parser. Archive
+  entries are read into memory by name and never extracted to disk.
+
+`defusedxml` was not added: the stdlib parser configured as above covers the same
+attacks for this use, keeping the runtime dependency list empty.
+
+## Limitations
+
+- No XSD/DTD schema validation; only the structure listed above is checked.
+- `score-timewise` is rejected rather than converted.
+- Only the first rootfile of an `.mxl` is loaded.
+- Element `sourceline` information is not kept on the tree (only for top-level warnings).

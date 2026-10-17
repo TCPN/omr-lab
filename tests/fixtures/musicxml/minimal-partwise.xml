@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise>
+  <part-list>
+    <score-part id="P1"><part-name>Melody</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <note><rest/><duration>1</duration></note>
+    </measure>
+  </part>
+</score-partwise>
