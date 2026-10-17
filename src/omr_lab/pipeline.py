@@ -284,13 +284,15 @@ def _record_result(
     for diagnostic in result.diagnostics:
         if diagnostic.strip():
             state.warn("engine_diagnostic", diagnostic)
-    state.artifacts = _map_artifacts(state, result.artifacts, output_dir)
+    # The failure is recorded first, so an unexpected error while mapping artifacts
+    # cannot replace the engine's own message.
     if not result.success:
         message = result.error or (
             f"Engine {engine_name!r} reported a failure without an error message "
             f"(return code {result.returncode})."
         )
         state.fail("engine_failed", message, returncode=result.returncode)
+    state.artifacts = _map_artifacts(state, result.artifacts, output_dir)
 
 
 def _map_artifacts(
@@ -300,14 +302,22 @@ def _map_artifacts(
     root = output_dir.resolve()
     recordable: dict[str, str] = {}
     for key, path in artifacts.items():
-        resolved = Path(path).resolve()
+        # A symlink loop raises RuntimeError on Python 3.11/3.12, an unsearchable
+        # directory PermissionError, and a non-path value from an adapter TypeError.
         try:
-            relative = resolved.relative_to(root).as_posix()
+            resolved = Path(path).resolve()
+            exists = resolved.exists()
+        except (OSError, RuntimeError, TypeError):
+            resolved, exists = None, False
+        try:
+            relative = resolved.relative_to(root).as_posix() if resolved else None
         except ValueError:
             relative = None
-        if relative is None or relative == ".":
+        if resolved is None:
+            reason = "its path cannot be resolved"
+        elif relative is None or relative == ".":
             reason = "it is not inside the run output directory"
-        elif not resolved.exists():
+        elif not exists:
             reason = "the file does not exist"
         elif (rule := _broken_path_rule(relative)) is not None:
             reason = f"its path {rule}"

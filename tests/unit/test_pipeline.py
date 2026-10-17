@@ -581,3 +581,44 @@ def test_input_that_cannot_be_stat_ed_is_invalid_input(
     assert document["error"]["code"] == "invalid_input"
     assert "cannot be read" in document["error"]["message"]
     assert engine.calls == []
+
+
+def test_unresolvable_artifact_keeps_engine_failure(
+    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Path.resolve() raises RuntimeError for a symlink loop on Python 3.11/3.12.
+    original_resolve = Path.resolve
+
+    def resolve(self: Path, *args: object, **kwargs: object) -> Path:
+        if self.name == "loop":
+            raise RuntimeError("Symlink loop from 'loop'")
+        return original_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", resolve)
+
+    def build(raw: Path) -> EngineResult:
+        (raw / "score.musicxml").write_text("x", encoding="utf-8")
+        return EngineResult(
+            "scripted",
+            success=False,
+            returncode=3,
+            error="Engine crashed",
+            artifacts={"engine_log": raw / "loop", "musicxml": raw / "score.musicxml"},
+        )
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["error"] == {
+        "code": "engine_failed",
+        "message": "Engine crashed",
+        "returncode": 3,
+    }
+    assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
+    assert document["warnings"] == [
+        {
+            "code": "artifact_not_recorded",
+            "message": (
+                "Engine artifact 'engine_log' was not recorded: its path cannot be resolved."
+            ),
+        }
+    ]
