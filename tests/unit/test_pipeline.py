@@ -696,3 +696,36 @@ def test_error_after_engine_failure_keeps_engine_failed(score: Path, tmp_path: P
     assert document["error"] == {"code": "engine_failed", "message": "crash", "returncode": 3}
     assert [w["code"] for w in document["warnings"]] == ["unexpected_error"]
     assert "TypeError" in document["warnings"][0]["message"]
+
+
+@pytest.mark.parametrize("timeout", [float("nan"), float("inf"), -1.0])
+def test_non_finite_or_negative_timeout_is_rejected(
+    score: Path, tmp_path: Path, timeout: float
+) -> None:
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        run_pipeline(score, tmp_path / "run", MockEngine(), timeout_seconds=timeout)
+    assert not (tmp_path / "run").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+def test_raw_symlinked_out_of_run_dir_records_no_artifacts(score: Path, tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    def build(raw: Path) -> EngineResult:
+        raw.rmdir()
+        raw.symlink_to(elsewhere, target_is_directory=True)
+        (elsewhere / "score.musicxml").write_text("x", encoding="utf-8")
+        return EngineResult(
+            "scripted",
+            success=False,
+            returncode=1,
+            error="crash",
+            artifacts={"musicxml": raw / "score.musicxml"},
+        )
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["error"] == {"code": "engine_failed", "message": "crash", "returncode": 1}
+    assert document["artifacts"] == {}
+    assert [w["code"] for w in document["warnings"]] == ["artifact_not_recorded"]

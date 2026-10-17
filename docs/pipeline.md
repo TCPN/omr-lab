@@ -26,7 +26,7 @@ result.document_path  # runs/0001/run.json
 
 ## Steps
 
-1. Check arguments that make a record impossible and raise `ValueError` for them: `timeout_seconds <= 0`, an empty engine name, an input file name that is empty or contains a backslash or control character (the schema stores the base name only), and an unusable `output_dir` (`OutputDirectoryError`: not a directory, not empty, or any `OSError` while checking or creating it, such as a dangling symlink or a file as a parent).
+1. Check arguments that make a record impossible and raise `ValueError` for them: `timeout_seconds` that is not a finite number greater than zero, an empty engine name, an input file name that is empty or contains a backslash or control character (the schema stores the base name only), and an unusable `output_dir` (`OutputDirectoryError`: not a directory, not empty, or any `OSError` while checking or creating it, such as a dangling symlink or a file as a parent).
 2. Check the input with one `stat()`: it must exist, be a regular file, be non-empty, be readable, and have a supported extension (case-insensitive): `.png`, `.jpg`/`.jpeg`, `.tif`/`.tiff`, `.bmp`, `.pdf`. `input.media_type` is derived from the extension (content is not sniffed); `input.sha256` is the digest of the input bytes.
 3. `engine.check_available()`; its version is recorded as `engine.version`.
 4. `engine.recognize(input, output_dir / "raw", timeout_seconds=..., options=...)`. A non-empty `EngineResult.version` replaces the availability version.

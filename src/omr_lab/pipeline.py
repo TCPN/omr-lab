@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import stat
@@ -133,8 +134,8 @@ def run_pipeline(
     """
     input_path = Path(input_path)
     output_dir = Path(output_dir)
-    if timeout_seconds <= 0:
-        raise ValueError("timeout_seconds must be greater than zero")
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be a finite number greater than zero")
     engine_name = engine.name
     if not isinstance(engine_name, str) or not engine_name:
         raise ValueError(f"Engine name must be a non-empty string, got {engine_name!r}.")
@@ -322,7 +323,12 @@ def _map_artifacts(
         except (OSError, RuntimeError, TypeError):
             resolved, exists = None, False
         inside = resolved is not None and resolved != raw_root and resolved.is_relative_to(raw_root)
-        relative = resolved.relative_to(root).as_posix() if inside else None
+        # raw/ itself may be a symlink out of the run directory; then nothing in it counts.
+        relative = (
+            resolved.relative_to(root).as_posix()
+            if inside and resolved.is_relative_to(root)
+            else None
+        )
         if resolved is None:
             reason = "its path cannot be resolved"
         elif relative is None:
