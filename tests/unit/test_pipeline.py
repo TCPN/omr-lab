@@ -343,9 +343,11 @@ def test_artifacts_outside_output_dir_or_missing_are_not_recorded(
     assert document["artifacts"] == {"engine_log": "raw/ok.log"}
     messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
     assert messages == [
-        "Engine artifact 'musicxml' was not recorded: it is not inside the run output directory.",
+        "Engine artifact 'musicxml' was not recorded: it is not inside the engine's raw/ output "
+        "directory.",
         "Engine artifact 'extra' was not recorded: the file does not exist.",
-        "Engine artifact 'root' was not recorded: it is not inside the run output directory.",
+        "Engine artifact 'root' was not recorded: it is not inside the engine's raw/ output "
+        "directory.",
     ]
     assert str(tmp_path) not in result.document_path.read_text(encoding="utf-8")
 
@@ -518,16 +520,37 @@ def test_fallback_falls_back_to_minimal_record_when_error_is_invalid(
     assert document["warnings"] == []
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="':' is not allowed in Windows file names")
-def test_drive_prefix_artifact_name_is_not_recorded(score: Path, tmp_path: Path) -> None:
+def test_artifact_outside_raw_such_as_run_json_is_not_recorded(score: Path, tmp_path: Path) -> None:
     def build(raw: Path) -> EngineResult:
-        # Directly under output_dir, so the relative path starts with "c:".
-        (raw.parent / "c:notes.txt").write_text("x", encoding="utf-8")
+        (raw.parent / RUN_DOCUMENT_FILENAME).write_text("engine output", encoding="utf-8")
         (raw / "score.musicxml").write_text("x", encoding="utf-8")
         return EngineResult(
             "scripted",
             success=True,
-            artifacts={"musicxml": raw / "score.musicxml", "notes": raw.parent / "c:notes.txt"},
+            artifacts={"musicxml": raw.parent / RUN_DOCUMENT_FILENAME, "raw": raw},
+        )
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["status"] == "succeeded"
+    assert document["artifacts"] == {}
+    messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
+    assert messages == [
+        f"Engine artifact {key!r} was not recorded: it is not inside the engine's raw/ "
+        "output directory."
+        for key in ("musicxml", "raw")
+    ]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="backslash is a path separator on Windows")
+def test_artifact_path_breaking_a_schema_rule_is_not_recorded(score: Path, tmp_path: Path) -> None:
+    def build(raw: Path) -> EngineResult:
+        (raw / "a\\b.txt").write_text("x", encoding="utf-8")
+        (raw / "score.musicxml").write_text("x", encoding="utf-8")
+        return EngineResult(
+            "scripted",
+            success=True,
+            artifacts={"musicxml": raw / "score.musicxml", "notes": raw / "a\\b.txt"},
         )
 
     document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
@@ -536,8 +559,8 @@ def test_drive_prefix_artifact_name_is_not_recorded(score: Path, tmp_path: Path)
     assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
     messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
     assert messages == [
-        "Engine artifact 'notes' was not recorded: its path must not start with a Windows "
-        "drive prefix such as 'C:'."
+        "Engine artifact 'notes' was not recorded: its path must use '/' as the separator, "
+        "not '\\'."
     ]
 
 
@@ -640,3 +663,22 @@ def test_output_dir_under_a_file_is_rejected(score: Path, tmp_path: Path) -> Non
     with pytest.raises(OutputDirectoryError, match="cannot be used"):
         run_pipeline(score, parent / "out", MockEngine())
     assert parent.read_text(encoding="utf-8") == "x"
+
+
+@pytest.mark.parametrize("bad", [None, b"bytes stderr"])
+def test_non_string_diagnostic_keeps_engine_failure(
+    score: Path, tmp_path: Path, bad: object
+) -> None:
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult(
+            "scripted", success=False, returncode=3, error="crash", diagnostics=("ok", bad)
+        )
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"] == {"code": "engine_failed", "message": "crash", "returncode": 3}
+    assert [w["code"] for w in document["warnings"]] == [
+        "engine_diagnostic",
+        "engine_diagnostic_not_recorded",
+    ]

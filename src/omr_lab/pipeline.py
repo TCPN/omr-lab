@@ -69,7 +69,7 @@ _SCORE_NOT_NORMALIZED_MESSAGE = (
 
 
 class OutputDirectoryError(ValueError):
-    """The run output directory cannot be used (it is a file or is not empty)."""
+    """The run output directory cannot be used (not a directory, not empty, or not creatable)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,20 +278,26 @@ def _check_input(state: _RunState, input_path: Path) -> bool:
 def _record_result(
     state: _RunState, result: EngineResult, engine_name: str, output_dir: Path
 ) -> None:
-    state.options = dict(result.options)
-    if result.version:
-        state.engine_version = result.version
-    for diagnostic in result.diagnostics:
-        if diagnostic.strip():
-            state.warn("engine_diagnostic", diagnostic)
-    # The failure is recorded first, so an unexpected error while mapping artifacts
-    # cannot replace the engine's own message.
+    # The failure is recorded first, so an unexpected error in the rest of the result
+    # (diagnostics, options, artifacts) cannot replace the engine's own message.
     if not result.success:
         message = result.error or (
             f"Engine {engine_name!r} reported a failure without an error message "
             f"(return code {result.returncode})."
         )
         state.fail("engine_failed", message, returncode=result.returncode)
+    state.options = dict(result.options)
+    if result.version:
+        state.engine_version = result.version
+    for diagnostic in result.diagnostics:
+        if not isinstance(diagnostic, str):
+            state.warn(
+                "engine_diagnostic_not_recorded",
+                f"An engine diagnostic of type {type(diagnostic).__name__} was left out; "
+                "diagnostics must be strings.",
+            )
+        elif diagnostic.strip():
+            state.warn("engine_diagnostic", diagnostic)
     state.artifacts = _map_artifacts(state, result.artifacts, output_dir)
 
 
@@ -300,6 +306,9 @@ def _map_artifacts(
 ) -> dict[str, str]:
     """Map engine artifact keys and paths to run document kinds and relative POSIX paths."""
     root = output_dir.resolve()
+    # The engine writes into raw/; anything else in the run directory (run.json and
+    # its temporary file) belongs to the pipeline and must not be claimed by an engine.
+    raw_root = (output_dir / RAW_DIRNAME).resolve()
     recordable: dict[str, str] = {}
     for key, path in artifacts.items():
         # A symlink loop raises RuntimeError on Python 3.11/3.12, an unsearchable
@@ -309,14 +318,12 @@ def _map_artifacts(
             exists = resolved.exists()
         except (OSError, RuntimeError, TypeError):
             resolved, exists = None, False
-        try:
-            relative = resolved.relative_to(root).as_posix() if resolved else None
-        except ValueError:
-            relative = None
+        inside = resolved is not None and resolved != raw_root and resolved.is_relative_to(raw_root)
+        relative = resolved.relative_to(root).as_posix() if inside else None
         if resolved is None:
             reason = "its path cannot be resolved"
-        elif relative is None or relative == ".":
-            reason = "it is not inside the run output directory"
+        elif relative is None:
+            reason = f"it is not inside the engine's {RAW_DIRNAME}/ output directory"
         elif not exists:
             reason = "the file does not exist"
         elif (rule := _broken_path_rule(relative)) is not None:
