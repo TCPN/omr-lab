@@ -106,6 +106,9 @@ class _RunState:
     error: dict[str, Any] | None = None
 
     def fail(self, code: str, message: str, **extra: Any) -> None:
+        # The schema requires a non-empty message; an adapter may raise without one.
+        if not isinstance(message, str) or not message.strip():
+            message = f"Failed with {code} and no further message."
         self.error = {"code": code, "message": message, **extra}
 
     def warn(self, code: str, message: str) -> None:
@@ -239,7 +242,7 @@ def _run(
             options=options,
         )
     except InvalidEngineOptionError as exc:
-        state.fail("invalid_option", str(exc))
+        state.fail("invalid_option", str(exc) or f"Engine {engine.name!r} rejected the options.")
         return
     _record_result(state, result, engine.name, output_dir)
 

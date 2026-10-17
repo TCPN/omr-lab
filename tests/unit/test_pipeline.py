@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from omr_lab.engines import EngineAvailability, EngineOptions, EngineResult, resolve_options
+from omr_lab.engines import (
+    EngineAvailability,
+    EngineOptions,
+    EngineResult,
+    InvalidEngineOptionError,
+    resolve_options,
+)
 from omr_lab.engines.mock import MOCK_ENGINE_VERSION, MockEngine
 from omr_lab.pipeline import (
     RAW_DIRNAME,
@@ -729,3 +735,28 @@ def test_raw_symlinked_out_of_run_dir_records_no_artifacts(score: Path, tmp_path
     assert document["error"] == {"code": "engine_failed", "message": "crash", "returncode": 1}
     assert document["artifacts"] == {}
     assert [w["code"] for w in document["warnings"]] == ["artifact_not_recorded"]
+
+
+def test_option_error_without_message_keeps_invalid_option(score: Path, tmp_path: Path) -> None:
+    def build(_raw: Path) -> EngineResult:
+        raise InvalidEngineOptionError()
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["error"] == {
+        "code": "invalid_option",
+        "message": "Engine 'scripted' rejected the options.",
+    }
+    assert document["engine"]["version"] == "scripted-1"
+
+
+def test_engine_failure_with_blank_error_gets_a_message(score: Path, tmp_path: Path) -> None:
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult("scripted", success=False, returncode=1, error="   ")
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"]["code"] == "engine_failed"
+    assert document["error"]["message"].strip()
+    assert document["error"]["returncode"] == 1
