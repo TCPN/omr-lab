@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Voice</part-name></score-part>
+    <score-part id="P2"><part-name>Ghost</part-name></score-part>
+  </part-list>
+  <engine-debug>vendor-specific data</engine-debug>
+  <part id="P1">
+    <measure number="1"><note><rest/><duration>1</duration></note></measure>
+  </part>
+  <part id="P3">
+    <measure number="1"><note><rest/><duration>1</duration></note></measure>
+  </part>
+</score-partwise>
