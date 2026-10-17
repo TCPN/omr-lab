@@ -458,3 +458,126 @@ def test_unrecordable_input_name_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no file name"):
         run_pipeline(tmp_path / "bad\\name.png", tmp_path / "run", MockEngine())
     assert not (tmp_path / "run").exists()
+
+
+def test_fallback_keeps_engine_failure_version_and_diagnostics(score: Path, tmp_path: Path) -> None:
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult(
+            "scripted",
+            success=False,
+            returncode=2,
+            error="Engine crashed: out of memory",
+            diagnostics=("loading page 1",),
+            options={"bad": float("inf")},
+        )
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"] == {
+        "code": "engine_failed",
+        "message": "Engine crashed: out of memory",
+        "returncode": 2,
+    }
+    assert document["engine"]["version"] == "scripted-1"
+    assert [w["code"] for w in document["warnings"]] == [
+        "engine_diagnostic",
+        "run_document_incomplete",
+    ]
+    assert "could not be written" in document["warnings"][1]["message"]
+    assert document["options"] == {}
+
+
+def test_fallback_for_succeeded_run_drops_score_not_normalized(score: Path, tmp_path: Path) -> None:
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult("scripted", success=True, options={"bad": float("nan")})
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"]["code"] == "internal_error"
+    assert document["engine"]["version"] == "scripted-1"
+    assert document["warnings"] == []
+
+
+def test_fallback_falls_back_to_minimal_record_when_error_is_invalid(
+    score: Path, tmp_path: Path
+) -> None:
+    # A non-integer return code breaks the error object itself, so only the minimal
+    # record validates.
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult(
+            "scripted", success=False, returncode="2", options={"bad": float("nan")}
+        )
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"]["code"] == "internal_error"
+    assert document["engine"]["version"] is None
+    assert document["warnings"] == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="':' is not allowed in Windows file names")
+def test_drive_prefix_artifact_name_is_not_recorded(score: Path, tmp_path: Path) -> None:
+    def build(raw: Path) -> EngineResult:
+        # Directly under output_dir, so the relative path starts with "c:".
+        (raw.parent / "c:notes.txt").write_text("x", encoding="utf-8")
+        (raw / "score.musicxml").write_text("x", encoding="utf-8")
+        return EngineResult(
+            "scripted",
+            success=True,
+            artifacts={"musicxml": raw / "score.musicxml", "notes": raw.parent / "c:notes.txt"},
+        )
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["status"] == "succeeded"
+    assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
+    messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
+    assert messages == [
+        "Engine artifact 'notes' was not recorded: its path must not start with a Windows "
+        "drive prefix such as 'C:'."
+    ]
+
+
+def test_kinds_are_assigned_after_unrecorded_artifacts_are_dropped(
+    score: Path, tmp_path: Path
+) -> None:
+    def build(raw: Path) -> EngineResult:
+        (raw / "sub").mkdir()
+        (raw / "sub" / "b.musicxml").write_text("x", encoding="utf-8")
+        return EngineResult(
+            "scripted",
+            success=True,
+            artifacts={
+                "musicxml": raw / "a.mxl",  # never written
+                "musicxml:sub/b.musicxml": raw / "sub" / "b.musicxml",
+            },
+        )
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["artifacts"] == {"musicxml": "raw/sub/b.musicxml"}
+
+
+def test_input_that_cannot_be_stat_ed_is_invalid_input(
+    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Path.exists() raises PermissionError on Python 3.11-3.13 for an input in a
+    # directory without search permission; simulate that without relying on chmod.
+    original_stat = Path.stat
+
+    def stat(self: Path, *args: object, **kwargs: object):
+        if self == score:
+            raise PermissionError(13, "Permission denied")
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", stat)
+    engine = ScriptedEngine(build=lambda _: EngineResult("scripted", success=True))
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"]["code"] == "invalid_input"
+    assert "cannot be read" in document["error"]["message"]
+    assert engine.calls == []

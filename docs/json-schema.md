@@ -92,6 +92,7 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `score_not_normalized` | warning | Musical content exists only in raw artifacts. |
 | `engine_diagnostic` | warning | One entry of `EngineResult.diagnostics`, copied verbatim. |
 | `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the run output directory, missing, or an unrepresentable path). |
+| `run_document_incomplete` | warning | The full run document did not validate, so `options` and `artifacts` were left out; the original `error` is kept. |
 
 The pipeline's use of these codes is described in [pipeline.md](pipeline.md). `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed`.
 

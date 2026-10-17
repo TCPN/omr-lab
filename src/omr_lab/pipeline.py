@@ -12,12 +12,16 @@ import json
 import logging
 import os
 import re
+import stat
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import cache, partial
 from pathlib import Path
 from typing import Any
+
+from jsonschema import Draft202012Validator
 
 from omr_lab.engines.base import (
     Engine,
@@ -29,6 +33,7 @@ from omr_lab.engines.base import (
 from omr_lab.schemas import (
     CURRENT_RUN_SCHEMA_VERSION,
     RunDocumentValidationError,
+    load_run_schema,
     validate_run_document,
 )
 
@@ -149,18 +154,57 @@ def run_pipeline(
     document = _build_document(state, filename, engine_name, started_at, duration)
     try:
         text = _serialize(document)
-    except (RunDocumentValidationError, TypeError, ValueError) as exc:
+    except _SERIALIZE_ERRORS as exc:
         # A bug in an adapter or in this module produced an invalid record. Write a
-        # minimal failed record instead, so the run still leaves a valid trace.
-        logger.exception("Run document failed validation; writing a minimal failed record")
-        fallback = _RunState(media_type=state.media_type, sha256=state.sha256)
-        fallback.fail("internal_error", f"The run document could not be written: {exc}")
-        document = _build_document(fallback, filename, engine_name, started_at, duration)
-        text = _serialize(document)
+        # reduced failed record instead, so the run still leaves a valid trace.
+        logger.exception("Run document failed validation; writing a reduced failed record")
+        build = partial(
+            _build_document,
+            filename=filename,
+            engine_name=engine_name,
+            started_at=started_at,
+            duration=duration,
+        )
+        document, text = _fallback_document(state, exc, build)
 
     document_path = output_dir / RUN_DOCUMENT_FILENAME
     _write_atomically(document_path, text)
     return PipelineResult(document=document, document_path=document_path, output_dir=output_dir)
+
+
+_SERIALIZE_ERRORS = (RunDocumentValidationError, TypeError, ValueError)
+
+
+def _fallback_document(
+    state: _RunState, exc: Exception, build: Callable[[_RunState], dict[str, Any]]
+) -> tuple[dict[str, Any], str]:
+    """Return a failed document that keeps as much of ``state`` as still validates.
+
+    ``options`` and ``artifacts`` come from the adapter and are the usual cause, so
+    they are dropped first; input, engine version, warnings and the original error
+    are kept. If that still fails, only input provenance and the error are written.
+    """
+    reason = f"The run document could not be written: {exc}"
+    reduced = _RunState(
+        media_type=state.media_type,
+        sha256=state.sha256,
+        engine_version=state.engine_version,
+        warnings=[w for w in state.warnings if w["code"] != "score_not_normalized"],
+        error=state.error,
+    )
+    if reduced.error is None:
+        reduced.fail("internal_error", reason)
+    else:
+        reduced.warn("run_document_incomplete", f"{reason}. Options and artifacts were left out.")
+    document = build(reduced)
+    try:
+        return document, _serialize(document)
+    except _SERIALIZE_ERRORS:
+        logger.exception("Reduced run document failed validation; writing a minimal record")
+    minimal = _RunState(media_type=state.media_type, sha256=state.sha256)
+    minimal.fail("internal_error", reason)
+    document = build(minimal)
+    return document, _serialize(document)
 
 
 def _run(
@@ -197,10 +241,17 @@ def _run(
 def _check_input(state: _RunState, input_path: Path) -> bool:
     """Record media type and digest; record an invalid_input error and return False on failure."""
     state.media_type = SUPPORTED_MEDIA_TYPES.get(input_path.suffix.lower())
-    if not input_path.exists():
+    # One stat() in a try: on Python 3.11-3.13 exists() and is_file() raise
+    # PermissionError for an input in a directory that cannot be searched.
+    try:
+        mode = input_path.stat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
         state.fail("invalid_input", f"Input file {input_path.name!r} does not exist.")
         return False
-    if not input_path.is_file():
+    except OSError as exc:
+        state.fail("invalid_input", f"Input file {input_path.name!r} cannot be read: {exc}")
+        return False
+    if not stat.S_ISREG(mode):
         state.fail("invalid_input", f"Input {input_path.name!r} is not a regular file.")
         return False
     if state.media_type is None:
@@ -246,9 +297,8 @@ def _map_artifacts(
     state: _RunState, artifacts: Mapping[str, Path], output_dir: Path
 ) -> dict[str, str]:
     """Map engine artifact keys and paths to run document kinds and relative POSIX paths."""
-    kinds = _artifact_kinds(list(artifacts))
     root = output_dir.resolve()
-    recorded: dict[str, str] = {}
+    recordable: dict[str, str] = {}
     for key, path in artifacts.items():
         resolved = Path(path).resolve()
         try:
@@ -259,14 +309,34 @@ def _map_artifacts(
             reason = "it is not inside the run output directory"
         elif not resolved.exists():
             reason = "the file does not exist"
-        elif _CONTROL_CHARACTERS.search(relative) or "\\" in relative:
-            reason = "its path contains a backslash or control character"
+        elif (rule := _broken_path_rule(relative)) is not None:
+            reason = f"its path {rule}"
         else:
-            recorded[kinds[key]] = relative
+            recordable[key] = relative
             continue
         # The path itself is left out of the message: it may be an absolute local path.
         state.warn("artifact_not_recorded", f"Engine artifact {key!r} was not recorded: {reason}.")
-    return recorded
+    # Kinds are assigned after filtering, so a dropped artifact never pushes a recorded
+    # one to a numbered kind such as "musicxml_2".
+    kinds = _artifact_kinds(list(recordable))
+    return {kinds[key]: relative for key, relative in recordable.items()}
+
+
+@cache
+def _artifact_path_validator() -> Draft202012Validator:
+    schema = load_run_schema(CURRENT_RUN_SCHEMA_VERSION)
+    return Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/relativePosixPath"})
+
+
+def _broken_path_rule(relative: str) -> str | None:
+    """Return the first schema path rule ``relative`` breaks, e.g. "must not ...", or None.
+
+    Errors come in schema order, which lists the control-character rule first.
+    """
+    error = next(_artifact_path_validator().iter_errors(relative), None)
+    if error is None:
+        return None
+    return error.schema.get("description") or error.message
 
 
 def _artifact_kinds(keys: list[str]) -> dict[str, str]:
