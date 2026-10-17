@@ -242,6 +242,8 @@ def run_command(
     Arguments are passed as a sequence, so paths and other values are never
     concatenated into a shell command. stdout and stderr are decoded as UTF-8
     with replacement characters for invalid bytes, independent of the locale.
+    stdin is closed (DEVNULL), so an engine that unexpectedly prompts for input sees
+    EOF instead of hanging until the timeout.
     The command runs in its own process group; on timeout the whole group is
     killed so that grandchildren (for example ``java`` started by a wrapper
     script) do not outlive it. The caller interprets non-zero exits and maps the
@@ -272,6 +274,7 @@ def run_command(
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
             **_process_group_kwargs(),
         )
     except OSError as exc:
