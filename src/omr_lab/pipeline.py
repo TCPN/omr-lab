@@ -323,8 +323,9 @@ def _map_artifacts(
         try:
             resolved = Path(path).resolve()
             exists = resolved.exists()
+            is_file = exists and resolved.is_file()
         except (OSError, RuntimeError, TypeError):
-            resolved, exists = None, False
+            resolved, exists, is_file = None, False, False
         inside = resolved is not None and resolved != raw_root and resolved.is_relative_to(raw_root)
         # raw/ itself may be a symlink out of the run directory; then nothing in it counts.
         relative = (
@@ -338,6 +339,8 @@ def _map_artifacts(
             reason = f"it is not inside the engine's {RAW_DIRNAME}/ output directory"
         elif not exists:
             reason = "the file does not exist"
+        elif not is_file:
+            reason = "it is not a regular file"
         elif (rule := _broken_path_rule(relative)) is not None:
             reason = f"its path {rule}"
         else:

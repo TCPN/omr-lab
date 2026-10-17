@@ -91,7 +91,7 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `internal_error` | error | Unexpected pipeline error; the message should say what failed. |
 | `score_not_normalized` | warning | Musical content exists only in raw artifacts. |
 | `engine_diagnostic` | warning | One entry of `EngineResult.diagnostics`, copied verbatim. |
-| `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the engine's `raw/` directory, missing, or an unrepresentable path). |
+| `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the engine's `raw/` directory, missing, not a regular file, or an unrepresentable path). |
 | `engine_diagnostic_not_recorded` | warning | An `EngineResult.diagnostics` entry was not a string and was left out. |
 | `unexpected_error` | warning | An unexpected exception after a failure was already recorded; the original `error` is kept. |
 | `run_document_incomplete` | warning | The full run document did not validate, so `options` and `artifacts` were left out; the original `error` is kept. |

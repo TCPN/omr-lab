@@ -760,3 +760,20 @@ def test_engine_failure_with_blank_error_gets_a_message(score: Path, tmp_path: P
     assert document["error"]["code"] == "engine_failed"
     assert document["error"]["message"].strip()
     assert document["error"]["returncode"] == 1
+
+
+def test_directory_artifact_is_not_recorded(score: Path, tmp_path: Path) -> None:
+    def build(raw: Path) -> EngineResult:
+        (raw / "book").mkdir()
+        (raw / "book" / "score.musicxml").write_text("x", encoding="utf-8")
+        return EngineResult(
+            "scripted",
+            success=True,
+            artifacts={"musicxml": raw / "book", "engine_log": raw / "book" / "score.musicxml"},
+        )
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["artifacts"] == {"engine_log": "raw/book/score.musicxml"}
+    messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
+    assert messages == ["Engine artifact 'musicxml' was not recorded: it is not a regular file."]
