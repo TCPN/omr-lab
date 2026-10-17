@@ -622,3 +622,21 @@ def test_unresolvable_artifact_keeps_engine_failure(
             ),
         }
     ]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlinks need privileges on Windows")
+def test_dangling_symlink_output_dir_is_rejected(score: Path, tmp_path: Path) -> None:
+    link = tmp_path / "run"
+    link.symlink_to(tmp_path / "missing")
+
+    with pytest.raises(OutputDirectoryError, match="cannot be used"):
+        run_pipeline(score, link, MockEngine())
+
+
+def test_output_dir_under_a_file_is_rejected(score: Path, tmp_path: Path) -> None:
+    parent = tmp_path / "notes.txt"
+    parent.write_text("x", encoding="utf-8")
+
+    with pytest.raises(OutputDirectoryError, match="cannot be used"):
+        run_pipeline(score, parent / "out", MockEngine())
+    assert parent.read_text(encoding="utf-8") == "x"

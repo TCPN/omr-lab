@@ -414,15 +414,22 @@ def _recordable_filename(input_path: Path) -> str:
 
 
 def _prepare_output_dir(output_dir: Path) -> None:
-    if output_dir.exists():
-        if not output_dir.is_dir():
-            raise OutputDirectoryError(f"Output path {str(output_dir)!r} is not a directory.")
-        if any(output_dir.iterdir()):
-            raise OutputDirectoryError(
-                f"Output directory {str(output_dir)!r} is not empty. Use a new or empty "
-                "directory per run so earlier results are not overwritten or mixed."
-            )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Any OSError (a dangling symlink, a file as a parent, an unsearchable parent that
+    # makes exists() raise on Python 3.11-3.13) means the path cannot be used.
+    try:
+        if output_dir.exists():
+            if not output_dir.is_dir():
+                raise OutputDirectoryError(f"Output path {str(output_dir)!r} is not a directory.")
+            if any(output_dir.iterdir()):
+                raise OutputDirectoryError(
+                    f"Output directory {str(output_dir)!r} is not empty. Use a new or empty "
+                    "directory per run so earlier results are not overwritten or mixed."
+                )
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise OutputDirectoryError(
+            f"Output path {str(output_dir)!r} cannot be used: {exc.strerror or exc}."
+        ) from exc
 
 
 def _sha256(path: Path) -> str:
