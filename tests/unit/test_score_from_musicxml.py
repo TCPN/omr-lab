@@ -195,6 +195,34 @@ def test_non_positive_backup_or_forward_is_invalid(tag: str) -> None:
     assert f"<{tag}> <duration>" in conversion.warnings[0].message
 
 
+def test_chord_member_with_different_staff_is_reported() -> None:
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+            "<staff>1</staff></note>"
+            "<note><chord/><pitch><step>E</step><octave>3</octave></pitch><duration>1</duration>"
+            '<staff>2</staff><notations><tuplet type="start"/></notations></note>'
+        )
+    )
+
+    (event,) = _events(conversion)
+    assert [p["octave"] for p in event["pitches"]] == [4, 3]
+    assert event["staff"] == 1
+    assert event["tuplets"] == [{"type": "start", "number": None}]
+    assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
+    assert "staff differs" in conversion.warnings[0].message
+
+
+@pytest.mark.parametrize(
+    "content", ['<sound tempo="0"/>', '<direction><sound tempo="-5"/></direction>']
+)
+def test_non_positive_tempo_gives_no_tempo_event(content: str) -> None:
+    conversion = _convert(_measure(content))
+
+    assert _events(conversion) == []
+    assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
+
+
 def test_grace_notes_take_no_time() -> None:
     conversion = _convert(
         _measure(

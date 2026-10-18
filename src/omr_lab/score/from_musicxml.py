@@ -204,6 +204,7 @@ class _PartConverter:
             self.position = None
             return
         position = self.position + amount
+        # motion() only passes positive lengths, so only a <backup> can go below zero.
         if position < 0:
             self.issues.add(
                 RunWarningCode.SCORE_TIMING_INCONSISTENT,
@@ -285,7 +286,7 @@ class _PartConverter:
                 self.direction(child, events)
             elif tag == "sound":
                 self.check_navigation(child)
-                tempo = self.number(child.get("tempo"), "<sound tempo>")
+                tempo = self.tempo_bpm(child)
                 if tempo is not None:
                     events.append(self.tempo_event(self.position, None, tempo, None, None))
             elif tag == "barline":
@@ -374,8 +375,7 @@ class _PartConverter:
             self.drop_note(is_chord)
             return
         if is_chord and self.last_note is not None:
-            self.last_note["pitches"].append(pitch)
-            self.last_note["lyrics"].extend(lyrics)
+            self.merge_chord_note(element, offset, duration, pitch, lyrics)
             return
         if is_chord:
             self.invalid("A <chord/> note without a preceding note was converted on its own")
@@ -387,6 +387,36 @@ class _PartConverter:
         event["lyrics"] = lyrics
         events.append(event)
         self.last_note = event
+
+    def merge_chord_note(
+        self,
+        element: ET.Element,
+        offset: Fraction | None,
+        duration: Fraction | None,
+        pitch: dict[str, Any],
+        lyrics: list[dict[str, Any]],
+    ) -> None:
+        """Add a <chord/> note to the chord's first note, reporting what cannot merge."""
+        assert self.last_note is not None
+        member = self.duration_fields("note", element, offset, duration)
+        compared = ("voice", "staff", "duration", "type", "dots", "time_modification")
+        differing = [name for name in compared if member[name] != self.last_note[name]]
+        if differing:
+            self.unsupported(
+                "A <chord/> note whose " + "/".join(differing) + " differs from the chord's "
+                "first note (kept as one chord with the first note's values)"
+            )
+        self.last_note["pitches"].append(pitch)
+        self.last_note["tuplets"].extend(member["tuplets"])
+        self.last_note["lyrics"].extend(lyrics)
+
+    def tempo_bpm(self, sound: ET.Element) -> float | None:
+        """<sound tempo> in quarter notes per minute; None (with a warning) unless positive."""
+        bpm = self.number(sound.get("tempo"), "<sound tempo>")
+        if bpm is not None and bpm <= 0:
+            self.invalid(f"<sound tempo> {bpm!r} that is not positive was ignored")
+            return None
+        return bpm
 
     def duration_fields(
         self, kind: str, element: ET.Element, offset: Fraction | None, duration: Fraction | None
@@ -665,9 +695,6 @@ class _PartConverter:
             per_minute = _text(metronome.find("per-minute"))
             if beat_unit is None or per_minute is None:
                 self.unsupported("A <metronome> without <beat-unit> and <per-minute>")
-        if bpm is not None and bpm <= 0:
-            self.invalid(f"<sound tempo> {bpm!r} that is not positive was recorded as null")
-            bpm = None
         return {
             "kind": "tempo",
             "offset": _nullable_rational(offset),
@@ -696,7 +723,7 @@ class _PartConverter:
         sound = element.find("sound")
         if sound is not None:
             self.check_navigation(sound)
-        bpm = None if sound is None else self.number(sound.get("tempo"), "<sound tempo>")
+        bpm = None if sound is None else self.tempo_bpm(sound)
         for tag in others:
             self.unsupported(f"<{tag}> in <direction-type>")
         if metronome is None and bpm is None:
