@@ -50,6 +50,8 @@ sounding ``<tie>`` is recorded instead.
 _STEPS = frozenset("ABCDEFG")
 _CLEF_SIGNS = frozenset({"G", "F", "C", "percussion", "TAB", "jianpu", "none"})
 _SYLLABIC = frozenset({"single", "begin", "middle", "end"})
+# <sound> attributes that change the playing order; the model has no field for them yet.
+_NAVIGATION_ATTRIBUTES = ("segno", "dalsegno", "coda", "tocoda", "dacapo", "fine", "forward-repeat")
 
 
 @dataclass(frozen=True)
@@ -211,6 +213,11 @@ class _PartConverter:
             return
         self.position = position
 
+    def check_navigation(self, sound: ET.Element) -> None:
+        for attribute in _NAVIGATION_ATTRIBUTES:
+            if sound.get(attribute) is not None:
+                self.unsupported(f"<sound {attribute}> (song structure)")
+
     def motion(self, element: ET.Element) -> Fraction | None:
         """Length of a <backup> or <forward>; None (unknown) unless it is positive."""
         label = f"<{element.tag}> <duration>"
@@ -275,6 +282,7 @@ class _PartConverter:
             elif tag == "direction":
                 self.direction(child, events)
             elif tag == "sound":
+                self.check_navigation(child)
                 tempo = self.number(child.get("tempo"), "<sound tempo>")
                 if tempo is not None:
                     events.append(self.tempo_event(self.position, None, tempo, None, None))
@@ -442,7 +450,7 @@ class _PartConverter:
                 self.invalid(f"<tie type> {tie_type!r} was ignored")
         return {
             "step": step,
-            "alter": int(alter) if float(alter).is_integer() else alter,
+            "alter": _compact(alter),
             "octave": octave,
             "ties": ties,
         }
@@ -578,7 +586,7 @@ class _PartConverter:
         alter = 0 if alter_text is None else self.number(alter_text, f"<{prefix}-alter>")
         if step not in _STEPS or alter is None:
             return None
-        return {"step": step, "alter": int(alter) if float(alter).is_integer() else alter}
+        return {"step": step, "alter": _compact(alter)}
 
     def harmony(self, element: ET.Element, events: list[dict[str, Any]]) -> None:
         roots = element.findall("root")
@@ -621,7 +629,7 @@ class _PartConverter:
             degrees.append(
                 {
                     "value": value,
-                    "alter": int(alter) if alter.is_integer() else alter,
+                    "alter": _compact(alter),
                     "type": degree_type,
                 }
             )
@@ -664,7 +672,7 @@ class _PartConverter:
             "kind": "tempo",
             "offset": _nullable_rational(offset),
             "staff": staff,
-            "bpm": int(bpm) if bpm is not None and bpm.is_integer() else bpm,
+            "bpm": None if bpm is None else _compact(bpm),
             "beat_unit": beat_unit,
             "beat_unit_dots": beat_unit_dots,
             "per_minute": per_minute,
@@ -686,6 +694,8 @@ class _PartConverter:
                 else:
                     others.append(child.tag)
         sound = element.find("sound")
+        if sound is not None:
+            self.check_navigation(sound)
         bpm = None if sound is None else self.number(sound.get("tempo"), "<sound tempo>")
         for tag in others:
             self.unsupported(f"<{tag}> in <direction-type>")
@@ -737,6 +747,11 @@ class _PartConverter:
             "repeat": repeat,
             "ending": ending,
         }
+
+
+def _compact(value: float) -> int | float:
+    """Write whole numbers as int (1, not 1.0) so the JSON matches the source text."""
+    return int(value) if float(value).is_integer() else value
 
 
 def _dots_after_first(metronome: ET.Element) -> int:

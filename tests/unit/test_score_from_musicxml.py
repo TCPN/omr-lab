@@ -285,6 +285,8 @@ def test_invalid_pitch_drops_the_note_with_a_warning_but_keeps_its_time() -> Non
             "<words> in <direction-type> without a tempo",
         ),
         ("<barline><fermata/></barline>", "<fermata> in <barline>"),
+        ('<sound dacapo="yes"/>', "<sound dacapo>"),
+        ('<direction><sound fine="yes"/></direction>', "<sound fine>"),
         (
             "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
             "<notations><fermata/></notations></note>",

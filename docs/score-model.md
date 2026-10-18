@@ -140,7 +140,7 @@ These are skipped without a warning because they describe layout or playback rat
 - in `<attributes>`: `<staves>` (every event carries its own staff number), `<instruments>`;
 - in `<measure>`: `<print>`;
 - in `<direction>`: `<voice>`, `<listening>`; in `<harmony>`: `<frame>` (fretboard diagram);
-- everywhere: `<footnote>`, `<level>`, all attributes not named in this document (positions, colors, fonts, `print-object`), and `<sound>` attributes other than `tempo`. `<time-modification>` `<normal-type>`/`<normal-dot>` are also skipped.
+- everywhere: `<footnote>`, `<level>`, all attributes not named in this document (positions, colors, fonts, `print-object`), and `<sound>` playback attributes such as `dynamics` or `pizzicato`. The `<sound>` navigation attributes (`segno`, `dalsegno`, `coda`, `tocoda`, `dacapo`, `fine`, `forward-repeat`) change the playing order, so they produce `score_unsupported_element`. `<time-modification>` `<normal-type>`/`<normal-dot>` are also skipped.
 
 ## Limitations
 
