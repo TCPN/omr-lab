@@ -13,8 +13,8 @@ import logging
 import math
 import os
 import re
+import secrets
 import stat
-import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -122,7 +122,7 @@ class _RunState:
     warnings: list[dict[str, str]] = field(default_factory=list)
     error: dict[str, Any] | None = None
     # Applied to every recorded message, so local paths do not reach run.json.
-    redact: Callable[[str], str] = _identity
+    redact_paths: Callable[[str], str] = _identity
 
     def record_error(self, code: RunErrorCode, message: str, **extra: Any) -> None:
         """Store the run's error, replacing any earlier one; it does not stop the run."""
@@ -137,7 +137,7 @@ class _RunState:
     def _recordable(self, message: str) -> str:
         # Undecodable engine output (surrogate escapes) cannot be written as UTF-8;
         # backslash escapes keep it visible, as in the diagnostics file.
-        return self.redact(message).encode("utf-8", "backslashreplace").decode("utf-8")
+        return self.redact_paths(message).encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def run_pipeline(
@@ -181,7 +181,7 @@ def run_pipeline(
 
     started_at = datetime.now(UTC)
     start = time.perf_counter()
-    state = _RunState(redact=_path_redactor(input_path, output_dir))
+    state = _RunState(redact_paths=_path_redactor(input_path, output_dir))
     pending_interrupt: KeyboardInterrupt | None = None
     try:
         _check_and_recognize(state, input_path, output_dir, engine, timeout_seconds, options)
@@ -248,7 +248,7 @@ def _fallback_document(
         # the pointer to the engine diagnostics.
         artifacts={k: v for k, v in state.artifacts.items() if k in _PIPELINE_ARTIFACT_KINDS},
         error=state.error,
-        redact=state.redact,
+        redact_paths=state.redact_paths,
     )
     if reduced.error is None:
         reduced.record_error(RunErrorCode.INTERNAL_ERROR, reason)
@@ -262,7 +262,9 @@ def _fallback_document(
         return document, _serialize(document)
     except _SERIALIZE_ERRORS:
         logger.exception("Reduced run document failed validation; writing a minimal record")
-    minimal = _RunState(media_type=state.media_type, sha256=state.sha256, redact=state.redact)
+    minimal = _RunState(
+        media_type=state.media_type, sha256=state.sha256, redact_paths=state.redact_paths
+    )
     minimal.record_error(RunErrorCode.INTERNAL_ERROR, reason)
     document = build_document(minimal)
     return document, _serialize(document)
@@ -348,6 +350,7 @@ def _check_and_recognize(
 
 def _check_and_record_input(state: _RunState, input_path: Path) -> bool:
     """Record media type and digest; record an invalid_input error and return False on failure."""
+    # From the name only, so even a missing input records the media type it claims.
     state.media_type = MEDIA_TYPE_BY_EXTENSION.get(input_path.suffix.lower())
     # One stat() in a try: on Python 3.11-3.13 exists() and is_file() raise
     # PermissionError for an input in a directory that cannot be searched.
@@ -408,18 +411,17 @@ def _record_result(
     state.artifacts = _map_artifacts(state, result.artifacts, output_dir)
     if diagnostics is not None:
         state.artifacts[ENGINE_DIAGNOSTICS_KIND] = diagnostics
-    if (
-        result.success
-        and _PRIMARY_MUSICXML_KEY in result.artifacts
-        and _PRIMARY_MUSICXML_KEY not in state.artifacts
-    ):
-        # An adapter that wrote no MusicXML must fail (docs/engine-interface.md); one
-        # whose MusicXML cannot be recorded leaves nothing for later steps either.
+    if result.success and _PRIMARY_MUSICXML_KEY not in state.artifacts:
+        # An adapter that wrote no MusicXML must fail (docs/engine-interface.md), and a
+        # succeeded run must give later steps its primary MusicXML.
+        if _PRIMARY_MUSICXML_KEY in result.artifacts:
+            problem = "was not recorded (see the artifact_not_recorded warning)"
+        else:
+            problem = "is missing from its artifacts"
         state.record_error(
             RunErrorCode.ENGINE_FAILED,
             f"Engine {engine_name!r} reported success, but its primary MusicXML artifact "
-            f"{_PRIMARY_MUSICXML_KEY!r} was not recorded (see the artifact_not_recorded "
-            "warning); this is a bug in the engine adapter.",
+            f"{_PRIMARY_MUSICXML_KEY!r} {problem}; this is a bug in the engine adapter.",
             returncode=result.returncode,
         )
 
@@ -439,7 +441,9 @@ def _write_diagnostics(
         entries: tuple[object, ...] = (diagnostics,)
     else:
         entries = tuple(diagnostics)
-    lines = [state.redact(entry) for entry in entries if isinstance(entry, str) and entry.strip()]
+    lines = [
+        state.redact_paths(entry) for entry in entries if isinstance(entry, str) and entry.strip()
+    ]
     left_out = [type(entry).__name__ for entry in entries if not isinstance(entry, str)]
     if left_out:
         # One warning, however many entries: a long list must not flood the warnings.
@@ -532,14 +536,14 @@ def _artifact_kinds(keys: list[str], reserved: set[str] | frozenset[str]) -> dic
     }
     taken = set(kinds.values()) | reserved
     for key in sorted(key for key in keys if key not in kinds):
-        base = re.sub(r"[^a-z0-9]+", "_", key.split(":", 1)[0].lower()).strip("_")
-        if not base:
-            base = "artifact"
-        elif not base[0].isalpha():
-            base = f"artifact_{base}"
-        candidate, number = base, 2
+        kind_prefix = re.sub(r"[^a-z0-9]+", "_", key.split(":", 1)[0].lower()).strip("_")
+        if not kind_prefix:
+            kind_prefix = "artifact"
+        elif not kind_prefix[0].isalpha():
+            kind_prefix = f"artifact_{kind_prefix}"
+        candidate, number = kind_prefix, 2
         while candidate in taken:
-            candidate, number = f"{base}_{number}", number + 1
+            candidate, number = f"{kind_prefix}_{number}", number + 1
         kinds[key] = candidate
         taken.add(candidate)
     return kinds
@@ -643,15 +647,15 @@ def _sha256(path: Path) -> str:
 
 def _write_atomically(path: Path, text: str) -> None:
     # A unique temporary name, so concurrent writers never rename each other's file.
-    descriptor, temporary = tempfile.mkstemp(
-        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
-    )
+    # open("x") rather than tempfile.mkstemp: mkstemp always creates mode 0600, which
+    # would make run.json unreadable to other users who can read the rest of the run.
+    temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+        with temporary.open("x", encoding="utf-8", newline="\n") as stream:
             stream.write(text)
         os.replace(temporary, path)
     except BaseException:
-        Path(temporary).unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
         raise
 
 

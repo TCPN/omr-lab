@@ -40,6 +40,13 @@ def score(tmp_path: Path) -> Path:
     return path
 
 
+def _primary(raw: Path) -> dict[str, Path]:
+    """Write a primary MusicXML into ``raw`` and return it as artifacts; success needs one."""
+    path = raw / "score.musicxml"
+    path.write_text("x", encoding="utf-8")
+    return {"musicxml": path}
+
+
 def _written(result: PipelineResult) -> dict:
     document = json.loads(result.document_path.read_text(encoding="utf-8"))
     validate_run_document(document)
@@ -345,6 +352,7 @@ def test_artifacts_outside_output_dir_or_missing_are_not_recorded(
             "scripted",
             success=True,
             artifacts={
+                **_primary(raw),
                 "notes": outside,
                 "engine_log": raw / "ok.log",
                 "extra": raw / "missing.txt",
@@ -356,7 +364,7 @@ def test_artifacts_outside_output_dir_or_missing_are_not_recorded(
 
     document = _written(result)
     assert document["status"] == "succeeded"
-    assert document["artifacts"] == {"engine_log": "raw/ok.log"}
+    assert document["artifacts"] == {"musicxml": "raw/score.musicxml", "engine_log": "raw/ok.log"}
     messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
     assert messages == [
         "Engine artifact 'notes' was not recorded: it is not inside the engine's raw/ output "
@@ -380,15 +388,21 @@ def test_engine_version_from_result_overrides_availability(score: Path, tmp_path
 
 def test_blank_diagnostics_are_skipped_and_order_is_kept(score: Path, tmp_path: Path) -> None:
     engine = ScriptedEngine(
-        build=lambda _: EngineResult(
-            "scripted", success=True, diagnostics=("first", "  ", "second 中文")
+        build=lambda raw: EngineResult(
+            "scripted",
+            success=True,
+            diagnostics=("first", "  ", "second 中文"),
+            artifacts=_primary(raw),
         )
     )
 
     document = _written(run_pipeline(score, tmp_path / "run", engine))
 
     assert document["warnings"] == [{"code": "score_not_normalized", "message": ANY}]
-    assert document["artifacts"] == {"engine_diagnostics": ENGINE_DIAGNOSTICS_FILENAME}
+    assert document["artifacts"] == {
+        "musicxml": "raw/score.musicxml",
+        "engine_diagnostics": ENGINE_DIAGNOSTICS_FILENAME,
+    }
     log = (tmp_path / "run" / ENGINE_DIAGNOSTICS_FILENAME).read_bytes()
     assert log == "first\nsecond 中文\n".encode()
 
@@ -397,7 +411,9 @@ def test_unserializable_options_fall_back_to_minimal_failed_record(
     score: Path, tmp_path: Path
 ) -> None:
     engine = ScriptedEngine(
-        build=lambda _: EngineResult("scripted", success=True, options={"bad": float("nan")})
+        build=lambda raw: EngineResult(
+            "scripted", success=True, options={"bad": float("nan")}, artifacts=_primary(raw)
+        )
     )
 
     result = run_pipeline(score, tmp_path / "run", engine)
@@ -505,7 +521,9 @@ def test_fallback_keeps_engine_failure_version_and_diagnostics(score: Path, tmp_
 
 def test_fallback_for_succeeded_run_drops_score_not_normalized(score: Path, tmp_path: Path) -> None:
     engine = ScriptedEngine(
-        build=lambda _: EngineResult("scripted", success=True, options={"bad": float("nan")})
+        build=lambda raw: EngineResult(
+            "scripted", success=True, options={"bad": float("nan")}, artifacts=_primary(raw)
+        )
     )
 
     document = _written(run_pipeline(score, tmp_path / "run", engine))
@@ -540,13 +558,17 @@ def test_artifact_outside_raw_such_as_run_json_is_not_recorded(score: Path, tmp_
         return EngineResult(
             "scripted",
             success=True,
-            artifacts={"result": raw.parent / RUN_DOCUMENT_FILENAME, "raw": raw},
+            artifacts={
+                "musicxml": raw / "score.musicxml",
+                "result": raw.parent / RUN_DOCUMENT_FILENAME,
+                "raw": raw,
+            },
         )
 
     document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
 
     assert document["status"] == "succeeded"
-    assert document["artifacts"] == {}
+    assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
     messages = [w["message"] for w in document["warnings"] if w["code"] == "artifact_not_recorded"]
     assert messages == [
         f"Engine artifact {key!r} was not recorded: it is not inside the engine's raw/ "
@@ -988,7 +1010,12 @@ def test_keyboard_interrupt_writes_an_interrupted_record_and_reraises(
 
 def test_string_diagnostics_are_one_entry(score: Path, tmp_path: Path) -> None:
     engine = ScriptedEngine(
-        build=lambda _: EngineResult("scripted", success=True, diagnostics="boom")  # type: ignore[arg-type]
+        build=lambda raw: EngineResult(
+            "scripted",
+            success=True,
+            diagnostics="boom",  # type: ignore[arg-type]
+            artifacts=_primary(raw),
+        )
     )
 
     document = _written(run_pipeline(score, tmp_path / "run", engine))
@@ -1019,12 +1046,14 @@ def test_engine_key_with_the_diagnostics_kind_is_renamed(score: Path, tmp_path: 
 def test_unwritable_diagnostics_file_adds_a_warning(score: Path, tmp_path: Path) -> None:
     def build(raw: Path) -> EngineResult:
         (raw.parent / ENGINE_DIAGNOSTICS_FILENAME).mkdir()  # an adapter bug in the way
-        return EngineResult("scripted", success=True, diagnostics=("a", "b"))
+        return EngineResult(
+            "scripted", success=True, diagnostics=("a", "b"), artifacts=_primary(raw)
+        )
 
     document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
 
     assert document["status"] == "succeeded"
-    assert document["artifacts"] == {}
+    assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
     assert document["warnings"][0]["code"] == "engine_diagnostic_not_recorded"
     assert document["warnings"][0]["message"].startswith("2 engine diagnostics were left out")
 
@@ -1085,3 +1114,26 @@ def test_non_string_diagnostics_give_one_warning(
     left_out = [w for w in document["warnings"] if w["code"] == "engine_diagnostic_not_recorded"]
     assert len(left_out) == 1
     assert f"of type {types} were left out" in left_out[0]["message"]
+
+
+def test_success_without_a_primary_musicxml_key_fails_the_run(score: Path, tmp_path: Path) -> None:
+    def build(raw: Path) -> EngineResult:
+        (raw / "engine.log").write_text("x", encoding="utf-8")
+        return EngineResult("scripted", success=True, artifacts={"engine_log": raw / "engine.log"})
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["status"] == "failed"
+    assert document["error"]["code"] == "engine_failed"
+    assert "'musicxml' is missing from its artifacts" in document["error"]["message"]
+    assert document["artifacts"] == {"engine_log": "raw/engine.log"}
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
+def test_run_json_has_the_same_mode_as_other_run_files(score: Path, tmp_path: Path) -> None:
+    output_dir = tmp_path / "run"
+
+    run_pipeline(score, output_dir, MockEngine())
+
+    mode = (output_dir / ENGINE_DIAGNOSTICS_FILENAME).stat().st_mode
+    assert (output_dir / RUN_DOCUMENT_FILENAME).stat().st_mode == mode
