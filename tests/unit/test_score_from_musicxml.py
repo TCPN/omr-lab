@@ -526,6 +526,46 @@ def test_number_of_distinct_warnings_is_capped() -> None:
     assert conversion.warnings[-1].message == ("50 more problem(s) of other kinds were not listed.")
 
 
+@pytest.mark.parametrize("number", ["x", "0"])
+def test_invalid_tuplet_number_is_reported(number: str) -> None:
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+            f'<notations><tuplet type="start" number="{number}"/></notations></note>'
+        )
+    )
+
+    assert _events(conversion)[0]["tuplets"] == [{"type": "start", "number": None}]
+    assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
+
+
+def test_offset_without_divisions_only_nulls_its_own_offset() -> None:
+    conversion = _convert(
+        _measure(
+            "<harmony><root><root-step>C</root-step></root><kind>major</kind>"
+            "<offset>2</offset></harmony>",
+            divisions=None,
+        )
+    )
+
+    assert _events(conversion)[0]["offset"] is None
+    assert "its offset was recorded as null" in conversion.warnings[0].message
+    assert "later offsets" not in conversion.warnings[0].message
+
+
+def test_long_offending_values_are_shortened_in_warnings() -> None:
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch>"
+            f"<duration>{'1' * 5000}</duration></note>"
+        )
+    )
+
+    (warning,) = conversion.warnings
+    assert len(warning.message) < 200
+    assert "(5000 characters)" in warning.message
+
+
 @pytest.mark.parametrize(
     ("value", "text"),
     [(Fraction(0), "0"), (Fraction(2), "2"), (Fraction(6, 8), "3/4"), (Fraction(1, 12), "1/12")],

@@ -53,8 +53,8 @@ _CLEF_SIGNS = frozenset({"G", "F", "C", "percussion", "TAB", "jianpu", "none"})
 _DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)")
 # Real files use a few digits; the cap keeps a crafted value from growing huge.
 _MAX_DECIMAL_LENGTH = 32
-_UNSIGNED = re.compile(r"[0-9]+")
-_SIGNED = re.compile(r"[+-]?[0-9]+")
+_ASCII_UNSIGNED_INT = re.compile(r"[0-9]+")
+_ASCII_SIGNED_INT = re.compile(r"[+-]?[0-9]+")
 _SYLLABIC = frozenset({"single", "begin", "middle", "end"})
 # <sound> attributes that change the playing order; the model has no field for them yet.
 _NAVIGATION_ATTRIBUTES = ("segno", "dalsegno", "coda", "tocoda", "dacapo", "fine", "forward-repeat")
@@ -93,6 +93,15 @@ def _nullable_rational(value: Fraction | None) -> str | None:
 
 
 _MAX_DISTINCT_WARNINGS = 100
+_MAX_EXAMPLE_LENGTH = 40
+
+
+def _shortened(example: object) -> str:
+    """repr() of an offending value, cut so a huge source value cannot bloat a warning."""
+    text = repr(example)
+    if len(text) <= _MAX_EXAMPLE_LENGTH:
+        return text
+    return f"{text[: _MAX_EXAMPLE_LENGTH - 1]}… ({len(str(example))} characters)"
 
 
 class _Issues:
@@ -112,7 +121,9 @@ class _Issues:
                 self._overflow += 1
                 return
             self._counts[key] = 0
-            self._first[key] = f"in {where}" if example is None else f"{example!r} in {where}"
+            self._first[key] = (
+                f"in {where}" if example is None else f"{_shortened(example)} in {where}"
+            )
         self._counts[key] += 1
 
     def warnings(self) -> tuple[ScoreWarning, ...]:
@@ -172,7 +183,7 @@ class _PartConverter:
         value = _text(element)
         if value is None:
             return None
-        if _SIGNED.fullmatch(value) is not None:
+        if _ASCII_SIGNED_INT.fullmatch(value) is not None:
             try:
                 return int(value)
             except ValueError:  # more digits than int() converts
@@ -196,20 +207,28 @@ class _PartConverter:
             return None
         return staff
 
-    def whole_notes(self, element: ET.Element | None, label: str) -> Fraction | None:
-        """Convert a <duration>/<offset>-style value in divisions to whole notes."""
+    def whole_notes(
+        self,
+        element: ET.Element | None,
+        label: str,
+        consequence: str = "later offsets in the measure are null",
+    ) -> Fraction | None:
+        """Convert a <duration>/<offset>-style value in divisions to whole notes.
+
+        ``consequence`` ends the missing-divisions warning: what becomes null.
+        """
         value = _text(element)
         if value is None:
             return None
         amount = _decimal(value)
         if amount is None:
-            self.invalid(f"Non-numeric {label} was ignored", value)
+            self.invalid(f"Invalid or too long {label} was ignored", value)
             return None
         if self.divisions is None:
             self.issues.add(
                 RunWarningCode.SCORE_DIVISIONS_MISSING,
                 f"{label} appears before any <divisions>, so its length is unknown and "
-                "later offsets in the measure are null",
+                f"{consequence}",
                 self.where,
             )
             return None
@@ -271,7 +290,7 @@ class _PartConverter:
             return None
         if offset_element is None:
             return self.position
-        offset = self.whole_notes(offset_element, "<offset>")
+        offset = self.whole_notes(offset_element, "<offset>", "its offset was recorded as null")
         if offset is None:
             return None
         position = self.position + offset
@@ -470,13 +489,12 @@ class _PartConverter:
                 if tuplet_type not in ("start", "stop"):
                     self.invalid("An unknown <tuplet type> was ignored", tuplet_type)
                     continue
-                number = tuplet.get("number")
-                tuplets.append(
-                    {
-                        "type": tuplet_type,
-                        "number": _ascii_int(number),
-                    }
-                )
+                number_text = tuplet.get("number")
+                number = _ascii_int(number_text)
+                if number_text is not None and (number is None or number < 1):
+                    self.invalid("An invalid <tuplet number> was recorded as null", number_text)
+                    number = None
+                tuplets.append({"type": tuplet_type, "number": number})
         return {
             "kind": kind,
             "offset": _nullable_rational(offset),
@@ -818,7 +836,7 @@ def _decimal(value: str) -> Fraction | None:
 
 def _ascii_int(value: str | None) -> int | None:
     """Parse an unsigned ASCII integer attribute; None for anything else (e.g. '²')."""
-    if value is None or _UNSIGNED.fullmatch(value) is None:
+    if value is None or _ASCII_UNSIGNED_INT.fullmatch(value) is None:
         return None
     try:
         return int(value)
