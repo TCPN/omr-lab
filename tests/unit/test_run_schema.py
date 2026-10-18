@@ -9,6 +9,7 @@ from omr_lab.schemas import (
     CURRENT_RUN_SCHEMA_VERSION,
     SUPPORTED_RUN_SCHEMA_VERSIONS,
     RunDocumentValidationError,
+    artifact_path_violation,
     load_run_schema,
     validate_run_document,
 )
@@ -198,3 +199,12 @@ def test_unknown_document_version_is_reported_as_violation():
     with pytest.raises(RunDocumentValidationError) as excinfo:
         validate_run_document(document)
     assert [m.split(": ", 1)[0] for m in excinfo.value.errors] == ["$.schema_version"]
+
+
+def test_artifact_path_violation_names_the_rule_or_returns_none() -> None:
+    assert artifact_path_violation("raw/score.musicxml") is None
+    assert artifact_path_violation("raw\\score.musicxml") == (
+        "must use '/' as the separator, not '\\'"
+    )
+    with pytest.raises(ValueError):
+        artifact_path_violation("raw/a", version="9.9.9")

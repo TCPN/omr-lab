@@ -19,11 +19,9 @@ import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from functools import cache, partial
+from functools import partial
 from pathlib import Path
 from typing import Any
-
-from jsonschema import Draft202012Validator
 
 from omr_lab.engines.base import (
     Engine,
@@ -37,7 +35,7 @@ from omr_lab.schemas import (
     RunDocumentValidationError,
     RunErrorCode,
     RunWarningCode,
-    load_run_schema,
+    artifact_path_violation,
     validate_run_document,
 )
 
@@ -184,12 +182,12 @@ def run_pipeline(
     started_at = datetime.now(UTC)
     start = time.perf_counter()
     state = _RunState(redact=_path_redactor(input_path, output_dir))
-    interrupted: KeyboardInterrupt | None = None
+    pending_interrupt: KeyboardInterrupt | None = None
     try:
-        _run(state, input_path, output_dir, engine, timeout_seconds, options)
+        _check_and_recognize(state, input_path, output_dir, engine, timeout_seconds, options)
     except KeyboardInterrupt as exc:
         # Ctrl-C during a long engine run is normal: leave a record, then re-raise.
-        interrupted = exc
+        pending_interrupt = exc
         message = "The run was interrupted (KeyboardInterrupt)."
         if state.error is None:
             state.record_error(RunErrorCode.INTERRUPTED, message)
@@ -226,8 +224,8 @@ def run_pipeline(
 
     document_path = output_dir / RUN_DOCUMENT_FILENAME
     _write_atomically(document_path, text)
-    if interrupted is not None:
-        raise interrupted
+    if pending_interrupt is not None:
+        raise pending_interrupt
     return PipelineResult(document=document, document_path=document_path, output_dir=output_dir)
 
 
@@ -314,7 +312,7 @@ def _absolute_forms(path: Path) -> set[str]:
     return forms
 
 
-def _run(
+def _check_and_recognize(
     state: _RunState,
     input_path: Path,
     output_dir: Path,
@@ -322,7 +320,7 @@ def _run(
     timeout_seconds: float,
     options: EngineOptions | None,
 ) -> None:
-    if not _check_input(state, input_path):
+    if not _check_and_record_input(state, input_path):
         return
 
     availability = engine.check_available()
@@ -348,7 +346,7 @@ def _run(
     _record_result(state, result, engine.name, output_dir)
 
 
-def _check_input(state: _RunState, input_path: Path) -> bool:
+def _check_and_record_input(state: _RunState, input_path: Path) -> bool:
     """Record media type and digest; record an invalid_input error and return False on failure."""
     state.media_type = MEDIA_TYPE_BY_EXTENSION.get(input_path.suffix.lower())
     # One stat() in a try: on Python 3.11-3.13 exists() and is_file() raise
@@ -501,7 +499,7 @@ def _map_artifacts(
             reason = "the file does not exist"
         elif not is_file:
             reason = "it is not a regular file"
-        elif (rule := _broken_path_rule(relative)) is not None:
+        elif (rule := artifact_path_violation(relative)) is not None:
             reason = f"its path {rule}"
         else:
             recordable[key] = relative
@@ -517,23 +515,6 @@ def _map_artifacts(
     reserved = {key for key in artifacts if _ARTIFACT_KIND_PATTERN.fullmatch(key)}
     kinds = _artifact_kinds(list(recordable), reserved | _PIPELINE_ARTIFACT_KINDS)
     return {kinds[key]: relative for key, relative in recordable.items()}
-
-
-@cache
-def _artifact_path_validator() -> Draft202012Validator:
-    schema = load_run_schema(CURRENT_RUN_SCHEMA_VERSION)
-    return Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/relativePosixPath"})
-
-
-def _broken_path_rule(relative: str) -> str | None:
-    """Return the first schema path rule ``relative`` breaks, e.g. "must not ...", or None.
-
-    Errors come in schema order, which lists the control-character rule first.
-    """
-    error = next(_artifact_path_validator().iter_errors(relative), None)
-    if error is None:
-        return None
-    return error.schema.get("description") or error.message
 
 
 def _artifact_kinds(keys: list[str], reserved: set[str] | frozenset[str]) -> dict[str, str]:

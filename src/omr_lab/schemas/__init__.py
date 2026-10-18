@@ -80,6 +80,26 @@ def _message(error: ValidationError) -> str:
     return error.message
 
 
+@cache
+def _artifact_path_validator(version: str) -> Draft202012Validator:
+    schema = load_run_schema(version)
+    return Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/relativePosixPath"})
+
+
+def artifact_path_violation(path: str, *, version: str = CURRENT_RUN_SCHEMA_VERSION) -> str | None:
+    """Return the first artifact path rule ``path`` breaks, e.g. "must not ...", or None.
+
+    The rules are the schema's ``relativePosixPath`` definition, so callers that check
+    a path before writing it (the pipeline) cannot drift from the schema. Errors come
+    in schema order, which lists the control-character rule first.
+    """
+    _check_supported(version)
+    error = next(_artifact_path_validator(version).iter_errors(path), None)
+    if error is None:
+        return None
+    return error.schema.get("description") or error.message
+
+
 def validate_run_document(document: Any, *, version: str | None = None) -> None:
     """Validate a decoded JSON run document against the run schema.
 
@@ -111,6 +131,7 @@ __all__ = [
     "RunDocumentValidationError",
     "RunErrorCode",
     "RunWarningCode",
+    "artifact_path_violation",
     "load_run_schema",
     "validate_run_document",
 ]
