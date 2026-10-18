@@ -92,18 +92,27 @@ def _nullable_rational(value: Fraction | None) -> str | None:
     return None if value is None else rational(value)
 
 
+_MAX_DISTINCT_WARNINGS = 100
+
+
 class _Issues:
     """Collects problems per (code, construct) so a large score cannot flood warnings."""
 
     def __init__(self) -> None:
         self._counts: dict[tuple[RunWarningCode, str], int] = {}
         self._first: dict[tuple[RunWarningCode, str], str] = {}
+        self._overflow = 0
 
-    def add(self, code: RunWarningCode, what: str, where: str) -> None:
+    def add(self, code: RunWarningCode, what: str, where: str, example: object = None) -> None:
+        """Count one problem. ``what`` must not contain the offending value (pass it as
+        ``example``), so different bad values of one construct share one warning."""
         key = (code, what)
         if key not in self._counts:
+            if len(self._counts) >= _MAX_DISTINCT_WARNINGS:
+                self._overflow += 1
+                return
             self._counts[key] = 0
-            self._first[key] = where
+            self._first[key] = f"in {where}" if example is None else f"{example!r} in {where}"
         self._counts[key] += 1
 
     def warnings(self) -> tuple[ScoreWarning, ...]:
@@ -112,10 +121,17 @@ class _Issues:
             times = "1 occurrence" if count == 1 else f"{count} occurrences"
             first = self._first[(code, what)]
             if code is RunWarningCode.SCORE_UNSUPPORTED_ELEMENT:
-                message = f"{what} is not represented in the score ({times}; first in {first})."
+                message = f"{what} is not represented in the score ({times}; first {first})."
             else:
-                message = f"{what} ({times}; first in {first})."
+                message = f"{what} ({times}; first {first})."
             result.append(ScoreWarning(code, message))
+        if self._overflow:
+            result.append(
+                ScoreWarning(
+                    RunWarningCode.SCORE_UNSUPPORTED_ELEMENT,
+                    f"{self._overflow} more problem(s) of other kinds were not listed.",
+                )
+            )
         return tuple(result)
 
 
@@ -143,8 +159,8 @@ class _PartConverter:
     def unsupported(self, what: str) -> None:
         self.issues.add(RunWarningCode.SCORE_UNSUPPORTED_ELEMENT, what, self.where)
 
-    def invalid(self, what: str) -> None:
-        self.issues.add(RunWarningCode.SCORE_INVALID_VALUE, what, self.where)
+    def invalid(self, what: str, value: object = None) -> None:
+        self.issues.add(RunWarningCode.SCORE_INVALID_VALUE, what, self.where, value)
 
     def check_children(self, element: ET.Element, handled: set[str], label: str) -> None:
         ignored = IGNORED_ELEMENTS.get(element.tag, frozenset())
@@ -161,7 +177,7 @@ class _PartConverter:
                 return int(value)
             except ValueError:  # more digits than int() converts
                 pass
-        self.invalid(f"Non-integer {label} {value!r} was recorded as null")
+        self.invalid(f"Non-integer {label} was recorded as null", value)
         return None
 
     def number(self, value: str | None, label: str) -> float | None:
@@ -169,14 +185,14 @@ class _PartConverter:
             return None
         number = float(value) if _DECIMAL.fullmatch(value) is not None else math.nan
         if not math.isfinite(number):
-            self.invalid(f"Non-numeric {label} {value!r} was recorded as null")
+            self.invalid(f"Non-numeric {label} was recorded as null", value)
             return None
         return number
 
     def staff(self, element: ET.Element) -> int | None:
         staff = self.integer(element.find("staff"), "<staff>")
         if staff is not None and staff < 1:
-            self.invalid(f"<staff> {staff} below 1 was recorded as null")
+            self.invalid("<staff> below 1 was recorded as null", staff)
             return None
         return staff
 
@@ -187,7 +203,7 @@ class _PartConverter:
             return None
         amount = _decimal(value)
         if amount is None:
-            self.invalid(f"Non-numeric {label} {value!r} was ignored")
+            self.invalid(f"Non-numeric {label} was ignored", value)
             return None
         if self.divisions is None:
             self.issues.add(
@@ -426,7 +442,7 @@ class _PartConverter:
         """<sound tempo> in quarter notes per minute; None (with a warning) unless positive."""
         bpm = self.number(sound.get("tempo"), "<sound tempo>")
         if bpm is not None and bpm <= 0:
-            self.invalid(f"<sound tempo> {bpm!r} that is not positive was ignored")
+            self.invalid("<sound tempo> that is not positive was ignored", bpm)
             return None
         return bpm
 
@@ -452,7 +468,7 @@ class _PartConverter:
             for tuplet in notations.findall("tuplet"):
                 tuplet_type = tuplet.get("type")
                 if tuplet_type not in ("start", "stop"):
-                    self.invalid(f"<tuplet type> {tuplet_type!r} was ignored")
+                    self.invalid("An unknown <tuplet type> was ignored", tuplet_type)
                     continue
                 number = tuplet.get("number")
                 tuplets.append(
@@ -491,7 +507,7 @@ class _PartConverter:
             if tie_type in ("start", "stop") and tie_type not in ties:
                 ties.append(tie_type)
             elif tie_type not in ("start", "stop"):
-                self.invalid(f"<tie type> {tie_type!r} was ignored")
+                self.invalid("An unknown <tie type> was ignored", tie_type)
         return {
             "step": step,
             "alter": _compact(alter),
@@ -514,11 +530,11 @@ class _PartConverter:
                 if value in _SYLLABIC:
                     syllabics.append(value)
                 else:
-                    self.invalid(f"<syllabic> {value!r} was ignored")
+                    self.invalid("An unknown <syllabic> was ignored", value)
             elif child.tag == "extend":
                 extend_type = child.get("type")
                 if extend_type not in (None, "start", "stop", "continue"):
-                    self.invalid(f"<extend type> {extend_type!r} was recorded as null")
+                    self.invalid("An unknown <extend type> was recorded as null", extend_type)
                     extend_type = None
                 extend = {"type": extend_type}
             elif child.tag not in ("footnote", "level"):
@@ -540,7 +556,7 @@ class _PartConverter:
             value = _text(divisions_element)
             divisions = None if value is None else _decimal(value)
             if divisions is None or divisions <= 0:
-                self.invalid(f"<divisions> {value!r} that is not a positive number was ignored")
+                self.invalid("<divisions> that is not a positive number was ignored", value)
             else:
                 self.divisions = divisions
         for key in element.findall("key"):
@@ -557,7 +573,7 @@ class _PartConverter:
         number = _ascii_int(value)
         if number is not None and number >= 1:
             return number
-        self.invalid(f"<{element.tag} number> {value!r} was recorded as a null staff")
+        self.invalid(f"An invalid <{element.tag} number> was recorded as a null staff", value)
         return None
 
     def key(self, element: ET.Element, events: list[dict[str, Any]]) -> None:
@@ -606,7 +622,7 @@ class _PartConverter:
         self.check_children(element, {"sign", "line", "clef-octave-change"}, "clef")
         sign = _text(element.find("sign"))
         if sign not in _CLEF_SIGNS:
-            self.invalid(f"A <clef> with <sign> {sign!r} was left out")
+            self.invalid("A <clef> with an unknown <sign> was left out", sign)
             return
         events.append(
             {
@@ -757,7 +773,7 @@ class _PartConverter:
         self.check_children(element, {"bar-style", "repeat", "ending"}, "barline")
         location = element.get("location", "right")
         if location not in ("left", "right", "middle"):
-            self.invalid(f"A <barline location> {location!r} was left out")
+            self.invalid("A <barline> with an unknown location was left out", location)
             return None
         repeat = None
         repeat_element = element.find("repeat")
@@ -766,12 +782,12 @@ class _PartConverter:
             times_text = repeat_element.get("times")
             times = _ascii_int(times_text)
             if times_text is not None and (times is None or times < 1):
-                self.invalid(f"<repeat times> {times_text!r} was recorded as null")
+                self.invalid("An invalid <repeat times> was recorded as null", times_text)
                 times = None
             if direction in ("forward", "backward"):
                 repeat = {"direction": direction, "times": times}
             else:
-                self.invalid(f"<repeat direction> {direction!r} was ignored")
+                self.invalid("An unknown <repeat direction> was ignored", direction)
         ending = None
         ending_element = element.find("ending")
         if ending_element is not None:

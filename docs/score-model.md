@@ -122,7 +122,7 @@ The ABC column names the construct a later ABC export would use (ABC 2.1 as rend
 
 ## Warnings
 
-The converter adds these run-document warnings (see the code table in [json-schema.md](json-schema.md)). Each warning is reported once per construct with a count and the first part and measure where it occurred, so a large score cannot flood the list.
+The converter adds these run-document warnings (see the code table in [json-schema.md](json-schema.md)). Each warning is reported once per construct, with a count, the first offending value (for invalid values) and the first part and measure where it occurred. After 100 distinct warnings, one more warning counts the rest. A large or badly recognized score therefore cannot flood the list.
 
 | Code | When |
 | --- | --- |

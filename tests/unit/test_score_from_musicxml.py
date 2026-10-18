@@ -504,6 +504,28 @@ def test_warnings_are_aggregated_per_construct() -> None:
     assert "50 occurrences" in conversion.warnings[0].message
 
 
+def test_different_bad_values_of_one_construct_share_a_warning() -> None:
+    notes = "".join(
+        f"<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+        f"<staff>1{letter}</staff></note>"
+        for letter in "abc"
+    )
+    conversion = _convert(_measure(notes))
+
+    assert [w.message for w in conversion.warnings] == [
+        "Non-integer <staff> was recorded as null "
+        "(3 occurrences; first '1a' in part 'P1', measure '1')."
+    ]
+
+
+def test_number_of_distinct_warnings_is_capped() -> None:
+    tags = "".join(f"<x{index}/>" for index in range(150))
+    conversion = _convert(_measure(tags))
+
+    assert len(conversion.warnings) == 101
+    assert conversion.warnings[-1].message == ("50 more problem(s) of other kinds were not listed.")
+
+
 @pytest.mark.parametrize(
     ("value", "text"),
     [(Fraction(0), "0"), (Fraction(2), "2"), (Fraction(6, 8), "3/4"), (Fraction(1, 12), "1/12")],
