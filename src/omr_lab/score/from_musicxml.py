@@ -52,6 +52,7 @@ _STEPS = frozenset("ABCDEFG")
 _CLEF_SIGNS = frozenset({"G", "F", "C", "percussion", "TAB", "jianpu", "none"})
 _DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)")
 _UNSIGNED = re.compile(r"[0-9]+")
+_SIGNED = re.compile(r"[+-]?[0-9]+")
 _SYLLABIC = frozenset({"single", "begin", "middle", "end"})
 # <sound> attributes that change the playing order; the model has no field for them yet.
 _NAVIGATION_ATTRIBUTES = ("segno", "dalsegno", "coda", "tocoda", "dacapo", "fine", "forward-repeat")
@@ -153,19 +154,18 @@ class _PartConverter:
         value = _text(element)
         if value is None:
             return None
-        try:
-            return int(value)
-        except ValueError:
-            self.invalid(f"Non-integer {label} {value!r} was recorded as null")
-            return None
+        if _SIGNED.fullmatch(value) is not None:
+            try:
+                return int(value)
+            except ValueError:  # more digits than int() converts
+                pass
+        self.invalid(f"Non-integer {label} {value!r} was recorded as null")
+        return None
 
     def number(self, value: str | None, label: str) -> float | None:
         if value is None:
             return None
-        try:
-            number = float(value)
-        except ValueError:
-            number = math.nan
+        number = float(value) if _DECIMAL.fullmatch(value) is not None else math.nan
         if not math.isfinite(number):
             self.invalid(f"Non-numeric {label} {value!r} was recorded as null")
             return None

@@ -367,6 +367,24 @@ def test_unicode_digits_in_number_attributes_do_not_crash(content: str) -> None:
     assert conversion.score["parts"][0]["measures"][0]
 
 
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<attributes><key><fifths>1_0</fifths></key></attributes>",
+        "<note><pitch><step>C</step><octave>\u0664</octave></pitch><duration>1</duration></note>",
+        "<note><pitch><step>C</step><alter>1e0</alter><octave>4</octave></pitch>"
+        "<duration>1</duration></note>",
+        "<note><pitch><step>C</step><alter>1_0</alter><octave>4</octave></pitch>"
+        "<duration>1</duration></note>",
+    ],
+)
+def test_numbers_must_be_plain_ascii_xml_numbers(content: str) -> None:
+    conversion = _convert(_measure(content))
+
+    assert _events(conversion) == []
+    assert RunWarningCode.SCORE_INVALID_VALUE in _codes(conversion)
+
+
 def test_presentation_elements_are_ignored_without_warnings() -> None:
     conversion = _convert(
         _measure(
