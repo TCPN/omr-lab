@@ -1050,3 +1050,19 @@ def test_missing_home_directory_does_not_break_the_run(
     result = run_pipeline(score, tmp_path / "run", MockEngine())
 
     assert _written(result)["status"] == "succeeded"
+
+
+def test_surrogate_in_error_message_keeps_engine_failure(score: Path, tmp_path: Path) -> None:
+    bad = os.fsdecode(b"cannot read \xa6.mxl")
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult("scripted", success=False, returncode=2, error=bad)
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"] == {
+        "code": "engine_failed",
+        "message": "cannot read \\udca6.mxl",
+        "returncode": 2,
+    }
+    assert document["warnings"] == []

@@ -131,10 +131,15 @@ class _RunState:
         # The schema requires a non-empty message; an adapter may raise without one.
         if not isinstance(message, str) or not message.strip():
             message = f"Failed with {code} and no further message."
-        self.error = {"code": code, "message": self.redact(message), **extra}
+        self.error = {"code": code, "message": self._recordable(message), **extra}
 
     def warn(self, code: RunWarningCode, message: str) -> None:
-        self.warnings.append({"code": code, "message": self.redact(message)})
+        self.warnings.append({"code": code, "message": self._recordable(message)})
+
+    def _recordable(self, message: str) -> str:
+        # Undecodable engine output (surrogate escapes) cannot be written as UTF-8;
+        # backslash escapes keep it visible, as in the diagnostics file.
+        return self.redact(message).encode("utf-8", "backslashreplace").decode("utf-8")
 
 
 def run_pipeline(
@@ -239,11 +244,7 @@ def _fallback_document(
         media_type=state.media_type,
         sha256=state.sha256,
         engine_version=state.engine_version,
-        warnings=[
-            w
-            for w in state.warnings
-            if w["code"] != RunWarningCode.SCORE_NOT_NORMALIZED and _is_utf8_encodable(w["message"])
-        ],
+        warnings=[w for w in state.warnings if w["code"] != RunWarningCode.SCORE_NOT_NORMALIZED],
         # The pipeline's own files have fixed, schema-valid paths; keeping them keeps
         # the pointer to the engine diagnostics.
         artifacts={k: v for k, v in state.artifacts.items() if k in _PIPELINE_ARTIFACT_KINDS},
@@ -266,14 +267,6 @@ def _fallback_document(
     minimal.record_error(RunErrorCode.INTERNAL_ERROR, reason)
     document = build(minimal)
     return document, _serialize(document)
-
-
-def _is_utf8_encodable(text: str) -> bool:
-    try:
-        text.encode("utf-8")
-    except (UnicodeEncodeError, AttributeError):
-        return False
-    return True
 
 
 def _path_redactor(input_path: Path, output_dir: Path) -> Callable[[str], str]:
