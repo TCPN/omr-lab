@@ -168,6 +168,33 @@ def test_notations_on_merged_chord_notes_are_reported() -> None:
     assert "<fermata> in <notations>" in conversion.warnings[0].message
 
 
+def test_chord_notes_of_a_dropped_note_are_not_merged_into_an_earlier_note() -> None:
+    conversion = _convert(
+        _measure(
+            f"{NOTE_C4}"
+            "<note><pitch><step>H</step><octave>4</octave></pitch><duration>1</duration></note>"
+            "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration>"
+            "</note>"
+        )
+    )
+
+    events = _events(conversion)
+    assert [(e["offset"], [p["step"] for p in e["pitches"]]) for e in events] == [
+        ("0", ["C"]),
+        ("1/4", ["E"]),
+    ]
+    assert set(_codes(conversion)) == {RunWarningCode.SCORE_INVALID_VALUE}
+
+
+@pytest.mark.parametrize("tag", ["backup", "forward"])
+def test_non_positive_backup_or_forward_is_invalid(tag: str) -> None:
+    conversion = _convert(_measure(f"{NOTE_C4}<{tag}><duration>-1</duration></{tag}>{NOTE_C4}"))
+
+    assert [e["offset"] for e in _events(conversion)] == ["0", None]
+    assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
+    assert f"<{tag}> <duration>" in conversion.warnings[0].message
+
+
 def test_grace_notes_take_no_time() -> None:
     conversion = _convert(
         _measure(

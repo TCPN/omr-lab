@@ -211,6 +211,21 @@ class _PartConverter:
             return
         self.position = position
 
+    def motion(self, element: ET.Element) -> Fraction | None:
+        """Length of a <backup> or <forward>; None (unknown) unless it is positive."""
+        label = f"<{element.tag}> <duration>"
+        amount = self.whole_notes(element.find("duration"), label)
+        if amount is not None and amount <= 0:
+            self.invalid(f"A {label} that is not positive was ignored; later offsets are null")
+            return None
+        return amount
+
+    def drop_note(self, is_chord: bool) -> None:
+        """Forget the previous note when a note is left out, so its <chord/> notes are
+        not merged into an earlier, unrelated event."""
+        if not is_chord:
+            self.last_note = None
+
     def offset_of(self, element: ET.Element) -> Fraction | None:
         """Position of a <harmony>/<direction>, including its <offset> child."""
         offset_element = element.find("offset")
@@ -247,11 +262,11 @@ class _PartConverter:
             if tag == "note":
                 self.note(child, events)
             elif tag == "backup":
-                amount = self.whole_notes(child.find("duration"), "<backup> <duration>")
+                amount = self.motion(child)
                 self.advance(None if amount is None else -amount)
                 self.last_note = None
             elif tag == "forward":
-                self.advance(self.whole_notes(child.find("duration"), "<forward> <duration>"))
+                self.advance(self.motion(child))
                 self.last_note = None
             elif tag == "attributes":
                 self.attributes(child, events)
@@ -321,9 +336,11 @@ class _PartConverter:
         self.check_children(element, handled, "note")
         if element.find("cue") is not None:
             self.unsupported("A cue <note>")
+            self.drop_note(is_chord)
             return
         if element.find("unpitched") is not None:
             self.unsupported("An unpitched <note>")
+            self.drop_note(is_chord)
             return
         # Checked here, not in duration_fields(), so merged <chord/> notes are covered too.
         for notations in element.findall("notations"):
@@ -344,6 +361,7 @@ class _PartConverter:
 
         pitch = self.pitch(element)
         if pitch is None:
+            self.drop_note(is_chord)
             return
         if is_chord and self.last_note is not None:
             self.last_note["pitches"].append(pitch)
