@@ -9,6 +9,7 @@ elements listed in ``IGNORED_ELEMENTS`` are skipped without a warning.
 from __future__ import annotations
 
 import math
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from fractions import Fraction
@@ -49,6 +50,8 @@ sounding ``<tie>`` is recorded instead.
 
 _STEPS = frozenset("ABCDEFG")
 _CLEF_SIGNS = frozenset({"G", "F", "C", "percussion", "TAB", "jianpu", "none"})
+_DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)")
+_UNSIGNED = re.compile(r"[0-9]+")
 _SYLLABIC = frozenset({"single", "begin", "middle", "end"})
 # <sound> attributes that change the playing order; the model has no field for them yet.
 _NAVIGATION_ATTRIBUTES = ("segno", "dalsegno", "coda", "tocoda", "dacapo", "fine", "forward-repeat")
@@ -180,9 +183,8 @@ class _PartConverter:
         value = _text(element)
         if value is None:
             return None
-        try:
-            amount = Fraction(value)
-        except (ValueError, ZeroDivisionError):
+        amount = _decimal(value)
+        if amount is None:
             self.invalid(f"Non-numeric {label} {value!r} was ignored")
             return None
         if self.divisions is None:
@@ -414,7 +416,7 @@ class _PartConverter:
                 tuplets.append(
                     {
                         "type": tuplet_type,
-                        "number": int(number) if number and number.isdigit() else None,
+                        "number": _ascii_int(number),
                     }
                 )
         return {
@@ -493,10 +495,7 @@ class _PartConverter:
         divisions_element = element.find("divisions")
         if divisions_element is not None:
             value = _text(divisions_element)
-            try:
-                divisions = Fraction(value) if value is not None else None
-            except (ValueError, ZeroDivisionError):
-                divisions = None
+            divisions = None if value is None else _decimal(value)
             if divisions is None or divisions <= 0:
                 self.invalid(f"<divisions> {value!r} that is not a positive number was ignored")
             else:
@@ -512,8 +511,9 @@ class _PartConverter:
         value = element.get("number")
         if value is None:
             return None
-        if value.isdigit() and int(value) >= 1:
-            return int(value)
+        number = _ascii_int(value)
+        if number is not None and number >= 1:
+            return number
         self.invalid(f"<{element.tag} number> {value!r} was recorded as a null staff")
         return None
 
@@ -724,7 +724,7 @@ class _PartConverter:
         if repeat_element is not None:
             direction = repeat_element.get("direction")
             times_text = repeat_element.get("times")
-            times = int(times_text) if times_text and times_text.isdigit() else None
+            times = _ascii_int(times_text)
             if times_text is not None and (times is None or times < 1):
                 self.invalid(f"<repeat times> {times_text!r} was recorded as null")
                 times = None
@@ -747,6 +747,26 @@ class _PartConverter:
             "repeat": repeat,
             "ending": ending,
         }
+
+
+def _decimal(value: str) -> Fraction | None:
+    """Parse an xs:decimal (no exponent, so '1e999999999' cannot build a huge number)."""
+    if _DECIMAL.fullmatch(value) is None:
+        return None
+    try:
+        return Fraction(value)
+    except ValueError:  # more digits than int() converts
+        return None
+
+
+def _ascii_int(value: str | None) -> int | None:
+    """Parse an unsigned ASCII integer attribute; None for anything else (e.g. '²')."""
+    if value is None or _UNSIGNED.fullmatch(value) is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
 def _compact(value: float) -> int | float:

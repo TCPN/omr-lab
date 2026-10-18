@@ -310,6 +310,35 @@ def test_unsupported_constructs_are_reported_not_dropped(content: str, construct
     assert construct in conversion.warnings[0].message
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "<note><pitch><step>C</step><octave>4</octave></pitch>"
+        "<duration>1e999999999</duration></note>",
+        "<attributes><divisions>1e999999999</divisions></attributes>",
+    ],
+)
+def test_exponent_numbers_are_rejected_without_being_computed(body: str) -> None:
+    conversion = _convert(_measure(body))
+
+    assert RunWarningCode.SCORE_INVALID_VALUE in _codes(conversion)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '<attributes><clef number="²"><sign>G</sign><line>2</line></clef></attributes>',
+        '<barline><repeat direction="backward" times="²"/></barline>',
+        "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+        '<notations><tuplet type="start" number="²"/></notations></note>',
+    ],
+)
+def test_unicode_digits_in_number_attributes_do_not_crash(content: str) -> None:
+    conversion = _convert(_measure(content))
+
+    assert conversion.score["parts"][0]["measures"][0]
+
+
 def test_presentation_elements_are_ignored_without_warnings() -> None:
     conversion = _convert(
         _measure(
