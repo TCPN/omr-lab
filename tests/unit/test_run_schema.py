@@ -206,5 +206,6 @@ def test_artifact_path_violation_names_the_rule_or_returns_none() -> None:
     assert artifact_path_violation("raw\\score.musicxml") == (
         "must use '/' as the separator, not '\\'"
     )
+    assert artifact_path_violation("") == "'' should be non-empty"
     with pytest.raises(ValueError):
         artifact_path_violation("raw/a", version="9.9.9")

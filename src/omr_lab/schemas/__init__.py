@@ -90,14 +90,18 @@ def artifact_path_violation(path: str, *, version: str = CURRENT_RUN_SCHEMA_VERS
     """Return the first artifact path rule ``path`` breaks, e.g. "must not ...", or None.
 
     The rules are the schema's ``relativePosixPath`` definition, so callers that check
-    a path before writing it (the pipeline) cannot drift from the schema. Errors come
-    in schema order, which lists the control-character rule first.
+    a path before writing it (the pipeline) cannot drift from the schema. Among the
+    path-pattern rules, the control-character rule is checked first.
     """
     _check_supported(version)
     error = next(_artifact_path_validator(version).iter_errors(path), None)
     if error is None:
         return None
-    return error.schema.get("description") or error.message
+    # Only the "not" rules carry a rule description; for type or minLength errors the
+    # schema's description would describe the definition, not the broken rule.
+    if error.validator == "not":
+        return error.schema.get("description") or error.message
+    return error.message
 
 
 def validate_run_document(document: Any, *, version: str | None = None) -> None:
