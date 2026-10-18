@@ -39,6 +39,11 @@ IGNORED_ELEMENTS: dict[str, frozenset[str]] = {
     "direction": frozenset({"voice", "listening", "footnote", "level"}),
     "harmony": frozenset({"frame", "footnote", "level"}),
     "barline": frozenset({"footnote", "level"}),
+    "lyric": frozenset({"footnote", "level"}),
+    "clef": frozenset({"footnote", "level"}),
+    "key": frozenset({"footnote", "level"}),
+    "time": frozenset({"footnote", "level"}),
+    "time-modification": frozenset({"footnote", "level"}),
 }
 """Child elements skipped without a warning, by parent element.
 
@@ -214,8 +219,11 @@ class _PartConverter:
 
         ``consequence`` ends the missing-divisions warning: what becomes null.
         """
+        if element is None:
+            return None
         value = _text(element)
         if value is None:
+            self.invalid(f"An empty {label} was ignored; {consequence}")
             return None
         amount = _decimal(value)
         if amount is None:
@@ -268,7 +276,13 @@ class _PartConverter:
     def motion(self, element: ET.Element) -> Fraction | None:
         """Length of a <backup> or <forward>; None (unknown) unless it is positive."""
         label = f"<{element.tag}> <duration>"
-        amount = self.whole_notes(element.find("duration"), label)
+        duration = element.find("duration")
+        if duration is None:
+            self.invalid(
+                f"A <{element.tag}> without <duration> was ignored; later offsets are null"
+            )
+            return None
+        amount = self.whole_notes(duration, label)
         if amount is not None and amount <= 0:
             self.invalid(f"A {label} that is not positive was ignored; later offsets are null")
             return None
@@ -555,7 +569,7 @@ class _PartConverter:
                     self.invalid("An unknown <extend type> was recorded as null", extend_type)
                     extend_type = None
                 extend = {"type": extend_type}
-            elif child.tag not in ("footnote", "level"):
+            elif child.tag not in IGNORED_ELEMENTS["lyric"]:
                 self.unsupported(f"<{child.tag}> in <lyric>")
         return {
             "number": element.get("number"),

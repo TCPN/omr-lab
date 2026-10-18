@@ -435,6 +435,21 @@ def test_position_that_grows_too_precise_becomes_unknown() -> None:
     assert _codes(conversion) == [RunWarningCode.SCORE_TIMING_INCONSISTENT]
 
 
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<backup/>",
+        "<forward><duration> </duration></forward>",
+        "<note><pitch><step>D</step><octave>4</octave></pitch><duration/></note>",
+    ],
+)
+def test_missing_or_empty_durations_are_reported(content: str) -> None:
+    conversion = _convert(_measure(f"{NOTE_C4}{content}{NOTE_C4}"))
+
+    assert _events(conversion)[-1]["offset"] is None
+    assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
+
+
 def test_presentation_elements_are_ignored_without_warnings() -> None:
     conversion = _convert(
         _measure(
