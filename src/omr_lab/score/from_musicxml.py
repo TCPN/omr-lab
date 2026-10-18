@@ -101,6 +101,7 @@ def _nullable_rational(value: Fraction | None) -> str | None:
 
 
 _MAX_DISTINCT_WARNINGS = 100
+_LATER_OFFSETS_NULL = "later offsets in the measure are null"
 _MAX_EXAMPLE_LENGTH = 40
 
 
@@ -258,8 +259,7 @@ class _PartConverter:
             # Only possible with many different <divisions> in one measure.
             self.issues.add(
                 RunWarningCode.SCORE_TIMING_INCONSISTENT,
-                "The position in the measure became too precise to record; later offsets "
-                "in the measure are null",
+                f"The position in the measure became too precise to record; {_LATER_OFFSETS_NULL}",
                 self.where,
             )
             self.position = None
@@ -268,8 +268,7 @@ class _PartConverter:
         if position < 0:
             self.issues.add(
                 RunWarningCode.SCORE_TIMING_INCONSISTENT,
-                "<backup> moved before the start of the measure; later offsets in the "
-                "measure are null",
+                f"<backup> moved before the start of the measure; {_LATER_OFFSETS_NULL}",
                 self.where,
             )
             self.position = None
@@ -286,15 +285,11 @@ class _PartConverter:
         label = f"<{element.tag}> <duration>"
         duration = element.find("duration")
         if duration is None:
-            self.invalid(
-                f"A <{element.tag}> without <duration> was ignored; later offsets are null"
-            )
+            self.invalid(f"A <{element.tag}> without <duration> was ignored; {_LATER_OFFSETS_NULL}")
             return None
-        amount = self.whole_notes(
-            duration, label, consequence="later offsets in the measure are null"
-        )
+        amount = self.whole_notes(duration, label, consequence=_LATER_OFFSETS_NULL)
         if amount is not None and amount <= 0:
-            self.invalid(f"A {label} that is not positive was ignored; later offsets are null")
+            self.invalid(f"A {label} that is not positive was ignored; {_LATER_OFFSETS_NULL}")
             return None
         return amount
 
@@ -386,7 +381,7 @@ class _PartConverter:
             consequence = (
                 "it was ignored; later offsets are not affected"
                 if is_chord
-                else "later offsets in the measure are null"
+                else _LATER_OFFSETS_NULL
             )
             duration_element = element.find("duration")
             if duration_element is None:
@@ -480,13 +475,17 @@ class _PartConverter:
         """Add a <chord/> note to the chord's first note, reporting what cannot merge."""
         assert self.last_note is not None
         member = self.duration_fields("note", element, offset, duration)
+        member_is_grace = element.find("grace") is not None
+        grace_differs = member_is_grace != (self.last_note["grace"] is not None)
         compared = ("voice", "staff", "duration", "type", "dots", "time_modification")
-        # A missing member duration is already reported where it was read.
-        differing = [
+        differing = ["grace"] if grace_differs else []
+        differing += [
             name
             for name in compared
             if member[name] != self.last_note[name]
-            and not (name == "duration" and member[name] is None)
+            # A grace mismatch already implies different durations, and a missing
+            # duration on a regular member is already reported where it was read.
+            and not (name == "duration" and (grace_differs or member[name] is None))
         ]
         if differing:
             self.unsupported(

@@ -213,6 +213,30 @@ def test_chord_member_with_different_staff_is_reported() -> None:
     assert "staff differs" in conversion.warnings[0].message
 
 
+GRACE_C4 = "<note><grace/><pitch><step>C</step><octave>4</octave></pitch><type>eighth</type></note>"
+
+
+@pytest.mark.parametrize(
+    ("first", "member"),
+    [
+        (NOTE_C4, "<note><grace/><chord/><pitch><step>E</step><octave>4</octave></pitch></note>"),
+        (
+            GRACE_C4,
+            "<note><chord/><pitch><step>E</step><octave>4</octave></pitch>"
+            "<duration>1</duration></note>",
+        ),
+    ],
+    ids=["grace-member-on-regular-note", "regular-member-on-grace-note"],
+)
+def test_chord_member_with_different_grace_status_is_reported(first: str, member: str) -> None:
+    conversion = _convert(_measure(first + member))
+
+    (event,) = _events(conversion)
+    assert len(event["pitches"]) == 2
+    assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
+    assert "whose grace" in conversion.warnings[0].message
+
+
 @pytest.mark.parametrize(
     "content", ['<sound tempo="0"/>', '<direction><sound tempo="-5"/></direction>']
 )
