@@ -12,6 +12,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, ValidationError
 
+from omr_lab.schemas.codes import RunErrorCode, RunWarningCode
+
 CURRENT_RUN_SCHEMA_VERSION = "0.1.0"
 """Version of the run document schema that this package writes."""
 
@@ -78,6 +80,30 @@ def _message(error: ValidationError) -> str:
     return error.message
 
 
+@cache
+def _artifact_path_validator(version: str) -> Draft202012Validator:
+    schema = load_run_schema(version)
+    return Draft202012Validator({"$defs": schema["$defs"], "$ref": "#/$defs/relativePosixPath"})
+
+
+def artifact_path_violation(path: str, *, version: str = CURRENT_RUN_SCHEMA_VERSION) -> str | None:
+    """Return the first artifact path rule ``path`` breaks, e.g. "must not ...", or None.
+
+    The rules are the schema's ``relativePosixPath`` definition, so callers that check
+    a path before writing it (the pipeline) cannot drift from the schema. Among the
+    path-pattern rules, the control-character rule is checked first.
+    """
+    _check_supported(version)
+    error = next(_artifact_path_validator(version).iter_errors(path), None)
+    if error is None:
+        return None
+    # Only the "not" rules carry a rule description; for type or minLength errors the
+    # schema's description would describe the definition, not the broken rule.
+    if error.validator == "not":
+        return error.schema.get("description") or error.message
+    return error.message
+
+
 def validate_run_document(document: Any, *, version: str | None = None) -> None:
     """Validate a decoded JSON run document against the run schema.
 
@@ -107,6 +133,9 @@ __all__ = [
     "CURRENT_RUN_SCHEMA_VERSION",
     "SUPPORTED_RUN_SCHEMA_VERSIONS",
     "RunDocumentValidationError",
+    "RunErrorCode",
+    "RunWarningCode",
+    "artifact_path_violation",
     "load_run_schema",
     "validate_run_document",
 ]
