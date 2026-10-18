@@ -13,6 +13,8 @@ meaningless test data, not a transcription of any work.
 | `wrong-root.xml` | Well-formed XML whose root is not a MusicXML score. |
 | `timewise.musicxml` | `score-timewise` document (reported as unsupported). |
 | `unknown-elements.musicxml` | Unknown top-level element, a declared part with no content, and an undeclared part. |
+| `score-features.musicxml` | One melody part with the constructs of the score model: pickup measure, key/time/clef, tempo, chord symbols with bass and degree, two lyric verses on the same notes (Chinese text, `begin`/`end` syllables, a tied melisma), dotted notes, a grace note, a triplet, a chord, a second voice after `<backup>`, repeats and first/second endings, plus a slur and a dynamic that the model reports as unsupported. |
+| `score-features.score.json` | Expected `score` object for `score-features.musicxml` (`source.artifact` `"musicxml"`), produced by the converter and checked by hand against the MusicXML; see `docs/score-model.md`. |
 
 Compressed `.mxl` archives are built from these files inside the tests (`tmp_path`), so
 no binary fixtures are committed. A missing file is likewise simulated with a path under

@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <work><work-title>Synthetic Two-Verse Line</work-title></work>
+  <identification>
+    <creator type="composer">OMR Lab Fixture</creator>
+    <rights>CC0 1.0 — synthetic fixture written for omr-lab tests</rights>
+  </identification>
+  <part-list>
+    <score-part id="P1"><part-name>Melody</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="0" implicit="yes">
+      <print new-system="yes"/>
+      <attributes>
+        <divisions>6</divisions>
+        <key><fifths>1</fifths><mode>major</mode></key>
+        <time symbol="normal"><beats>3</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction placement="above">
+        <direction-type><words>Moderato</words></direction-type>
+        <direction-type>
+          <metronome><beat-unit>quarter</beat-unit><per-minute>96</per-minute></metronome>
+        </direction-type>
+        <sound tempo="96"/>
+      </direction>
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+        <lyric number="1"><syllabic>single</syllabic><text>我</text></lyric>
+        <lyric number="2"><syllabic>single</syllabic><text>你</text></lyric>
+      </note>
+    </measure>
+    <measure number="1">
+      <barline location="left"><bar-style>heavy-light</bar-style><repeat direction="forward"/></barline>
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>9</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <dot/>
+        <beam number="1">begin</beam>
+        <notations><slur type="start" number="1"/></notations>
+        <lyric number="1"><syllabic>begin</syllabic><text>讚</text></lyric>
+        <lyric number="2"><syllabic>begin</syllabic><text>感</text></lyric>
+      </note>
+      <note>
+        <pitch><step>A</step><octave>4</octave></pitch>
+        <duration>3</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <notations><slur type="stop" number="1"/></notations>
+        <lyric number="1"><syllabic>end</syllabic><text>美</text></lyric>
+        <lyric number="2"><syllabic>end</syllabic><text>謝</text></lyric>
+      </note>
+      <note>
+        <pitch><step>B</step><octave>4</octave></pitch>
+        <duration>6</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations><tied type="start"/></notations>
+        <lyric number="1"><syllabic>single</syllabic><text>主</text><extend type="start"/></lyric>
+        <lyric number="2"><syllabic>single</syllabic><text>神</text><extend type="start"/></lyric>
+      </note>
+    </measure>
+    <measure number="2">
+      <harmony>
+        <root><root-step>D</root-step></root>
+        <kind text="">major</kind>
+        <bass><bass-step>F</bass-step><bass-alter>1</bass-alter></bass>
+      </harmony>
+      <note>
+        <pitch><step>B</step><octave>4</octave></pitch>
+        <duration>6</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <notations><tied type="stop"/></notations>
+        <lyric number="1"><extend type="stop"/></lyric>
+      </note>
+      <note>
+        <grace slash="yes"/>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note>
+        <pitch><step>A</step><octave>4</octave></pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>F</step><alter>1</alter><octave>4</octave></pitch>
+        <duration>2</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <accidental>sharp</accidental>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop" number="1"/></notations>
+      </note>
+      <harmony>
+        <root><root-step>D</root-step></root>
+        <kind text="7">dominant</kind>
+        <degree><degree-value>9</degree-value><degree-alter>0</degree-alter><degree-type>add</degree-type></degree>
+      </harmony>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <lyric number="1"><syllabic>single</syllabic><text>恩</text></lyric>
+        <lyric number="2"><syllabic>single</syllabic><text>愛</text></lyric>
+      </note>
+      <note>
+        <chord/>
+        <pitch><step>B</step><octave>4</octave></pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+    <measure number="3">
+      <barline location="left"><ending number="1" type="start">1.</ending></barline>
+      <harmony>
+        <root><root-step>C</root-step></root>
+        <kind>major</kind>
+        <offset>6</offset>
+      </harmony>
+      <direction placement="below">
+        <direction-type><dynamics><p/></dynamics></direction-type>
+      </direction>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>12</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <lyric number="1"><syllabic>begin</syllabic><text>永</text></lyric>
+        <lyric number="2"><syllabic>begin</syllabic><text>直</text></lyric>
+      </note>
+      <note>
+        <rest/>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <backup><duration>18</duration></backup>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>18</duration>
+        <voice>2</voice>
+        <type>half</type>
+        <dot/>
+      </note>
+      <barline location="right">
+        <bar-style>light-heavy</bar-style>
+        <ending number="1" type="stop"/>
+        <repeat direction="backward" times="2"/>
+      </barline>
+    </measure>
+    <measure number="4">
+      <barline location="left"><ending number="2" type="start">2.</ending></barline>
+      <attributes><key><fifths>0</fifths></key></attributes>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>18</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <dot/>
+        <lyric number="1"><syllabic>end</syllabic><text>遠</text></lyric>
+        <lyric number="2"><syllabic>end</syllabic><text>到</text></lyric>
+      </note>
+      <barline location="right">
+        <bar-style>light-heavy</bar-style>
+        <ending number="2" type="discontinue"/>
+      </barline>
+    </measure>
+  </part>
+</score-partwise>

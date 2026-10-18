@@ -1,8 +1,8 @@
-# Run Document JSON Schema (v0.1.0)
+# Run Document JSON Schema (v0.2.0)
 
 Each pipeline run produces one **run document**: a JSON object recording what was run, how, and what came out. It records only facts supported by the pipeline and engine output. A valid run document is not proof that the music was recognized correctly.
 
-- Schema (source of truth): [`src/omr_lab/schemas/run-0.1.0.schema.json`](../src/omr_lab/schemas/run-0.1.0.schema.json), JSON Schema draft 2020-12, `$id` `urn:omr-lab:schema:run:0.1.0`. It ships inside the `omr_lab` package.
+- Schema (source of truth): [`src/omr_lab/schemas/run-0.2.0.schema.json`](../src/omr_lab/schemas/run-0.2.0.schema.json), JSON Schema draft 2020-12, `$id` `urn:omr-lab:schema:run:0.2.0`. It ships inside the `omr_lab` package together with the previous version, `run-0.1.0.schema.json`.
 - Validation: `omr_lab.schemas.validate_run_document(document, *, version=None)` raises `RunDocumentValidationError` (a `ValueError`) whose `errors` list holds one `"<json path>: <message>"` entry per violation, ordered by location (array indexes numerically). Artifact path errors name the broken rule instead of printing a regular expression. `omr_lab.schemas.load_run_schema(version=CURRENT_RUN_SCHEMA_VERSION)` returns a schema as a dict.
 - Examples: `tests/fixtures/run-documents/valid/` and `tests/fixtures/run-documents/invalid/`.
 
@@ -10,7 +10,7 @@ Each pipeline run produces one **run document**: a JSON object recording what wa
 
 ```json
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "status": "succeeded",
   "input": {"filename": "score.png", "media_type": "image/png"},
   "engine": {"name": "audiveris", "version": null},
@@ -23,13 +23,13 @@ Each pipeline run produces one **run document**: a JSON object recording what wa
 }
 ```
 
-`score: null` means no normalized musical content is available; it is not an empty or recognized score. The recognized notation is only in the raw `musicxml` artifact until the score content model (issue #19) exists.
+`score: null` means no normalized musical content is available; it is not an empty or recognized score. The pipeline does not fill `score` yet, so the recognized notation is only in the raw `musicxml` artifact. A document with a score object is `tests/fixtures/run-documents/valid/succeeded-with-score.json`.
 
 ## Example: failed run
 
 ```json
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.2.0",
   "status": "failed",
   "input": {"filename": "score.png", "media_type": "image/png"},
   "engine": {"name": "audiveris", "version": "5.4"},
@@ -48,14 +48,14 @@ All top-level fields are **required**; unknown top-level fields are rejected. "N
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `schema_version` | `"0.1.0"` | Exact version of this contract. |
+| `schema_version` | `"0.2.0"` | Exact version of this contract. |
 | `status` | `"succeeded"` \| `"failed"` | Pipeline outcome, not a correctness claim. |
 | `input` | object | See below. |
 | `engine` | object | Engine provenance. See below. |
 | `options` | object | Effective engine options as echoed in `EngineResult.options`; `{}` when none or when the engine did not return a result. Values are any JSON. See [pipeline.md](pipeline.md). |
 | `artifacts` | object | Raw artifacts by kind (e.g. `musicxml`, `engine_log`, `engine_diagnostics`); may be `{}`. |
 | `timing` | object | See below. |
-| `score` | `null` | Normalized musical content. Always `null` in 0.1.0 (placeholder for issue #19). |
+| `score` | object \| `null` | Normalized musical content in the score model ([score-model.md](score-model.md)); `null` when none is available. |
 | `warnings` | array of objects | Non-fatal problems in order of occurrence; may be `[]`. |
 | `error` | object \| `null` | Object when `status` is `failed`; `null` when `status` is `succeeded`. |
 
@@ -78,7 +78,7 @@ Keys are snake_case artifact kinds. Values are POSIX-style paths relative to the
 ### `warnings[]` and `error`
 Both use a snake_case `code` (pattern `^[a-z][a-z0-9_]*$`) and a non-empty, human-readable `message`; no other warning fields are allowed. `error` may also carry `returncode` (nullable integer) when the failure came from an external process.
 
-Codes are not an enum in 0.1.0. Codes in use so far:
+Codes are not an enum in the schema. Codes in use so far:
 
 | Code | Kind | Meaning |
 | --- | --- | --- |
@@ -95,6 +95,10 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `engine_diagnostic_not_recorded` | warning | An `EngineResult.diagnostics` entry was not a string, or the diagnostics file could not be written, so diagnostics were left out. |
 | `unexpected_error` | warning | An unexpected exception after a failure was already recorded; the original `error` is kept. |
 | `run_document_incomplete` | warning | The full run document did not validate, so `options` and the engine's `artifacts` were left out; the original `error` is kept. |
+| `score_unsupported_element` | warning | The source uses a construct the score model cannot hold; it is missing from `score` ([score-model.md](score-model.md#warnings)). |
+| `score_invalid_value` | warning | A source value was malformed or out of range; the field is `null` or the element is missing from `score`. |
+| `score_divisions_missing` | warning | A duration appeared before any `<divisions>`, so durations and later offsets are `null`. |
+| `score_timing_inconsistent` | warning | A `<backup>` or `<offset>` pointed before the start of its measure, so later offsets are `null`. |
 
 The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (re-exported by `omr_lab.pipeline`) list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). `musicxml_invalid` is reserved for MusicXML validation in the pipeline.
 
@@ -106,7 +110,7 @@ Messages must not contain absolute local paths: they name the user and private f
 - Raw engine artifacts are kept separate from normalized content.
 
 ## Versioning
-`schema_version` is fixed per schema file. Any change to the contract adds a new schema file with a new version (for example, `run-0.2.0.schema.json` when issue #19 replaces the `score` placeholder with the score content model) and updates this document. Within 0.x, any change may be breaking.
+`schema_version` is fixed per schema file. Any change to the contract adds a new schema file with a new version and updates this document. 0.2.0 replaced the `score` placeholder of 0.1.0 (always `null`) with the score model (issue #19); everything else is unchanged. Within 0.x, any change may be breaking.
 
 - Old schema files stay in the package. `SUPPORTED_RUN_SCHEMA_VERSIONS` lists every version that can still be validated; `CURRENT_RUN_SCHEMA_VERSION` is the one writers emit.
 - Writers always emit the current version.

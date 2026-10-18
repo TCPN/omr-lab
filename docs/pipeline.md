@@ -16,7 +16,7 @@ result.document_path  # runs/0001/run.json
 
 ```
 <output_dir>/
-  run.json                 normalized run document (schema 0.1.0)
+  run.json                 normalized run document (schema 0.2.0)
   engine_diagnostics.log   EngineResult.diagnostics, one per line (only when there are any)
   raw/                     raw engine artifacts; the engine's output_dir
 ```
@@ -53,7 +53,7 @@ Error and warning codes are `omr_lab.schemas.RunErrorCode` and `RunWarningCode` 
 
 ## EngineResult to run document
 
-- `options`: a copy of `EngineResult.options` (the effective options echoed by the adapter, defaults included). It is `{}` when `recognize()` did not return, i.e. for `invalid_input`, `engine_unavailable`, `invalid_option`, and unexpected exceptions; the requested options are not recorded there because they were never confirmed by the engine. An `invalid_option` message names the rejected option, but the other requested options are not in the record: schema 0.1.0 has no field for them (`error` allows no extra properties). A later schema version could add one, for example `error.details.requested_options`.
+- `options`: a copy of `EngineResult.options` (the effective options echoed by the adapter, defaults included). It is `{}` when `recognize()` did not return, i.e. for `invalid_input`, `engine_unavailable`, `invalid_option`, and unexpected exceptions; the requested options are not recorded there because they were never confirmed by the engine. An `invalid_option` message names the rejected option, but the other requested options are not in the record: the run schema has no field for them (`error` allows no extra properties). A later schema version could add one, for example `error.details.requested_options`.
 - `artifacts`: each engine artifact gets a snake_case kind and a path:
   - Kind: a key that already matches `^[a-z][a-z0-9_]*$` is kept. Other keys use the part before the first `:` (so `musicxml:sub/score.mvt2.musicxml` becomes `musicxml`), lowercased, with runs of other characters replaced by `_`; `artifact_` is prefixed when the result does not start with a letter, and an empty result becomes `artifact`. Kinds are assigned only to artifacts that are recorded, so a dropped `musicxml:<path>` artifact never pushes a recorded one to a numbered kind. A key that is itself a kind stays reserved even when it is dropped, so a dropped primary `musicxml` is never replaced by a movement file. Duplicates get `_2`, `_3`, ... in sorted order of the original keys, skipping kinds already in use. Example: `musicxml:sub/a.musicxml` and `musicxml:sub/b.musicxml` become `musicxml` and `musicxml_2` without a `musicxml` key, and `musicxml_2` and `musicxml_3` with one. An engine key equal to the pipeline's own kind `engine_diagnostics` is renamed the same way (`engine_diagnostics_2`).
   - Path: relative paths are resolved against the current working directory, then made relative to the resolved run output directory and written with `/` separators (for example `raw/sub/a.musicxml`).
@@ -62,7 +62,7 @@ Error and warning codes are `omr_lab.schemas.RunErrorCode` and `RunWarningCode` 
 - Messages that contain text which is not valid UTF-8 (undecodable engine output) are recorded with backslash escapes.
 - Local paths: every error and warning message and every diagnostics line has the run output directory replaced with `<output_dir>`, the input file's directory with `<input_dir>` and the home directory with `~` (absolute and symlink-resolved forms; only whole path components match, so a path inside a longer path is left alone). Raw engine artifacts in `raw/` are not changed and may still contain local paths.
 - `warnings`, in this order: `engine_diagnostic_not_recorded` warnings, `artifact_not_recorded` warnings, then `score_not_normalized` on succeeded runs. On failed runs, `unexpected_error` and `run_document_incomplete` can follow (see the error table above).
-- `score` is always `null` (schema 0.1.0); the recognized notation exists only in the raw artifacts.
+- `score` is always `null` for now: schema 0.2.0 defines the score model ([score-model.md](score-model.md)), but the pipeline does not yet convert the engine's MusicXML into it, so the recognized notation exists only in the raw artifacts.
 - `timing.duration_seconds` covers input checks through mapping (not writing the file); `timing.started_at` is a UTC RFC 3339 timestamp with milliseconds.
 
 ## Mock engine
