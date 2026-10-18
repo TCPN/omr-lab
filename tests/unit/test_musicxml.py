@@ -18,7 +18,7 @@ from omr_lab.musicxml import (
     load_musicxml,
     parse_musicxml_bytes,
 )
-from omr_lab.musicxml import document as document_module
+from omr_lab.musicxml import mxl as mxl_module
 from omr_lab.musicxml.safe_xml import TooManyElementsError, parse_xml_bytes
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "musicxml"
@@ -680,7 +680,7 @@ def test_mxl_with_too_many_entries_is_refused(
     )
     assert load_musicxml(archive).archive_member == "score.xml"
 
-    monkeypatch.setattr(document_module, "MAX_ARCHIVE_ENTRIES", 20)
+    monkeypatch.setattr(mxl_module, "MAX_ARCHIVE_ENTRIES", 20)
     with pytest.raises(MusicXmlError) as excinfo:
         load_musicxml(archive)
     assert excinfo.value.code == "musicxml_too_large"
