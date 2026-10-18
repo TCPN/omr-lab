@@ -261,8 +261,11 @@ def test_chord_member_with_empty_duration_keeps_later_offsets() -> None:
         )
     )
 
-    assert [e["offset"] for e in _events(conversion)] == ["0", "1/4"]
-    assert "its duration was recorded as null" in conversion.warnings[0].message
+    events = _events(conversion)
+    assert [e["offset"] for e in events] == ["0", "1/4"]
+    assert events[0]["duration"] == "1/4"
+    assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
+    assert "later offsets are not affected" in conversion.warnings[0].message
 
 
 @pytest.mark.parametrize("duration", ["<duration>abc</duration>", "<duration>0</duration>", ""])

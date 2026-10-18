@@ -384,7 +384,7 @@ class _PartConverter:
         if grace_element is None:
             # Only a note that is not a chord member moves the position (see advance()).
             consequence = (
-                "its duration was recorded as null"
+                "it was ignored; later offsets are not affected"
                 if is_chord
                 else "later offsets in the measure are null"
             )
@@ -481,7 +481,13 @@ class _PartConverter:
         assert self.last_note is not None
         member = self.duration_fields("note", element, offset, duration)
         compared = ("voice", "staff", "duration", "type", "dots", "time_modification")
-        differing = [name for name in compared if member[name] != self.last_note[name]]
+        # A missing member duration is already reported where it was read.
+        differing = [
+            name
+            for name in compared
+            if member[name] != self.last_note[name]
+            and not (name == "duration" and member[name] is None)
+        ]
         if differing:
             self.unsupported(
                 "A <chord/> note whose " + "/".join(differing) + " differs from the chord's "
