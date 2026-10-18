@@ -219,7 +219,8 @@ class _PartConverter:
         self,
         element: ET.Element | None,
         label: str,
-        consequence: str = "later offsets in the measure are null",
+        *,
+        consequence: str,
     ) -> Fraction | None:
         """Convert a <duration>/<offset>-style value in divisions to whole notes.
 
@@ -289,7 +290,9 @@ class _PartConverter:
                 f"A <{element.tag}> without <duration> was ignored; later offsets are null"
             )
             return None
-        amount = self.whole_notes(duration, label)
+        amount = self.whole_notes(
+            duration, label, consequence="later offsets in the measure are null"
+        )
         if amount is not None and amount <= 0:
             self.invalid(f"A {label} that is not positive was ignored; later offsets are null")
             return None
@@ -308,7 +311,9 @@ class _PartConverter:
             return None
         if offset_element is None:
             return self.position
-        offset = self.whole_notes(offset_element, "<offset>", "its offset was recorded as null")
+        offset = self.whole_notes(
+            offset_element, "<offset>", consequence="its offset was recorded as null"
+        )
         if offset is None:
             return None
         position = self.position + offset
@@ -387,7 +392,9 @@ class _PartConverter:
             if duration_element is None:
                 self.invalid(f"A <note> without <duration> was found; {consequence}")
             else:
-                duration = self.whole_notes(duration_element, "<note> <duration>", consequence)
+                duration = self.whole_notes(
+                    duration_element, "<note> <duration>", consequence=consequence
+                )
                 if duration is not None and duration <= 0:
                     self.invalid(
                         f"A <note> <duration> that is not positive was ignored; {consequence}"

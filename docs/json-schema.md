@@ -97,8 +97,8 @@ Codes are not an enum in the schema. Codes in use so far:
 | `run_document_incomplete` | warning | The full run document did not validate, so `options` and the engine's `artifacts` were left out; the original `error` is kept. |
 | `score_unsupported_element` | warning | The source uses a construct the score model cannot hold; it is missing from `score` ([score-model.md](score-model.md#warnings)). |
 | `score_invalid_value` | warning | A source value was malformed or out of range; the field is `null` or the element is missing from `score`. |
-| `score_divisions_missing` | warning | A duration appeared before any `<divisions>`, so durations and later offsets are `null`. |
-| `score_timing_inconsistent` | warning | A `<backup>` or `<offset>` pointed before the start of its measure, so later offsets are `null`. |
+| `score_divisions_missing` | warning | A duration or `<offset>` appeared before any `<divisions>`; that value is `null`, and for a duration that moves the position, so are later offsets in the measure. |
+| `score_timing_inconsistent` | warning | A `<backup>` moved before the start of its measure, or the position became too precise to record (later offsets are `null`); or an `<offset>` pointed before the start of its measure (only its own offset is `null`). |
 
 The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (re-exported by `omr_lab.pipeline`) list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). `musicxml_invalid` is reserved for MusicXML validation in the pipeline.
 

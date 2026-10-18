@@ -128,8 +128,8 @@ The converter adds these run-document warnings (see the code table in [json-sche
 | --- | --- |
 | `score_unsupported_element` | The source uses something the model has no field for, for example slurs, articulations, fermatas, dynamics, ornaments, cue or unpitched notes, `<harmony>` without `<root>` (Roman numerals, functions), non-traditional keys, `<senza-misura>`, composite time signatures (only the first `<beats>`/`<beat-type>` pair is kept), metric modulation in `<metronome>`, `<words>` without a tempo, `<transpose>`, `<measure-style>`, `<figured-bass>`, lyrics on rests, `<end-line>`/`<humming>` in lyrics, and any unknown element. |
 | `score_invalid_value` | A value is malformed or out of range (a step other than A–G, an octave outside 0–9, non-numeric numbers (alters and tempos included), `<fifths>` outside −11..11, a `<backup>` or `<forward>` that is not positive, decimal text longer than 32 characters). The field becomes `null`, or the element is left out when it cannot exist without that value (a note without a valid pitch keeps its time but is not listed). |
-| `score_divisions_missing` | A duration or offset appears before any `<divisions>`. |
-| `score_timing_inconsistent` | A `<backup>` or `<offset>` points before the start of the measure. |
+| `score_divisions_missing` | A duration or `<offset>` appears before any `<divisions>`. That value is `null`; a duration that moves the position also makes later offsets in the measure `null`. |
+| `score_timing_inconsistent` | A `<backup>` moves before the start of the measure, or the position needs more than 512 bits (only possible with many different `<divisions>` in one measure): later offsets are `null`. An `<offset>` that points before the start of the measure: only its own offset is `null`. |
 
 ### Ignored elements
 
