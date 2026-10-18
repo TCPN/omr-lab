@@ -110,7 +110,7 @@ class _Issues:
     def __init__(self) -> None:
         self._counts: dict[tuple[RunWarningCode, str], int] = {}
         self._first: dict[tuple[RunWarningCode, str], str] = {}
-        self._overflow = 0
+        self._overflow: dict[RunWarningCode, int] = {}
 
     def add(self, code: RunWarningCode, what: str, where: str, example: object = None) -> None:
         """Count one problem. ``what`` must not contain the offending value (pass it as
@@ -118,7 +118,7 @@ class _Issues:
         key = (code, what)
         if key not in self._counts:
             if len(self._counts) >= _MAX_DISTINCT_WARNINGS:
-                self._overflow += 1
+                self._overflow[code] = self._overflow.get(code, 0) + 1
                 return
             self._counts[key] = 0
             self._first[key] = (
@@ -136,12 +136,9 @@ class _Issues:
             else:
                 message = f"{what} ({times}; first {first})."
             result.append(ScoreWarning(code, message))
-        if self._overflow:
+        for code, count in self._overflow.items():
             result.append(
-                ScoreWarning(
-                    RunWarningCode.SCORE_UNSUPPORTED_ELEMENT,
-                    f"{self._overflow} more problem(s) of other kinds were not listed.",
-                )
+                ScoreWarning(code, f"{count} more problem(s) of other kinds were not listed.")
             )
         return tuple(result)
 
@@ -454,7 +451,10 @@ class _PartConverter:
                 "first note (kept as one chord with the first note's values)"
             )
         self.last_note["pitches"].append(pitch)
-        self.last_note["tuplets"].extend(member["tuplets"])
+        # Exporters may repeat a chord's tuplet bracket on every member; keep it once.
+        self.last_note["tuplets"].extend(
+            tuplet for tuplet in member["tuplets"] if tuplet not in self.last_note["tuplets"]
+        )
         self.last_note["lyrics"].extend(lyrics)
 
     def tempo_bpm(self, sound: ET.Element) -> float | None:

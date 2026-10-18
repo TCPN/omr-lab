@@ -223,6 +223,20 @@ def test_non_positive_tempo_gives_no_tempo_event(content: str) -> None:
     assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
 
 
+def test_tuplet_repeated_on_chord_members_is_kept_once() -> None:
+    tuplet = '<notations><tuplet type="start" number="1"/></notations>'
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+            f"{tuplet}</note>"
+            "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration>"
+            f"{tuplet}</note>"
+        )
+    )
+
+    assert _events(conversion)[0]["tuplets"] == [{"type": "start", "number": 1}]
+
+
 def test_grace_notes_take_no_time() -> None:
     conversion = _convert(
         _measure(
