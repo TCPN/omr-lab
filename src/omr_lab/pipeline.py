@@ -299,7 +299,8 @@ def _path_redactor(input_path: Path, output_dir: Path) -> Callable[[str], str]:
     # text, a path separator, whitespace, a quote or punctuation (so "/home/ann"
     # leaves "/home/anna" alone).
     pattern = re.compile(
-        r"(?<![\w.\-/\\~])(?:"
+        # "file://" + path is a URI such as Java's Path.toUri() writes; redact it too.
+        r"(?:(?<=file://)|(?<![\w.\-/\\~]))(?:"
         + "|".join(map(re.escape, longest_first))
         + r")(?=$|[\\/\s'\".,;:)\]>])"
     )
