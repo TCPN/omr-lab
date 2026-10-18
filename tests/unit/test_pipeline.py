@@ -948,6 +948,7 @@ def test_absolute_paths_in_messages_are_redacted(
                 f"command: [{str(launcher)!r}, '-output', {str(raw)!r}, '--', {str(score)!r}]",
                 f"INFO processing {score}",
                 f"sibling {home}a/x and {home.parent}",
+                f"nested /srv/backup{home}/x, option --out={home}/y",
             ),
         )
 
@@ -963,6 +964,8 @@ def test_absolute_paths_in_messages_are_redacted(
         "INFO processing <input_dir>/score.png",
         # Only whole path components match, so a longer sibling name is left alone.
         f"sibling {home}a/x and {home.parent}",
+        # A path inside a longer path is left alone; one after "=" is redacted.
+        f"nested /srv/backup{home}/x, option --out=~/y",
     ]
 
 

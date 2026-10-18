@@ -294,11 +294,14 @@ def _path_redactor(input_path: Path, output_dir: Path) -> Callable[[str], str]:
     if not placeholder_by_path:
         return _identity
     longest_first = sorted(placeholder_by_path, key=len, reverse=True)
-    # A path only matches as whole components: it must be followed by the end of the
-    # text, a path separator, whitespace, a quote or punctuation, so "/home/ann"
-    # leaves "/home/anna" alone.
+    # A path only matches as whole components. It must not continue a longer path
+    # (so "/tmp" leaves "/var/tmp" alone), and it must be followed by the end of the
+    # text, a path separator, whitespace, a quote or punctuation (so "/home/ann"
+    # leaves "/home/anna" alone).
     pattern = re.compile(
-        "(?:" + "|".join(map(re.escape, longest_first)) + r")(?=$|[\\/\s'\".,;:)\]>])"
+        r"(?<![\w.\-/\\~])(?:"
+        + "|".join(map(re.escape, longest_first))
+        + r")(?=$|[\\/\s'\".,;:)\]>])"
     )
     return lambda text: pattern.sub(lambda match: placeholder_by_path[match.group(0)], text)
 
