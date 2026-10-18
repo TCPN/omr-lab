@@ -340,9 +340,11 @@ class _PartConverter:
                 amount = self.motion(child)
                 self.advance(None if amount is None else -amount)
                 self.last_note = None
+                self.chord_start = self.position
             elif tag == "forward":
                 self.advance(self.motion(child))
                 self.last_note = None
+                self.chord_start = self.position
             elif tag == "attributes":
                 self.attributes(child, events)
             elif tag == "harmony":

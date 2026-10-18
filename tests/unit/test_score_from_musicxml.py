@@ -303,6 +303,25 @@ def test_chord_rest_with_invalid_duration_keeps_later_offsets() -> None:
     assert "later offsets are not affected" in " ".join(w.message for w in conversion.warnings)
 
 
+@pytest.mark.parametrize(
+    ("motion", "offset"),
+    [
+        ("<backup><duration>2</duration></backup>", "0"),
+        ("<forward><duration>1</duration></forward>", "3/4"),
+    ],
+)
+def test_chord_note_after_backup_or_forward_starts_at_the_current_position(
+    motion: str, offset: str
+) -> None:
+    chord_note = (
+        "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration></note>"
+    )
+    conversion = _convert(_measure(f"{NOTE_C4}{NOTE_C4}{motion}{chord_note}"))
+
+    assert _events(conversion)[-1]["offset"] == offset
+    assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
+
+
 @pytest.mark.parametrize("duration", ["<duration>abc</duration>", "<duration>0</duration>", ""])
 def test_invalid_note_duration_says_later_offsets_are_null(duration: str) -> None:
     conversion = _convert(
