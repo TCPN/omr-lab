@@ -19,7 +19,6 @@ import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from functools import cache, partial
 from pathlib import Path
 from typing import Any
@@ -36,6 +35,8 @@ from omr_lab.engines.base import (
 from omr_lab.schemas import (
     CURRENT_RUN_SCHEMA_VERSION,
     RunDocumentValidationError,
+    RunErrorCode,
+    RunWarningCode,
     load_run_schema,
     validate_run_document,
 )
@@ -67,31 +68,6 @@ MEDIA_TYPE_BY_EXTENSION: Mapping[str, str] = {
     ".pdf": "application/pdf",
 }
 """Accepted input file extensions (case-insensitive) and the media type recorded for each."""
-
-
-class RunErrorCode(StrEnum):
-    """``error.code`` values of a run document (docs/json-schema.md)."""
-
-    INVALID_INPUT = "invalid_input"
-    ENGINE_UNAVAILABLE = "engine_unavailable"
-    ENGINE_FAILED = "engine_failed"
-    INVALID_OPTION = "invalid_option"
-    ENGINE_TIMEOUT = "engine_timeout"
-    """Reserved: not produced until EngineResult can report a timeout (issue #48)."""
-    MUSICXML_INVALID = "musicxml_invalid"
-    """Reserved for MusicXML validation in the pipeline; not produced yet."""
-    INTERRUPTED = "interrupted"
-    INTERNAL_ERROR = "internal_error"
-
-
-class RunWarningCode(StrEnum):
-    """``warnings[].code`` values of a run document (docs/json-schema.md)."""
-
-    SCORE_NOT_NORMALIZED = "score_not_normalized"
-    ARTIFACT_NOT_RECORDED = "artifact_not_recorded"
-    ENGINE_DIAGNOSTIC_NOT_RECORDED = "engine_diagnostic_not_recorded"
-    UNEXPECTED_ERROR = "unexpected_error"
-    RUN_DOCUMENT_INCOMPLETE = "run_document_incomplete"
 
 
 # fullmatch, not match with "$": Python's "$" also matches before a final newline.
@@ -315,29 +291,30 @@ def _path_redactor(input_path: Path, output_dir: Path) -> Callable[[str], str]:
     except (RuntimeError, KeyError, OSError):
         pass  # No home directory (e.g. a container user without a passwd entry).
     known += [(input_path.parent, "<input_dir>"), (output_dir, "<output_dir>")]
-    roots: dict[str, str] = {}
+    placeholder_by_path: dict[str, str] = {}
     for path, placeholder in known:
         for form in _absolute_forms(path):
             # A filesystem root ("/") would turn every path into a placeholder.
             if Path(form).parent != Path(form):
-                roots[form] = placeholder
-    if not roots:
+                placeholder_by_path[form] = placeholder
+    if not placeholder_by_path:
         return _identity
-    # A root only matches as a whole path component: "/home/ann" leaves "/home/anna".
+    longest_first = sorted(placeholder_by_path, key=len, reverse=True)
+    # A path only matches as whole components: it must be followed by the end of the
+    # text, a path separator, whitespace, a quote or punctuation, so "/home/ann"
+    # leaves "/home/anna" alone.
     pattern = re.compile(
-        "(?:"
-        + "|".join(re.escape(form) for form in sorted(roots, key=len, reverse=True))
-        + r")(?![^\\/\s'\".,;:)\]>])"
+        "(?:" + "|".join(map(re.escape, longest_first)) + r")(?=$|[\\/\s'\".,;:)\]>])"
     )
-    return lambda text: pattern.sub(lambda match: roots[match.group(0)], text)
+    return lambda text: pattern.sub(lambda match: placeholder_by_path[match.group(0)], text)
 
 
 def _absolute_forms(path: Path) -> set[str]:
     """Return the absolute and the resolved form of ``path`` (they differ under a symlink)."""
     forms = set()
-    for absolute in (Path.absolute, Path.resolve):
+    for to_form in (path.absolute, path.resolve):
         try:
-            forms.add(str(absolute(path)))
+            forms.add(str(to_form()))
         except (OSError, RuntimeError):
             continue
     return forms

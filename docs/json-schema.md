@@ -69,7 +69,7 @@ All top-level fields are **required**; unknown top-level fields are rejected. "N
 - `version` (required, nullable string): version reported by the engine; `null` when unknown. Never guessed.
 
 ### `artifacts`
-Keys are snake_case artifact kinds. Values are POSIX-style paths relative to the run output directory: absolute paths, Windows drive prefixes, backslashes, control characters (including newlines), and `..` segments are rejected. Raw engine artifacts stay in these files and are never merged into `score`.
+Keys are snake_case artifact kinds. Values are POSIX-style paths relative to the run output directory: absolute paths, Windows drive prefixes, backslashes, control characters (including newlines), and `..` segments are rejected. Raw engine artifacts stay in these files and are never merged into `score`. Artifacts are engine output under `raw/`, except kinds the pipeline writes itself outside `raw/`: `engine_diagnostics` (`engine_diagnostics.log`, the engine's diagnostics with local paths redacted). Tools that archive or re-hash raw engine output should skip pipeline-owned kinds.
 
 ### `timing`
 - `duration_seconds` (required, number ≥ 0): total elapsed wall-clock time.
@@ -96,7 +96,7 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `unexpected_error` | warning | An unexpected exception after a failure was already recorded; the original `error` is kept. |
 | `run_document_incomplete` | warning | The full run document did not validate, so `options` and the engine's `artifacts` were left out; the original `error` is kept. |
 
-The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.pipeline.RunErrorCode` and `RunWarningCode` list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). `musicxml_invalid` is reserved for MusicXML validation in the pipeline.
+The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (re-exported by `omr_lab.pipeline`) list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). `musicxml_invalid` is reserved for MusicXML validation in the pipeline.
 
 Messages must not contain absolute local paths: they name the user and private folders, and they are wrong once the run directory is moved. The pipeline replaces the run output directory, the input file's directory and the home directory with `<output_dir>`, `<input_dir>` and `~` in every message and in the diagnostics file.
 

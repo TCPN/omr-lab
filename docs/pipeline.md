@@ -49,7 +49,7 @@ Run failures do not raise; each produces a failed run document (`status: "failed
 
 `engine_timeout` cannot be told apart yet: `EngineResult` has no timeout flag, so an adapter-reported timeout is recorded as `engine_failed` with the adapter's message. Distinguishing it needs an interface change, tracked in issue #48.
 
-Error and warning codes are `omr_lab.pipeline.RunErrorCode` and `RunWarningCode`; the table in [json-schema.md](json-schema.md#warnings-and-error) lists them all.
+Error and warning codes are `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (also importable from `omr_lab.pipeline`); the table in [json-schema.md](json-schema.md#warnings-and-error) lists them all.
 
 ## EngineResult to run document
 
