@@ -21,7 +21,7 @@ Offsets and durations are exact rationals in **whole notes**, written as strings
 
 - `offset` is the position from the start of the measure. `<backup>` and `<forward>` move the position; grace notes and `<chord/>` notes do not advance it. `<harmony>` and `<direction>` add their own `<offset>` child.
 - `duration` is the sounding length. It is `null` for grace notes.
-- When `<divisions>` has not appeared yet, or a duration is invalid, that `duration` is `null` (`score_divisions_missing` or `score_invalid_value`). Unless the note is a `<chord/>` member, which does not move the position, every later `offset` in the measure is `null` too; the warning says which. A `<backup>` past the start of the measure makes later offsets `null` (`score_timing_inconsistent`).
+- When `<divisions>` has not appeared yet, or a duration is invalid, that `duration` is `null` (`score_divisions_missing` or `score_invalid_value`). A merged `<chord/>` member's invalid duration is ignored instead: the chord keeps its first note's `duration`, and later offsets are not affected. For any other note, every later `offset` in the measure is `null` too; the warning says which. A `<backup>` past the start of the measure makes later offsets `null` (`score_timing_inconsistent`).
 
 ## Shape
 
@@ -52,7 +52,7 @@ Events of a measure are in source order. Every event has `kind` and `offset`; mo
 
 `harmony.kind_text` is the `text` attribute of `<kind>` as written: `null` when absent, and `""` when the source says to print no kind text (for example a major chord shown as the root alone).
 
-A chord is one `note` event with several `pitches`: each MusicXML `<chord/>` note is merged into the note before it, and its lyrics are appended to that event's `lyrics`. A lyric for a verse number the chord already has is not added twice; it produces `score_unsupported_element`.
+A chord is one `note` event with several `pitches`: each MusicXML `<chord/>` note is merged into the note before it, and its lyrics are appended to that event's `lyrics`. A lyric for a verse number the chord already has is not added twice; it produces `score_unsupported_element`. A `<chord/>` member whose grace status, voice, staff, duration, type, dots or time modification differs from the chord's first note is merged with the first note's values, which also produces `score_unsupported_element`.
 
 ### Lyrics and verses
 
