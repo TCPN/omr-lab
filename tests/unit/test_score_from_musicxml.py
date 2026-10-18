@@ -385,6 +385,31 @@ def test_numbers_must_be_plain_ascii_xml_numbers(content: str) -> None:
     assert RunWarningCode.SCORE_INVALID_VALUE in _codes(conversion)
 
 
+def test_very_long_decimals_are_rejected() -> None:
+    nines = "9" * 4299
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch>"
+            f"<duration>{nines}</duration></note>",
+            divisions="0.001",
+        )
+    )
+
+    assert _events(conversion)[0]["duration"] is None
+    assert _codes(conversion) == [RunWarningCode.SCORE_INVALID_VALUE]
+
+
+def test_position_that_grows_too_precise_becomes_unknown() -> None:
+    content = "".join(
+        f"<attributes><divisions>{10**30 + k}</divisions></attributes>{NOTE_C4}"
+        for k in range(1, 30, 2)
+    )
+    conversion = _convert(_measure(content))
+
+    assert _events(conversion)[-1]["offset"] is None
+    assert _codes(conversion) == [RunWarningCode.SCORE_TIMING_INCONSISTENT]
+
+
 def test_presentation_elements_are_ignored_without_warnings() -> None:
     conversion = _convert(
         _measure(

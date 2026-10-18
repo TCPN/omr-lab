@@ -51,6 +51,8 @@ sounding ``<tie>`` is recorded instead.
 _STEPS = frozenset("ABCDEFG")
 _CLEF_SIGNS = frozenset({"G", "F", "C", "percussion", "TAB", "jianpu", "none"})
 _DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)")
+# Real files use a few digits; the cap keeps a crafted value from growing huge.
+_MAX_DECIMAL_LENGTH = 32
 _UNSIGNED = re.compile(r"[0-9]+")
 _SIGNED = re.compile(r"[+-]?[0-9]+")
 _SYLLABIC = frozenset({"single", "begin", "middle", "end"})
@@ -204,6 +206,16 @@ class _PartConverter:
             self.position = None
             return
         position = self.position + amount
+        if max(position.numerator.bit_length(), position.denominator.bit_length()) > 512:
+            # Only possible with many different <divisions> in one measure.
+            self.issues.add(
+                RunWarningCode.SCORE_TIMING_INCONSISTENT,
+                "The position in the measure became too precise to record; later offsets "
+                "in the measure are null",
+                self.where,
+            )
+            self.position = None
+            return
         # motion() only passes positive lengths, so only a <backup> can go below zero.
         if position < 0:
             self.issues.add(
@@ -777,13 +789,14 @@ class _PartConverter:
 
 
 def _decimal(value: str) -> Fraction | None:
-    """Parse an xs:decimal (no exponent, so '1e999999999' cannot build a huge number)."""
-    if _DECIMAL.fullmatch(value) is None:
+    """Parse an xs:decimal of at most _MAX_DECIMAL_LENGTH characters.
+
+    No exponent ('1e999999999') and no very long text, so the exact arithmetic on
+    the result stays small and its rational strings stay within int/str limits.
+    """
+    if len(value) > _MAX_DECIMAL_LENGTH or _DECIMAL.fullmatch(value) is None:
         return None
-    try:
-        return Fraction(value)
-    except ValueError:  # more digits than int() converts
-        return None
+    return Fraction(value)
 
 
 def _ascii_int(value: str | None) -> int | None:
