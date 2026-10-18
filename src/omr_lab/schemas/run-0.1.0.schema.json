@@ -69,7 +69,7 @@
       }
     },
     "options": {
-      "$comment": "Placeholder for engine options (issue #21). Keys are option names; values are the effective JSON values. Empty when no options were given.",
+      "$comment": "Effective engine options as echoed by the adapter (issue #21). Keys are option names; values are the effective JSON values, defaults included. Empty when the engine did not return a result.",
       "description": "Effective run/engine options recorded for provenance.",
       "type": "object",
       "propertyNames": {"minLength": 1}

@@ -53,7 +53,7 @@ All top-level fields are **required**; unknown top-level fields are rejected. "N
 | `input` | object | See below. |
 | `engine` | object | Engine provenance. See below. |
 | `options` | object | Effective engine options as echoed in `EngineResult.options`; `{}` when none or when the engine did not return a result. Values are any JSON. See [pipeline.md](pipeline.md). |
-| `artifacts` | object | Raw artifacts by kind (e.g. `musicxml`, `engine_log`); may be `{}`. |
+| `artifacts` | object | Raw artifacts by kind (e.g. `musicxml`, `engine_log`, `engine_diagnostics`); may be `{}`. |
 | `timing` | object | See below. |
 | `score` | `null` | Normalized musical content. Always `null` in 0.1.0 (placeholder for issue #19). |
 | `warnings` | array of objects | Non-fatal problems in order of occurrence; may be `[]`. |
@@ -88,15 +88,17 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `invalid_option` | error | The engine rejected an option name or value (`InvalidEngineOptionError`, including `UnknownEngineOptionError`). |
 | `engine_timeout` | error | Engine process exceeded its timeout. |
 | `musicxml_invalid` | error | Engine output could not be parsed or validated as MusicXML. |
+| `interrupted` | error | The run was stopped by a `KeyboardInterrupt` (Ctrl-C) before it finished. |
 | `internal_error` | error | Unexpected pipeline error; the message should say what failed. |
 | `score_not_normalized` | warning | Musical content exists only in raw artifacts. |
-| `engine_diagnostic` | warning | One entry of `EngineResult.diagnostics`, copied verbatim. |
 | `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the engine's `raw/` directory, missing, not a regular file, or an unrepresentable path). |
-| `engine_diagnostic_not_recorded` | warning | An `EngineResult.diagnostics` entry was not a string and was left out. |
+| `engine_diagnostic_not_recorded` | warning | An `EngineResult.diagnostics` entry was not a string, or the diagnostics file could not be written, so diagnostics were left out. |
 | `unexpected_error` | warning | An unexpected exception after a failure was already recorded; the original `error` is kept. |
 | `run_document_incomplete` | warning | The full run document did not validate, so `options` and `artifacts` were left out; the original `error` is kept. |
 
-The pipeline's use of these codes is described in [pipeline.md](pipeline.md). `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed`.
+The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.pipeline.RunErrorCode` and `RunWarningCode` list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). `musicxml_invalid` is reserved for MusicXML validation in the pipeline.
+
+Messages must not contain absolute local paths: they name the user and private folders, and they are wrong once the run directory is moved. The pipeline replaces the run output directory, the input file's directory and the home directory with `<output_dir>`, `<input_dir>` and `~` in every message and in the diagnostics file.
 
 ## Rules
 - Do not fabricate coordinates, confidence values, or musical properties absent from engine output. Unknown values are `null` or absent, never guessed.
