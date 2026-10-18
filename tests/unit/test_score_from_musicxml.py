@@ -292,6 +292,17 @@ def test_chord_member_with_empty_duration_keeps_later_offsets() -> None:
     assert "later offsets are not affected" in conversion.warnings[0].message
 
 
+def test_chord_rest_with_invalid_duration_keeps_later_offsets() -> None:
+    conversion = _convert(
+        _measure(f"{NOTE_C4}<note><chord/><rest/><duration>abc</duration></note>{NOTE_C4}")
+    )
+
+    first, rest, second = _events(conversion)
+    assert rest["duration"] is None
+    assert second["offset"] == "1/4"
+    assert "later offsets are not affected" in " ".join(w.message for w in conversion.warnings)
+
+
 @pytest.mark.parametrize("duration", ["<duration>abc</duration>", "<duration>0</duration>", ""])
 def test_invalid_note_duration_says_later_offsets_are_null(duration: str) -> None:
     conversion = _convert(
