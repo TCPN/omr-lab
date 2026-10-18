@@ -64,7 +64,7 @@ Each `<lyric>` becomes one entry in the note's `lyrics`, in source order, with:
 - `text`: the syllable, or `null` for a lyric with no `<text>` (an extender-only lyric continuing a melisma);
 - `extend`: `{type}` from `<extend>` (`type` is `null` when not given), or `null`.
 
-Several verses under the same notes stay separate: read verse *n* by taking the lyric with `number == n` from each note. Elided syllables (`<text>`, `<elision>`, `<text>`) become one lyric whose text joins the parts with the elision text (`"a‿b"`); its `syllabic` combines the first and last parts (`end` + `begin` gives `middle`). How lyric numbering varies between engines and how to map it to ABC verses is studied in issue #28.
+Several verses under the same notes stay separate: read verse *n* by taking the lyric with `number == n` from each note. Elided syllables (`<text>`, `<elision>`, `<text>`) become one lyric whose text joins the parts with the elision text (`"a‿b"`; an empty `<elision/>` is written as `‿`, U+203F, the undertie it is drawn as); its `syllabic` combines the first and last parts (`end` + `begin` gives `middle`). How lyric numbering varies between engines and how to map it to ABC verses is studied in issue #28.
 
 ## Example
 
@@ -127,7 +127,7 @@ The converter adds these run-document warnings (see the code table in [json-sche
 | Code | When |
 | --- | --- |
 | `score_unsupported_element` | The source uses something the model has no field for, for example slurs, articulations, fermatas, dynamics, ornaments, cue or unpitched notes, `<harmony>` without `<root>` (Roman numerals, functions), non-traditional keys, `<senza-misura>`, composite time signatures (only the first `<beats>`/`<beat-type>` pair is kept), metric modulation in `<metronome>`, `<words>` without a tempo, `<transpose>`, `<measure-style>`, `<figured-bass>`, lyrics on rests, `<end-line>`/`<humming>` in lyrics, and any unknown element. |
-| `score_invalid_value` | A value is malformed or out of range (a step other than A–G, an octave outside 0–9, non-numeric numbers, `<fifths>` outside −11..11, a `<backup>` or `<forward>` that is not positive). The field becomes `null`, or the element is left out when it cannot exist without that value (a note without a valid pitch keeps its time but is not listed). |
+| `score_invalid_value` | A value is malformed or out of range (a step other than A–G, an octave outside 0–9, non-numeric numbers, `<fifths>` outside −11..11, a `<backup>` or `<forward>` that is not positive, decimal text longer than 32 characters). The field becomes `null`, or the element is left out when it cannot exist without that value (a note without a valid pitch keeps its time but is not listed). |
 | `score_divisions_missing` | A duration or offset appears before any `<divisions>`. |
 | `score_timing_inconsistent` | A `<backup>` or `<offset>` points before the start of the measure. |
 

@@ -251,6 +251,17 @@ def test_elided_syllables_join_into_one_lyric() -> None:
     ]
 
 
+def test_empty_elision_keeps_the_syllable_boundary() -> None:
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+            '<lyric><text>a</text><elision smufl="lyricsElision"/><text>e</text></lyric></note>'
+        )
+    )
+
+    assert _events(conversion)[0]["lyrics"][0]["text"] == "a\u203fe"
+
+
 def test_missing_divisions_gives_null_timing_with_a_warning() -> None:
     conversion = _convert(_measure(f"{NOTE_C4}{NOTE_C4}", divisions=None))
 

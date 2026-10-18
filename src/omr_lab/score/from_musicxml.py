@@ -507,7 +507,8 @@ class _PartConverter:
             if child.tag == "text":
                 texts.append(child.text or "")
             elif child.tag == "elision":
-                texts.append(child.text or "")
+                # An empty <elision/> is drawn as the default undertie; keep the boundary.
+                texts.append(child.text or "\u203f")
             elif child.tag == "syllabic":
                 value = _text(child)
                 if value in _SYLLABIC:
