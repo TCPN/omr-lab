@@ -94,7 +94,7 @@ Codes are not an enum in 0.1.0. Codes in use so far:
 | `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the engine's `raw/` directory, missing, not a regular file, or an unrepresentable path). |
 | `engine_diagnostic_not_recorded` | warning | An `EngineResult.diagnostics` entry was not a string, or the diagnostics file could not be written, so diagnostics were left out. |
 | `unexpected_error` | warning | An unexpected exception after a failure was already recorded; the original `error` is kept. |
-| `run_document_incomplete` | warning | The full run document did not validate, so `options` and `artifacts` were left out; the original `error` is kept. |
+| `run_document_incomplete` | warning | The full run document did not validate, so `options` and the engine's `artifacts` were left out; the original `error` is kept. |
 
 The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.pipeline.RunErrorCode` and `RunWarningCode` list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). `musicxml_invalid` is reserved for MusicXML validation in the pipeline.
 

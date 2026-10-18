@@ -268,6 +268,9 @@ def _fallback_document(
             for w in state.warnings
             if w["code"] != RunWarningCode.SCORE_NOT_NORMALIZED and _is_utf8_encodable(w["message"])
         ],
+        # The pipeline's own files have fixed, schema-valid paths; keeping them keeps
+        # the pointer to the engine diagnostics.
+        artifacts={k: v for k, v in state.artifacts.items() if k in _PIPELINE_ARTIFACT_KINDS},
         error=state.error,
         redact=state.redact,
     )
@@ -276,7 +279,7 @@ def _fallback_document(
     else:
         reduced.warn(
             RunWarningCode.RUN_DOCUMENT_INCOMPLETE,
-            f"{reason}. Options and artifacts were left out.",
+            f"{reason}. Options and engine artifacts were left out.",
         )
     document = build(reduced)
     try:
@@ -306,12 +309,14 @@ def _path_redactor(input_path: Path, output_dir: Path) -> Callable[[str], str]:
     and the home directory ``~``. Longer paths are replaced first, so a run
     directory under the home directory still becomes ``<output_dir>``.
     """
+    known: list[tuple[Path, str]] = []
+    try:
+        known.append((Path.home(), "~"))
+    except (RuntimeError, KeyError, OSError):
+        pass  # No home directory (e.g. a container user without a passwd entry).
+    known += [(input_path.parent, "<input_dir>"), (output_dir, "<output_dir>")]
     roots: dict[str, str] = {}
-    for path, placeholder in (
-        (Path.home(), "~"),
-        (input_path.parent, "<input_dir>"),
-        (output_dir, "<output_dir>"),
-    ):
+    for path, placeholder in known:
         for form in _absolute_forms(path):
             # A filesystem root ("/") would turn every path into a placeholder.
             if Path(form).parent != Path(form):

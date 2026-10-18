@@ -499,6 +499,7 @@ def test_fallback_keeps_engine_failure_version_and_diagnostics(score: Path, tmp_
     assert document["engine"]["version"] == "scripted-1"
     assert [w["code"] for w in document["warnings"]] == ["run_document_incomplete"]
     assert "could not be written" in document["warnings"][0]["message"]
+    assert document["artifacts"] == {"engine_diagnostics": ENGINE_DIAGNOSTICS_FILENAME}
     assert document["options"] == {}
 
 
@@ -1036,3 +1037,16 @@ def _documented_codes(kind: str) -> set[str]:
 def test_code_enums_match_the_documented_code_table() -> None:
     assert {code.value for code in RunErrorCode} == _documented_codes("error")
     assert {code.value for code in RunWarningCode} == _documented_codes("warning")
+
+
+def test_missing_home_directory_does_not_break_the_run(
+    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_home() -> Path:
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", staticmethod(no_home))
+
+    result = run_pipeline(score, tmp_path / "run", MockEngine())
+
+    assert _written(result)["status"] == "succeeded"
