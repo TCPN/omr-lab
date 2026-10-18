@@ -632,6 +632,17 @@ def test_long_offending_values_are_shortened_in_warnings() -> None:
     assert "(5000 characters)" in warning.message
 
 
+def test_overflow_is_counted_per_warning_code() -> None:
+    tags = "".join(f"<x{index}/>" for index in range(150))
+    conversion = _convert(_measure(f"{tags}{NOTE_C4}<backup><duration>3</duration></backup>"))
+
+    overflow = conversion.warnings[100:]
+    assert [(w.code, w.message.split()[0]) for w in overflow] == [
+        (RunWarningCode.SCORE_UNSUPPORTED_ELEMENT, "50"),
+        (RunWarningCode.SCORE_TIMING_INCONSISTENT, "1"),
+    ]
+
+
 @pytest.mark.parametrize(
     ("value", "text"),
     [(Fraction(0), "0"), (Fraction(2), "2"), (Fraction(6, 8), "3/4"), (Fraction(1, 12), "1/12")],
