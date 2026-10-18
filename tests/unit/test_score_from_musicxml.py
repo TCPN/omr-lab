@@ -154,6 +154,20 @@ def test_chord_notes_merge_into_one_event_with_their_lyrics() -> None:
     assert events[1]["offset"] == "1/2"
 
 
+def test_notations_on_merged_chord_notes_are_reported() -> None:
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration></note>"
+            "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration>"
+            "<notations><fermata/></notations></note>"
+        )
+    )
+
+    assert len(_events(conversion)) == 1
+    assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
+    assert "<fermata> in <notations>" in conversion.warnings[0].message
+
+
 def test_grace_notes_take_no_time() -> None:
     conversion = _convert(
         _measure(

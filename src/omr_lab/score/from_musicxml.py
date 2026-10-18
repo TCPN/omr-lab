@@ -325,6 +325,9 @@ class _PartConverter:
         if element.find("unpitched") is not None:
             self.unsupported("An unpitched <note>")
             return
+        # Checked here, not in duration_fields(), so merged <chord/> notes are covered too.
+        for notations in element.findall("notations"):
+            self.check_children(notations, {"tuplet"}, "notations")
 
         lyrics = [self.lyric(lyric) for lyric in element.findall("lyric")]
         rest = element.find("rest")
@@ -376,7 +379,6 @@ class _PartConverter:
             )
         tuplets = []
         for notations in element.findall("notations"):
-            self.check_children(notations, {"tuplet"}, "notations")
             for tuplet in notations.findall("tuplet"):
                 tuplet_type = tuplet.get("type")
                 if tuplet_type not in ("start", "stop"):
