@@ -52,7 +52,7 @@ Events of a measure are in source order. Every event has `kind` and `offset`; mo
 
 `harmony.kind_text` is the `text` attribute of `<kind>` as written: `null` when absent, and `""` when the source says to print no kind text (for example a major chord shown as the root alone).
 
-A chord is one `note` event with several `pitches`: each MusicXML `<chord/>` note is merged into the note before it, and its lyrics are appended to that event's `lyrics`.
+A chord is one `note` event with several `pitches`: each MusicXML `<chord/>` note is merged into the note before it, and its lyrics are appended to that event's `lyrics`. A lyric for a verse number the chord already has is not added twice; it produces `score_unsupported_element`.
 
 ### Lyrics and verses
 
@@ -140,6 +140,7 @@ These are skipped without a warning because they describe layout or playback rat
 - in `<attributes>`: `<staves>` (every event carries its own staff number), `<instruments>`;
 - in `<measure>`: `<print>`;
 - in `<direction>`: `<voice>`, `<listening>`; in `<harmony>`: `<frame>` (fretboard diagram);
+- in `<sound>`: `<instrument-change>`, `<midi-device>`, `<midi-instrument>`, `<play>` (playback setup). A measure-level `<sound>` `<offset>` moves its tempo event; other `<sound>` children (`<swing>`, an `<offset>` inside `<direction>`) produce `score_unsupported_element`;
 - everywhere: `<footnote>`, `<level>`, all attributes not named in this document (positions, colors, fonts, `print-object`), and `<sound>` playback attributes such as `dynamics` or `pizzicato`. The `<sound>` navigation attributes (`segno`, `dalsegno`, `coda`, `tocoda`, `dacapo`, `fine`, `forward-repeat`) change the playing order, so they produce `score_unsupported_element`. `<time-modification>` `<normal-type>`/`<normal-dot>` are also skipped.
 
 ## Limitations

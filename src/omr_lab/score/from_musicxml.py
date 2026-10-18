@@ -39,6 +39,7 @@ IGNORED_ELEMENTS: dict[str, frozenset[str]] = {
     "direction": frozenset({"voice", "listening", "footnote", "level"}),
     "harmony": frozenset({"frame", "footnote", "level"}),
     "barline": frozenset({"footnote", "level"}),
+    "sound": frozenset({"instrument-change", "midi-device", "midi-instrument", "play"}),
     "lyric": frozenset({"footnote", "level"}),
     "clef": frozenset({"footnote", "level"}),
     "key": frozenset({"footnote", "level"}),
@@ -58,6 +59,9 @@ _CLEF_SIGNS = frozenset({"G", "F", "C", "percussion", "TAB", "jianpu", "none"})
 _DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)")
 # Real files use a few digits; the cap keeps a crafted value from growing huge.
 _MAX_DECIMAL_LENGTH = 32
+# A position needing more bits can only come from many different <divisions> in one
+# measure; past this it is treated as unknown rather than written as a huge rational.
+_MAX_POSITION_BITS = 512
 _ASCII_UNSIGNED_INT = re.compile(r"[0-9]+")
 _ASCII_SIGNED_INT = re.compile(r"[+-]?[0-9]+")
 _SYLLABIC = frozenset({"single", "begin", "middle", "end"})
@@ -143,7 +147,9 @@ class _Issues:
             result.append(ScoreWarning(code, message))
         for code, count in self._overflow.items():
             result.append(
-                ScoreWarning(code, f"{count} more problem(s) of other kinds were not listed.")
+                ScoreWarning(
+                    code, f"{count} more occurrence(s) of problems of other kinds were not listed."
+                )
             )
         return tuple(result)
 
@@ -246,7 +252,8 @@ class _PartConverter:
             self.position = None
             return
         position = self.position + amount
-        if max(position.numerator.bit_length(), position.denominator.bit_length()) > 512:
+        bits = max(position.numerator.bit_length(), position.denominator.bit_length())
+        if bits > _MAX_POSITION_BITS:
             # Only possible with many different <divisions> in one measure.
             self.issues.add(
                 RunWarningCode.SCORE_TIMING_INCONSISTENT,
@@ -344,9 +351,10 @@ class _PartConverter:
                 self.direction(child, events)
             elif tag == "sound":
                 self.check_navigation(child)
+                self.check_children(child, {"offset"}, "sound")
                 tempo = self.tempo_bpm(child)
                 if tempo is not None:
-                    events.append(self.tempo_event(self.position, None, tempo, None, None))
+                    events.append(self.tempo_event(self.offset_of(child), None, tempo, None, None))
             elif tag == "barline":
                 barline = self.barline(child)
                 if barline is not None:
@@ -469,7 +477,12 @@ class _PartConverter:
         self.last_note["tuplets"].extend(
             tuplet for tuplet in member["tuplets"] if tuplet not in self.last_note["tuplets"]
         )
-        self.last_note["lyrics"].extend(lyrics)
+        verses = {lyric["number"] for lyric in self.last_note["lyrics"]}
+        for lyric in lyrics:
+            if lyric["number"] in verses:
+                self.unsupported("A second lyric for the same verse on one chord")
+            else:
+                self.last_note["lyrics"].append(lyric)
 
     def tempo_bpm(self, sound: ET.Element) -> float | None:
         """<sound tempo> in quarter notes per minute; None (with a warning) unless positive."""
@@ -784,6 +797,8 @@ class _PartConverter:
         sound = element.find("sound")
         if sound is not None:
             self.check_navigation(sound)
+            # Its own <offset> would shift playback from the printed direction; not modelled.
+            self.check_children(sound, set(), "sound")
         bpm = None if sound is None else self.tempo_bpm(sound)
         for tag in others:
             self.unsupported(f"<{tag}> in <direction-type>")

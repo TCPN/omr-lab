@@ -237,6 +237,21 @@ def test_tuplet_repeated_on_chord_members_is_kept_once() -> None:
     assert _events(conversion)[0]["tuplets"] == [{"type": "start", "number": 1}]
 
 
+def test_repeated_verse_on_a_chord_member_is_kept_once() -> None:
+    lyric = '<lyric number="1"><text>a</text></lyric>'
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+            f"{lyric}</note>"
+            "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration>"
+            f"{lyric}</note>"
+        )
+    )
+
+    assert len(_events(conversion)[0]["lyrics"]) == 1
+    assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
+
+
 def test_grace_notes_take_no_time() -> None:
     conversion = _convert(
         _measure(
@@ -495,6 +510,26 @@ def test_measure_level_sound_tempo_becomes_a_tempo_event() -> None:
     }
 
 
+def test_measure_level_sound_offset_moves_the_tempo() -> None:
+    conversion = _convert(_measure('<sound tempo="80"><offset>2</offset></sound>'))
+
+    assert _events(conversion)[0]["offset"] == "1/2"
+    assert conversion.warnings == ()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '<sound tempo="80"><swing><straight/></swing></sound>',
+        '<direction><sound tempo="80"><offset>1</offset></sound></direction>',
+    ],
+)
+def test_unmodelled_sound_children_are_reported(content: str) -> None:
+    conversion = _convert(_measure(content))
+
+    assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
+
+
 def test_staff_numbers_are_read_from_elements_and_attributes() -> None:
     conversion = _convert(
         _measure(
@@ -552,7 +587,9 @@ def test_number_of_distinct_warnings_is_capped() -> None:
     conversion = _convert(_measure(tags))
 
     assert len(conversion.warnings) == 101
-    assert conversion.warnings[-1].message == ("50 more problem(s) of other kinds were not listed.")
+    assert conversion.warnings[-1].message == (
+        "50 more occurrence(s) of problems of other kinds were not listed."
+    )
 
 
 @pytest.mark.parametrize("number", ["x", "0"])
