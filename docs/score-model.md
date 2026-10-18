@@ -21,7 +21,7 @@ Offsets and durations are exact rationals in **whole notes**, written as strings
 
 - `offset` is the position from the start of the measure. `<backup>` and `<forward>` move the position; grace notes and `<chord/>` notes do not advance it. `<harmony>` and `<direction>` add their own `<offset>` child.
 - `duration` is the sounding length. It is `null` for grace notes.
-- When `<divisions>` has not appeared yet, or a duration is invalid, that `duration` is `null` and every later `offset` in the measure is `null` (`score_divisions_missing` or `score_invalid_value`). A `<backup>` past the start of the measure makes later offsets `null` (`score_timing_inconsistent`).
+- When `<divisions>` has not appeared yet, or a duration is invalid, that `duration` is `null` (`score_divisions_missing` or `score_invalid_value`). Unless the note is a `<chord/>` member, which does not move the position, every later `offset` in the measure is `null` too; the warning says which. A `<backup>` past the start of the measure makes later offsets `null` (`score_timing_inconsistent`).
 
 ## Shape
 

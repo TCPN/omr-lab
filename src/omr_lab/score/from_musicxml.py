@@ -233,7 +233,7 @@ class _PartConverter:
             return None
         amount = _decimal(value)
         if amount is None:
-            self.invalid(f"Invalid or too long {label} was ignored", value)
+            self.invalid(f"Invalid or too long {label} was ignored; {consequence}", value)
             return None
         if self.divisions is None:
             self.issues.add(
@@ -377,13 +377,21 @@ class _PartConverter:
         is_chord = element.find("chord") is not None
         duration = None
         if grace_element is None:
+            # Only a note that is not a chord member moves the position (see advance()).
+            consequence = (
+                "its duration was recorded as null"
+                if is_chord
+                else "later offsets in the measure are null"
+            )
             duration_element = element.find("duration")
             if duration_element is None:
-                self.invalid("A <note> without <duration> was recorded with a null duration")
+                self.invalid(f"A <note> without <duration> was found; {consequence}")
             else:
-                duration = self.whole_notes(duration_element, "<note> <duration>")
+                duration = self.whole_notes(duration_element, "<note> <duration>", consequence)
                 if duration is not None and duration <= 0:
-                    self.invalid("A <note> <duration> that is not positive was ignored")
+                    self.invalid(
+                        f"A <note> <duration> that is not positive was ignored; {consequence}"
+                    )
                     duration = None
         if is_chord:
             offset = self.chord_start

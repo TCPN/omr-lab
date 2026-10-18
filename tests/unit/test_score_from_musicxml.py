@@ -252,6 +252,28 @@ def test_repeated_verse_on_a_chord_member_is_kept_once() -> None:
     assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
 
 
+def test_chord_member_with_empty_duration_keeps_later_offsets() -> None:
+    conversion = _convert(
+        _measure(
+            f"{NOTE_C4}"
+            "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration/></note>"
+            f"{NOTE_C4}"
+        )
+    )
+
+    assert [e["offset"] for e in _events(conversion)] == ["0", "1/4"]
+    assert "its duration was recorded as null" in conversion.warnings[0].message
+
+
+@pytest.mark.parametrize("duration", ["<duration>abc</duration>", "<duration>0</duration>", ""])
+def test_invalid_note_duration_says_later_offsets_are_null(duration: str) -> None:
+    conversion = _convert(
+        _measure(f"<note><pitch><step>C</step><octave>4</octave></pitch>{duration}</note>")
+    )
+
+    assert "later offsets in the measure are null" in conversion.warnings[0].message
+
+
 def test_grace_notes_take_no_time() -> None:
     conversion = _convert(
         _measure(
