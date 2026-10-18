@@ -170,6 +170,7 @@ def run_pipeline(
     # bool is an int subclass, so True would otherwise pass as a 1-second timeout.
     if (
         isinstance(timeout_seconds, bool)
+        or not isinstance(timeout_seconds, int | float)
         or not math.isfinite(timeout_seconds)
         or timeout_seconds <= 0
     ):
@@ -214,14 +215,14 @@ def run_pipeline(
         # A bug in an adapter or in this module produced an invalid record. Write a
         # reduced failed record instead, so the run still leaves a valid trace.
         logger.exception("Run document failed validation; writing a reduced failed record")
-        build = partial(
+        build_document = partial(
             _build_document,
             filename=filename,
             engine_name=engine_name,
             started_at=started_at,
             duration=duration,
         )
-        document, text = _fallback_document(state, exc, build)
+        document, text = _fallback_document(state, exc, build_document)
 
     document_path = output_dir / RUN_DOCUMENT_FILENAME
     _write_atomically(document_path, text)
@@ -231,7 +232,7 @@ def run_pipeline(
 
 
 def _fallback_document(
-    state: _RunState, exc: Exception, build: Callable[[_RunState], dict[str, Any]]
+    state: _RunState, exc: Exception, build_document: Callable[[_RunState], dict[str, Any]]
 ) -> tuple[dict[str, Any], str]:
     """Return a failed document that keeps as much of ``state`` as still validates.
 
@@ -258,14 +259,14 @@ def _fallback_document(
             RunWarningCode.RUN_DOCUMENT_INCOMPLETE,
             f"{reason}. Options and engine artifacts were left out.",
         )
-    document = build(reduced)
+    document = build_document(reduced)
     try:
         return document, _serialize(document)
     except _SERIALIZE_ERRORS:
         logger.exception("Reduced run document failed validation; writing a minimal record")
     minimal = _RunState(media_type=state.media_type, sha256=state.sha256, redact=state.redact)
     minimal.record_error(RunErrorCode.INTERNAL_ERROR, reason)
-    document = build(minimal)
+    document = build_document(minimal)
     return document, _serialize(document)
 
 
@@ -278,14 +279,14 @@ def _path_redactor(input_path: Path, output_dir: Path) -> Callable[[str], str]:
     and the home directory ``~``. Longer paths are replaced first, so a run
     directory under the home directory still becomes ``<output_dir>``.
     """
-    known: list[tuple[Path, str]] = []
+    paths_to_redact: list[tuple[Path, str]] = []
     try:
-        known.append((Path.home(), "~"))
+        paths_to_redact.append((Path.home(), "~"))
     except (RuntimeError, KeyError, OSError):
         pass  # No home directory (e.g. a container user without a passwd entry).
-    known += [(input_path.parent, "<input_dir>"), (output_dir, "<output_dir>")]
+    paths_to_redact += [(input_path.parent, "<input_dir>"), (output_dir, "<output_dir>")]
     placeholder_by_path: dict[str, str] = {}
-    for path, placeholder in known:
+    for path, placeholder in paths_to_redact:
         for form in _absolute_forms(path):
             # A filesystem root ("/") would turn every path into a placeholder.
             if Path(form).parent != Path(form):
@@ -434,18 +435,21 @@ def _write_diagnostics(
     so they go to a file instead of ``warnings``. Returns None when there are no
     non-blank diagnostics or the file cannot be written (a warning says why).
     """
-    # A plain string would otherwise be split into one entry per character.
-    entries = (diagnostics,) if isinstance(diagnostics, str) else tuple(diagnostics)
-    lines = []
-    for diagnostic in entries:
-        if not isinstance(diagnostic, str):
-            state.warn(
-                RunWarningCode.ENGINE_DIAGNOSTIC_NOT_RECORDED,
-                f"An engine diagnostic of type {type(diagnostic).__name__} was left out; "
-                "diagnostics must be strings.",
-            )
-        elif diagnostic.strip():
-            lines.append(state.redact(diagnostic))
+    # A plain string would otherwise be split into one entry per character, and raw
+    # process output (bytes) into one int per byte.
+    if isinstance(diagnostics, str | bytes | bytearray):
+        entries: tuple[object, ...] = (diagnostics,)
+    else:
+        entries = tuple(diagnostics)
+    lines = [state.redact(entry) for entry in entries if isinstance(entry, str) and entry.strip()]
+    left_out = [type(entry).__name__ for entry in entries if not isinstance(entry, str)]
+    if left_out:
+        # One warning, however many entries: a long list must not flood the warnings.
+        state.warn(
+            RunWarningCode.ENGINE_DIAGNOSTIC_NOT_RECORDED,
+            f"{len(left_out)} engine diagnostic(s) of type {', '.join(sorted(set(left_out)))} "
+            "were left out; diagnostics must be strings.",
+        )
     if not lines:
         return None
     path = output_dir / ENGINE_DIAGNOSTICS_FILENAME
@@ -467,7 +471,7 @@ def _map_artifacts(
     state: _RunState, artifacts: Mapping[str, Path], output_dir: Path
 ) -> dict[str, str]:
     """Map engine artifact keys and paths to run document kinds and relative POSIX paths."""
-    root = output_dir.resolve()
+    run_root = output_dir.resolve()
     # The engine writes into raw/; anything else in the run directory (run.json and
     # the diagnostics file) belongs to the pipeline and must not be claimed by an engine.
     raw_root = (output_dir / RAW_DIRNAME).resolve()
@@ -481,16 +485,17 @@ def _map_artifacts(
             is_file = exists and resolved.is_file()
         except (OSError, RuntimeError, TypeError):
             resolved, exists, is_file = None, False, False
-        inside = resolved is not None and resolved != raw_root and resolved.is_relative_to(raw_root)
         # raw/ itself may be a symlink out of the run directory; then nothing in it counts.
-        relative = (
-            resolved.relative_to(root).as_posix()
-            if inside and resolved.is_relative_to(root)
-            else None
+        inside_raw = (
+            resolved is not None
+            and resolved != raw_root
+            and resolved.is_relative_to(raw_root)
+            and resolved.is_relative_to(run_root)
         )
+        relative = resolved.relative_to(run_root).as_posix() if inside_raw else ""
         if resolved is None:
             reason = "its path cannot be resolved"
-        elif relative is None:
+        elif not inside_raw:
             reason = f"it is not inside the engine's {RAW_DIRNAME}/ output directory"
         elif not exists:
             reason = "the file does not exist"

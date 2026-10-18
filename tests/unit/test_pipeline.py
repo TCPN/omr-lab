@@ -737,7 +737,7 @@ def test_error_after_engine_failure_keeps_engine_failed(score: Path, tmp_path: P
     assert "TypeError" in document["warnings"][0]["message"]
 
 
-@pytest.mark.parametrize("timeout", [float("nan"), float("inf"), -1.0, True])
+@pytest.mark.parametrize("timeout", [float("nan"), float("inf"), -1.0, True, "60", None])
 def test_non_finite_or_negative_timeout_is_rejected(
     score: Path, tmp_path: Path, timeout: float
 ) -> None:
@@ -1066,3 +1066,22 @@ def test_surrogate_in_error_message_keeps_engine_failure(score: Path, tmp_path: 
         "returncode": 2,
     }
     assert document["warnings"] == []
+
+
+@pytest.mark.parametrize(
+    ("diagnostics", "types"),
+    [(b"stderr bytes", "bytes"), (("ok", 1, 2, None, 3), "NoneType, int")],
+    ids=["bytes", "many"],
+)
+def test_non_string_diagnostics_give_one_warning(
+    score: Path, tmp_path: Path, diagnostics: object, types: str
+) -> None:
+    engine = ScriptedEngine(
+        build=lambda _: EngineResult("scripted", success=True, diagnostics=diagnostics)  # type: ignore[arg-type]
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    left_out = [w for w in document["warnings"] if w["code"] == "engine_diagnostic_not_recorded"]
+    assert len(left_out) == 1
+    assert f"of type {types} were left out" in left_out[0]["message"]
