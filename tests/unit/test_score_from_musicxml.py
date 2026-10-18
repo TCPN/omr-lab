@@ -416,6 +416,8 @@ def test_unicode_digits_in_number_attributes_do_not_crash(content: str) -> None:
         "<duration>1</duration></note>",
         "<note><pitch><step>C</step><alter>1_0</alter><octave>4</octave></pitch>"
         "<duration>1</duration></note>",
+        "<note><pitch><step>C</step><alter>1" + "0" * 39 + "</alter><octave>4</octave></pitch>"
+        "<duration>1</duration></note>",
     ],
 )
 def test_numbers_must_be_plain_ascii_xml_numbers(content: str) -> None:

@@ -8,7 +8,6 @@ elements listed in ``IGNORED_ELEMENTS`` are skipped without a warning.
 
 from __future__ import annotations
 
-import math
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -202,11 +201,12 @@ class _PartConverter:
     def number(self, value: str | None, label: str) -> float | None:
         if value is None:
             return None
-        number = float(value) if _DECIMAL.fullmatch(value) is not None else math.nan
-        if not math.isfinite(number):
-            self.invalid(f"Non-numeric {label} was recorded as null", value)
+        # Same rules (and length cap) as durations, so no value is silently rounded.
+        exact = _decimal(value)
+        if exact is None:
+            self.invalid(f"Invalid or too long {label} was recorded as null", value)
             return None
-        return number
+        return float(exact)
 
     def staff(self, element: ET.Element) -> int | None:
         staff = self.integer(element.find("staff"), "<staff>")
