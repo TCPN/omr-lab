@@ -4,11 +4,13 @@ import re
 import sys
 import threading
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import get_args
 
 import pytest
 
+import omr_lab.pipeline as pipeline_module
 from omr_lab.engines import (
     EngineAvailability,
     EngineOptions,
@@ -18,6 +20,7 @@ from omr_lab.engines import (
 )
 from omr_lab.engines.mock import MOCK_ENGINE_VERSION, MockEngine
 from omr_lab.musicxml import WarningCode as MusicXmlWarningCode
+from omr_lab.musicxml import load_musicxml
 from omr_lab.pipeline import (
     ENGINE_DIAGNOSTICS_FILENAME,
     RAW_DIRNAME,
@@ -1120,6 +1123,21 @@ def test_musicxml_that_cannot_be_loaded_fails_the_run(
     assert document["score"] is None
     assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
     assert str(tmp_path) not in result.document_path.read_text(encoding="utf-8")
+
+
+def test_too_large_musicxml_message_names_no_unreachable_setting(
+    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # run_pipeline has no max_bytes/max_elements, so the message must not ask to raise them.
+    monkeypatch.setattr(pipeline_module, "load_musicxml", partial(load_musicxml, max_bytes=10))
+
+    document = _written(run_pipeline(score, tmp_path / "run", _scripted_musicxml(MINIMAL_MUSICXML)))
+
+    message = document["error"]["message"]
+    assert "(musicxml_too_large)" in message
+    assert "10-byte limit" in message
+    assert "max_bytes" not in message and "Raise" not in message
+    assert message.endswith("which cannot be changed per run.")
 
 
 def test_loader_and_converter_warnings_are_recorded_in_order(score: Path, tmp_path: Path) -> None:

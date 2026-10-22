@@ -79,6 +79,8 @@ _SERIALIZE_ERRORS = (RunDocumentValidationError, TypeError, ValueError)
 _PRIMARY_MUSICXML_KEY = "musicxml"
 # Kinds of files the pipeline itself records; an engine key with one of them is renamed.
 _PIPELINE_ARTIFACT_KINDS = frozenset({ENGINE_DIAGNOSTICS_KIND})
+# The loader's advice for its own callers (omr_lab.musicxml.document); see _record_score.
+_LOADER_LIMIT_HINT = re.compile(r"\s*Raise max_(?:bytes|elements) if this file is expected\.")
 
 
 class OutputDirectoryError(ValueError):
@@ -443,10 +445,17 @@ def _record_score(state: _RunState, output_dir: Path) -> None:
     try:
         document = load_musicxml(output_dir / relative)
     except MusicXmlError as exc:
+        reason = exc.message
+        if exc.code == "musicxml_too_large":
+            # The loader suggests raising max_bytes/max_elements, which run_pipeline
+            # does not expose; say what the limit is instead.
+            reason = _LOADER_LIMIT_HINT.sub("", reason) + (
+                " The pipeline uses the loader's default limits, which cannot be changed per run."
+            )
         state.record_error(
             RunErrorCode.MUSICXML_INVALID,
             f"The engine's MusicXML artifact {relative!r} could not be loaded "
-            f"({exc.code}): {exc.message}",
+            f"({exc.code}): {reason}",
         )
         return
     conversion = score_from_musicxml(document, source_artifact=_PRIMARY_MUSICXML_KEY)
