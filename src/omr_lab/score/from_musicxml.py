@@ -463,7 +463,8 @@ class _PartConverter:
             None if grace_element is None else {"slash": grace_element.get("slash") == "yes"}
         )
         event["pitches"] = [pitch]
-        event["lyrics"] = lyrics
+        event["lyrics"] = []
+        self.add_lyrics(event, lyrics)
         events.append(event)
         self.last_note = event
 
@@ -500,12 +501,16 @@ class _PartConverter:
         self.last_note["tuplets"].extend(
             tuplet for tuplet in member["tuplets"] if tuplet not in self.last_note["tuplets"]
         )
-        verses = {lyric["number"] for lyric in self.last_note["lyrics"]}
+        self.add_lyrics(self.last_note, lyrics)
+
+    def add_lyrics(self, event: dict[str, Any], lyrics: list[dict[str, Any]]) -> None:
+        """Append lyrics, keeping one per verse number; lyrics without a number are all kept."""
         for lyric in lyrics:
-            if lyric["number"] in verses:
-                self.unsupported("A second lyric for the same verse on one chord")
+            number = lyric["number"]
+            if number is not None and any(kept["number"] == number for kept in event["lyrics"]):
+                self.unsupported("A second lyric for the same verse number on one note or chord")
             else:
-                self.last_note["lyrics"].append(lyric)
+                event["lyrics"].append(lyric)
 
     def tempo_bpm(self, sound: ET.Element) -> float | None:
         """<sound tempo> in quarter notes per minute; None (with a warning) unless positive."""

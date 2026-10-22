@@ -54,7 +54,7 @@ Events of a measure are in source order. Every event has `kind` and `offset`; mo
 
 `rest.hidden` is `true` when the rest's `<note>` has `print-object="no"`: a placeholder that is not printed, such as the gap fillers notation programs export for a second voice.
 
-A chord is one `note` event with several `pitches`: each MusicXML `<chord/>` note is merged into the note before it, and its lyrics are appended to that event's `lyrics`. A lyric for a verse number the chord already has is not added twice; it produces `score_unsupported_element`. A `<chord/>` member whose grace status, voice, staff, duration, type, dots or time modification differs from the chord's first note is merged with the first note's values, which also produces `score_unsupported_element`.
+A chord is one `note` event with several `pitches`: each MusicXML `<chord/>` note is merged into the note before it, and its lyrics are appended to that event's `lyrics`. Its lyrics follow the same one-per-verse-number rule as a single note's. A `<chord/>` member whose grace status, voice, staff, duration, type, dots or time modification differs from the chord's first note is merged with the first note's values, which also produces `score_unsupported_element`.
 
 ### Lyrics and verses
 
@@ -67,7 +67,7 @@ Each `<lyric>` becomes one entry in the note's `lyrics`, in source order, with:
 - `extend`: `{type}` from `<extend>` (`type` is `null` when not given), or `null`;
 - `elided`: `true` when the lyric contains `<elision>`, i.e. several syllables sung on one note.
 
-Several verses under the same notes stay separate: read verse *n* by taking the lyric with `number == n` from each note. Elided syllables (`<text>`, `<elision>`, `<text>`) become one lyric with `elided: true` whose text joins the parts with the elision text as written (`"a‿b"`). An empty `<elision/>` adds no text (`"ae"`): the converter does not invent the undertie it is drawn as, so a consumer that needs the mark draws it from `elided`; its `syllabic` combines the first and last parts (`end` + `begin` gives `middle`). How lyric numbering varies between engines and how to map it to ABC verses is studied in issue #28.
+Several verses under the same notes stay separate: read verse *n* by taking the lyric with `number == n` from each note. Each note keeps one lyric per verse number; a second lyric with the same `number`, on the note or on a `<chord/>` member merged into it, produces `score_unsupported_element`. Lyrics without a `number` are all kept, in source order, because the source does not say which verse they belong to (some exporters tell them apart only by position). Elided syllables (`<text>`, `<elision>`, `<text>`) become one lyric with `elided: true` whose text joins the parts with the elision text as written (`"a‿b"`). An empty `<elision/>` adds no text (`"ae"`): the converter does not invent the undertie it is drawn as, so a consumer that needs the mark draws it from `elided`; its `syllabic` combines the first and last parts (`end` + `begin` gives `middle`). How lyric numbering varies between engines and how to map it to ABC verses is studied in issue #28.
 
 ## Example
 

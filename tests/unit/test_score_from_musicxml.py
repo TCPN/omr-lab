@@ -276,6 +276,41 @@ def test_repeated_verse_on_a_chord_member_is_kept_once() -> None:
     assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
 
 
+UNNUMBERED_LYRICS = "<lyric><text>我</text></lyric><lyric><text>你</text></lyric>"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+        f"{UNNUMBERED_LYRICS}</note>",
+        "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+        "<lyric><text>我</text></lyric></note>"
+        "<note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration>"
+        "<lyric><text>你</text></lyric></note>",
+    ],
+    ids=["single-note", "chord-member"],
+)
+def test_lyrics_without_number_are_all_kept(content: str) -> None:
+    conversion = _convert(_measure(content))
+
+    assert [lyric["text"] for lyric in _events(conversion)[0]["lyrics"]] == ["我", "你"]
+    assert _codes(conversion) == []
+
+
+def test_repeated_verse_number_on_a_single_note_is_kept_once() -> None:
+    lyrics = '<lyric number="1"><text>a</text></lyric><lyric number="1"><text>b</text></lyric>'
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+            f"{lyrics}</note>"
+        )
+    )
+
+    assert [lyric["text"] for lyric in _events(conversion)[0]["lyrics"]] == ["a"]
+    assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
+
+
 def test_chord_member_with_empty_duration_keeps_later_offsets() -> None:
     conversion = _convert(
         _measure(
