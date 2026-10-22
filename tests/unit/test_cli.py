@@ -11,7 +11,7 @@ from omr_lab.cli import (
     EXIT_INVALID_INPUT,
     EXIT_INVALID_OPTION,
     EXIT_OK,
-    EXIT_OUTPUT_DIR,
+    EXIT_OUTPUT_DIR_UNUSABLE,
     EXIT_RUN_FAILED,
     EXIT_USAGE,
     build_parser,
@@ -214,7 +214,7 @@ def test_non_empty_output_dir_exits_without_run_document(
 
     code = main(_mock_run(image, output))
 
-    assert code == EXIT_OUTPUT_DIR
+    assert code == EXIT_OUTPUT_DIR_UNUSABLE
     assert "is not empty" in capsys.readouterr().err
     assert sorted(p.name for p in output.iterdir()) == ["keep.txt"]
 
@@ -227,13 +227,16 @@ def test_aborted_run_directory_is_reported(
 
     code = main(_mock_run(image, output))
 
-    assert code == EXIT_OUTPUT_DIR
+    assert code == EXIT_OUTPUT_DIR_UNUSABLE
     assert "holds an aborted run" in capsys.readouterr().err
     assert not (output / "run.json").exists()
 
 
-def test_interrupted_run_exits_with_130(
-    image: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_interrupt_before_the_run_document_exits_with_130(
+    image: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     def interrupt(*args: object, **kwargs: object) -> None:
         raise KeyboardInterrupt
@@ -241,6 +244,25 @@ def test_interrupted_run_exits_with_130(
     monkeypatch.setattr(cli, "run_pipeline", interrupt)
 
     assert main(_mock_run(image, tmp_path / "run")) == EXIT_INTERRUPTED
+    assert "interrupted before the run document was written" in capsys.readouterr().err
+
+
+def test_interrupt_during_the_engine_points_to_the_run_document(
+    image: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def interrupt(self: MockEngine, *args: object, **kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(MockEngine, "recognize", interrupt)
+    output = tmp_path / "run"
+
+    assert main(_mock_run(image, output)) == EXIT_INTERRUPTED
+    assert f"interrupted; see {output / 'run.json'}" in capsys.readouterr().err
+    document = json.loads((output / "run.json").read_text(encoding="utf-8"))
+    assert document["error"]["code"] == "interrupted"
 
 
 def test_input_name_the_run_document_cannot_store_is_a_usage_error(
@@ -266,7 +288,7 @@ def test_run_document_that_cannot_be_written_is_reported(
 
     code = main(_mock_run(image, output))
 
-    assert code == EXIT_OUTPUT_DIR
+    assert code == EXIT_OUTPUT_DIR_UNUSABLE
     err = capsys.readouterr().err
     assert "could not be written (No space left on device)" in err
     assert "aborted run" in err

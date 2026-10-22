@@ -40,7 +40,7 @@ EXIT_ENGINE_UNAVAILABLE = 4
 """The engine's prerequisites are missing (``run``), or an engine is unavailable (``doctor``)."""
 EXIT_INVALID_OPTION = 5
 """The engine rejected an ``--option`` name or value."""
-EXIT_OUTPUT_DIR = 6
+EXIT_OUTPUT_DIR_UNUSABLE = 6
 """The output directory cannot be used; no run document was written."""
 EXIT_INTERRUPTED = 130
 """Stopped with Ctrl-C (128 + SIGINT, the shell convention)."""
@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
             f"Exit codes: {EXIT_OK} success, {EXIT_RUN_FAILED} run failed, "
             f"{EXIT_USAGE} usage error, {EXIT_INVALID_INPUT} invalid input, "
             f"{EXIT_ENGINE_UNAVAILABLE} engine unavailable, {EXIT_INVALID_OPTION} invalid "
-            f"engine option, {EXIT_OUTPUT_DIR} unusable output directory, "
+            f"engine option, {EXIT_OUTPUT_DIR_UNUSABLE} unusable output directory, "
             f"{EXIT_INTERRUPTED} interrupted. See docs/cli.md."
         ),
     )
@@ -130,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--timeout",
-        type=_positive_seconds,
+        type=_parse_timeout_seconds,
         default=DEFAULT_TIMEOUT_SECONDS,
         metavar="SECONDS",
         help=f"Engine timeout in seconds (default: {DEFAULT_TIMEOUT_SECONDS:g}).",
@@ -163,11 +163,11 @@ def parse_options(pairs: Sequence[str]) -> EngineOptions:
             raise ValueError(f"--option {pair!r} must have the form KEY=VALUE")
         if key in options:
             raise ValueError(f"--option {key!r} is given more than once")
-        options[key] = _option_value(text)
+        options[key] = _parse_option_value(text)
     return options
 
 
-def _option_value(text: str) -> EngineOptionValue:
+def _parse_option_value(text: str) -> EngineOptionValue:
     try:
         value = json.loads(text)
     except ValueError:
@@ -182,7 +182,7 @@ def _option_value(text: str) -> EngineOptionValue:
     return value
 
 
-def _positive_seconds(text: str) -> float:
+def _parse_timeout_seconds(text: str) -> float:
     try:
         value = float(text)
     except ValueError:
@@ -192,11 +192,11 @@ def _positive_seconds(text: str) -> float:
     return value
 
 
-def _doctor(only: str | None, out: TextIO) -> int:
+def _doctor(engine_name: str | None, out: TextIO) -> int:
     print(f"omr-lab {__version__}", file=out)
     print(f"Python {platform.python_version()} ({sys.executable})", file=out)
     exit_code = EXIT_OK
-    for name in [only] if only else sorted(ENGINES):
+    for name in [engine_name] if engine_name else sorted(ENGINES):
         availability = ENGINES[name]().check_available()
         if availability.available:
             version = f" {availability.version}" if availability.version else ""
@@ -214,10 +214,10 @@ def _run(
     options: EngineOptions,
     timeout_seconds: float,
 ) -> int:
-    aborted = _aborted_run_message(output_dir)
-    if aborted is not None:
-        print(f"omr-lab: error: {aborted}", file=sys.stderr)
-        return EXIT_OUTPUT_DIR
+    aborted_message = _aborted_run_message(output_dir)
+    if aborted_message is not None:
+        print(f"omr-lab: error: {aborted_message}", file=sys.stderr)
+        return EXIT_OUTPUT_DIR_UNUSABLE
     engine = ENGINES[engine_name]()
     try:
         result = run_pipeline(
@@ -225,10 +225,15 @@ def _run(
         )
     except OutputDirectoryError as exc:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
-        return EXIT_OUTPUT_DIR
+        return EXIT_OUTPUT_DIR_UNUSABLE
     except KeyboardInterrupt:
-        # run_pipeline wrote an "interrupted" run.json before re-raising.
-        print(f"omr-lab: interrupted; see {output_dir / RUN_DOCUMENT_FILENAME}", file=sys.stderr)
+        # run_pipeline records "interrupted" only for a Ctrl-C during the engine step;
+        # before or after it, no run.json is written.
+        document_path = output_dir / RUN_DOCUMENT_FILENAME
+        if document_path.is_file():
+            print(f"omr-lab: interrupted; see {document_path}", file=sys.stderr)
+        else:
+            print("omr-lab: interrupted before the run document was written", file=sys.stderr)
         return EXIT_INTERRUPTED
     except ValueError as exc:
         # Arguments that make a run record impossible, such as an input file name
@@ -244,7 +249,7 @@ def _run(
             "inspection and choose a new output directory.",
             file=sys.stderr,
         )
-        return EXIT_OUTPUT_DIR
+        return EXIT_OUTPUT_DIR_UNUSABLE
 
     document = result.document
     print(f"Run document: {result.document_path}")
