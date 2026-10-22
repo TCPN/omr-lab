@@ -21,7 +21,16 @@ uv run ruff check .
 uv run omr-lab --help
 ```
 
-Installing and testing the project does not require Java or an OMR engine. With Audiveris installed, `AudiverisEngine.recognize()` already runs real recognition; the CLI and pipeline integration come later in milestone M1.
+Installing and testing the project does not require Java or an OMR engine.
+
+## Command line
+```bash
+uv run omr-lab doctor                                    # which engines this machine can run
+uv run omr-lab run score.png -o runs/0001                # recognize with Audiveris (the default)
+uv run omr-lab run score.png -o runs/0002 --engine mock  # try the CLI without an engine
+```
+
+`run` writes `runs/0001/run.json` (the run document, [docs/json-schema.md](docs/json-schema.md)) and the engine's raw output under `runs/0001/raw/`, and exits with a documented code (0 on success). Options, output and exit codes are in [docs/cli.md](docs/cli.md). The mock engine recognizes nothing; real recognition needs Audiveris (see `docs/engines/audiveris.md`).
 
 ## Test selection
 Tests that need more than a plain Python environment carry a pytest marker:
@@ -49,6 +58,7 @@ uv run pytest -m ""                     # everything, marked or not
 - `docs/architecture.md`: boundaries and data flow
 - `docs/json-schema.md`: normalized run document contract (schema in `src/omr_lab/schemas/`)
 - `docs/pipeline.md`: pipeline orchestration, output layout, and the mock engine
+- `docs/cli.md`: `omr-lab doctor` and `omr-lab run`, options and exit codes
 - `docs/musicxml.md`: MusicXML loading, validation errors/warnings, and XML safety
 - `docs/governance/`: roles, workflow, milestones and labels
 - `docs/issues/`: proposed issue bodies (not yet live GitHub Issues)
