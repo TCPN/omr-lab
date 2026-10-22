@@ -30,7 +30,8 @@ INVALID_EXPECTED_PATH = {
     "succeeded-with-error": "$.error",
     "error-missing-message": "$.error",
     "missing-score": "$",
-    "fabricated-score-content": "$.score",
+    "fabricated-score-content": "$.score.parts[0].measures[0].events[4]",
+    "decimal-score-duration": "$.score.parts[0].measures[0].events[4].duration",
     "missing-options": "$",
     "absolute-artifact-path": "$.artifacts.musicxml",
     "parent-artifact-path": "$.artifacts.musicxml",
@@ -87,7 +88,25 @@ def test_valid_documents_carry_version_and_engine_provenance(path):
 def test_missing_musical_content_is_explicit_null(path):
     document = _load(path)
     assert "score" in document
-    assert document["score"] is None
+    if document["status"] == "failed":
+        assert document["score"] is None
+
+
+def test_valid_fixtures_include_a_score_object():
+    scores = [_load(path)["score"] for path in VALID]
+    assert any(isinstance(score, dict) for score in scores)
+
+
+def test_previous_version_still_validates_but_has_no_score_model():
+    document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
+    document["schema_version"] = "0.1.0"
+    validate_run_document(document)
+
+    with_score = _load(FIXTURES / "valid" / "succeeded-with-score.json")
+    with_score["schema_version"] = "0.1.0"
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(with_score)
+    assert [m.split(": ", 1)[0] for m in excinfo.value.errors] == ["$.score"]
 
 
 def test_non_object_document_is_rejected():

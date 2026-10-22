@@ -14,10 +14,10 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from omr_lab.schemas.codes import RunErrorCode, RunWarningCode
 
-CURRENT_RUN_SCHEMA_VERSION = "0.1.0"
+CURRENT_RUN_SCHEMA_VERSION = "0.2.0"
 """Version of the run document schema that this package writes."""
 
-SUPPORTED_RUN_SCHEMA_VERSIONS: tuple[str, ...] = ("0.1.0",)
+SUPPORTED_RUN_SCHEMA_VERSIONS: tuple[str, ...] = ("0.1.0", "0.2.0")
 """Run document schema versions that can be validated; older files stay packaged."""
 
 

@@ -2,7 +2,7 @@
 
 They live next to the schema, not in the pipeline, so any module that records a
 run failure (for example MusicXML validation) can use them without importing the
-pipeline. The 0.1.0 schema checks only the snake_case pattern; a unit test keeps
+pipeline. The schemas check only the snake_case pattern; a unit test keeps
 these enums and the documented table in step.
 """
 
@@ -34,6 +34,10 @@ class RunWarningCode(StrEnum):
     ENGINE_DIAGNOSTIC_NOT_RECORDED = "engine_diagnostic_not_recorded"
     UNEXPECTED_ERROR = "unexpected_error"
     RUN_DOCUMENT_INCOMPLETE = "run_document_incomplete"
+    SCORE_UNSUPPORTED_ELEMENT = "score_unsupported_element"
+    SCORE_INVALID_VALUE = "score_invalid_value"
+    SCORE_DIVISIONS_MISSING = "score_divisions_missing"
+    SCORE_TIMING_INCONSISTENT = "score_timing_inconsistent"
 
 
 __all__ = ["RunErrorCode", "RunWarningCode"]

@@ -79,7 +79,7 @@ _PRIMARY_MUSICXML_KEY = "musicxml"
 _PIPELINE_ARTIFACT_KINDS = frozenset({ENGINE_DIAGNOSTICS_KIND})
 
 _SCORE_NOT_NORMALIZED_MESSAGE = (
-    f"Normalized score content is not produced by run schema {CURRENT_RUN_SCHEMA_VERSION}; "
+    "The pipeline does not convert engine output into the score model yet; "
     "the recognized notation is only in the raw artifacts."
 )
 
