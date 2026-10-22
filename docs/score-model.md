@@ -43,14 +43,16 @@ Events of a measure are in source order. Every event has `kind` and `offset`; mo
 | `kind` | Fields |
 | --- | --- |
 | `note` | `voice`, `staff`, `duration`, `type`, `dots`, `time_modification` `{actual_notes, normal_notes}` \| `null`, `tuplets[]` `{type: start\|stop, number}`, `grace` `{slash}` \| `null`, `pitches[]` `{step, alter, octave, ties[]}`, `lyrics[]` |
-| `rest` | `voice`, `staff`, `duration`, `type`, `dots`, `time_modification`, `tuplets[]`, `measure_rest` |
-| `harmony` | `staff`, `root` `{step, alter}`, `kind_value`, `kind_text`, `bass` `{step, alter}` \| `null`, `degrees[]` `{value, alter, type}` |
+| `rest` | `voice`, `staff`, `duration`, `type`, `dots`, `time_modification`, `tuplets[]`, `measure_rest`, `hidden` |
+| `harmony` | `staff`, `root` `{step, alter}`, `chord_kind`, `chord_kind_text`, `bass` `{step, alter}` \| `null`, `degrees[]` `{value, alter, type}` |
 | `tempo` | `staff`, `bpm`, `beat_unit`, `beat_unit_dots`, `per_minute`, `words` |
 | `clef` | `staff`, `sign`, `line`, `octave_change` |
 | `key` | `staff`, `fifths`, `mode` |
 | `time` | `staff`, `beats`, `beat_type`, `symbol` |
 
-`harmony.kind_text` is the `text` attribute of `<kind>` as written: `null` when absent, and `""` when the source says to print no kind text (for example a major chord shown as the root alone).
+`harmony.chord_kind` is the `<kind>` value (e.g. `major`, `minor-seventh`), named so it is not confused with the event `kind`. `harmony.chord_kind_text` is the `text` attribute of `<kind>` as written: `null` when absent, and `""` when the source says to print no kind text (for example a major chord shown as the root alone).
+
+`rest.hidden` is `true` when the rest's `<note>` has `print-object="no"`: a placeholder that is not printed, such as the gap fillers notation programs export for a second voice.
 
 A chord is one `note` event with several `pitches`: each MusicXML `<chord/>` note is merged into the note before it, and its lyrics are appended to that event's `lyrics`. A lyric for a verse number the chord already has is not added twice; it produces `score_unsupported_element`. A `<chord/>` member whose grace status, voice, staff, duration, type, dots or time modification differs from the chord's first note is merged with the first note's values, which also produces `score_unsupported_element`.
 
@@ -62,9 +64,10 @@ Each `<lyric>` becomes one entry in the note's `lyrics`, in source order, with:
 - `name`: the `name` attribute (e.g. `"verse"`, `"chorus"`), or `null`;
 - `syllabic`: `single`, `begin`, `middle`, `end` or `null`;
 - `text`: the syllable, or `null` for a lyric with no `<text>` (an extender-only lyric continuing a melisma);
-- `extend`: `{type}` from `<extend>` (`type` is `null` when not given), or `null`.
+- `extend`: `{type}` from `<extend>` (`type` is `null` when not given), or `null`;
+- `elided`: `true` when the lyric contains `<elision>`, i.e. several syllables sung on one note.
 
-Several verses under the same notes stay separate: read verse *n* by taking the lyric with `number == n` from each note. Elided syllables (`<text>`, `<elision>`, `<text>`) become one lyric whose text joins the parts with the elision text (`"a‿b"`; an empty `<elision/>` is written as `‿`, U+203F, the undertie it is drawn as); its `syllabic` combines the first and last parts (`end` + `begin` gives `middle`). How lyric numbering varies between engines and how to map it to ABC verses is studied in issue #28.
+Several verses under the same notes stay separate: read verse *n* by taking the lyric with `number == n` from each note. Elided syllables (`<text>`, `<elision>`, `<text>`) become one lyric with `elided: true` whose text joins the parts with the elision text as written (`"a‿b"`). An empty `<elision/>` adds no text (`"ae"`): the converter does not invent the undertie it is drawn as, so a consumer that needs the mark draws it from `elided`; its `syllabic` combines the first and last parts (`end` + `begin` gives `middle`). How lyric numbering varies between engines and how to map it to ABC verses is studied in issue #28.
 
 ## Example
 
@@ -77,13 +80,13 @@ The first notes of `score-features.musicxml` (pickup measure; the key, time, cle
   "barlines": [],
   "events": [
     {"kind": "harmony", "offset": "0", "staff": null, "root": {"step": "G", "alter": 0},
-     "kind_value": "major", "kind_text": null, "bass": null, "degrees": []},
+     "chord_kind": "major", "chord_kind_text": null, "bass": null, "degrees": []},
     {"kind": "note", "offset": "0", "voice": "1", "staff": null, "duration": "1/4",
      "type": "quarter", "dots": 0, "time_modification": null, "tuplets": [], "grace": null,
      "pitches": [{"step": "D", "alter": 0, "octave": 4, "ties": []}],
      "lyrics": [
-       {"number": "1", "name": null, "syllabic": "single", "text": "我", "extend": null},
-       {"number": "2", "name": null, "syllabic": "single", "text": "你", "extend": null}
+       {"number": "1", "name": null, "syllabic": "single", "text": "我", "extend": null, "elided": false},
+       {"number": "2", "name": null, "syllabic": "single", "text": "你", "extend": null, "elided": false}
      ]}
   ]
 }
@@ -110,11 +113,11 @@ The ABC column names the construct a later ABC export would use (ABC 2.1 as rend
 | `duration`, `type`, `dots` | `<duration>`/`<divisions>`, `<type>`, `<dot/>` | length multiple of `L:` (e.g. `3/2`, `>` broken rhythm) |
 | `time_modification`, `tuplets[]` | `<time-modification>`, `<notations><tuplet>` | `(3` / `(p:q:r` |
 | `grace` | `<grace slash>` | `{g}`, `{/g}` (acciaccatura) |
-| `rest`, `measure_rest` | `<rest>`, `<rest measure="yes">` | `z`, `Z` |
+| `rest`, `measure_rest`, `hidden` | `<rest>`, `<rest measure="yes">`, `<note print-object="no">` | `z`, `Z`; `x`, `X` when hidden |
 | `voice`, `staff` | `<voice>`, `<staff>` | `V:` per voice or staff, `&` overlay |
 | `note.lyrics[]` by `number` | `<lyric number>` | one `w:` line per verse under the music line |
 | `lyrics[].syllabic`, `extend` | `<syllabic>`, `<extend>` | `-` between syllables, `_` for a melisma, `*` to skip a note |
-| `harmony` `root`, `kind_value`/`kind_text`, `bass`, `degrees` | `<harmony><root>`, `<kind text>`, `<bass>`, `<degree>` | `"Am7"`, `"D/F#"` chord symbol before the note |
+| `harmony` `root`, `chord_kind`/`chord_kind_text`, `bass`, `degrees` | `<harmony><root>`, `<kind text>`, `<bass>`, `<degree>` | `"Am7"`, `"D/F#"` chord symbol before the note |
 | `tempo` `bpm`, `beat_unit`, `per_minute`, `words` | `<sound tempo>`, `<metronome>`, `<words>` | `Q:1/4=96 "Moderato"` |
 | `clef` | `<clef><sign><line><clef-octave-change>` | `clef=treble`, `bass`, `alto`, `treble-8` in `K:`/`V:` |
 | `key` `fifths`, `mode` | `<key><fifths><mode>` | `K:G`, `K:Em` |
@@ -141,7 +144,7 @@ These are skipped without a warning because they describe layout or playback rat
 - in `<measure>`: `<print>`;
 - in `<direction>`: `<voice>`, `<listening>`; in `<harmony>`: `<frame>` (fretboard diagram);
 - in `<sound>`: `<instrument-change>`, `<midi-device>`, `<midi-instrument>`, `<play>` (playback setup). A measure-level `<sound>` `<offset>` moves its tempo event; other `<sound>` children (`<swing>`, an `<offset>` inside `<direction>`) produce `score_unsupported_element`;
-- everywhere: `<footnote>`, `<level>`, all attributes not named in this document (positions, colors, fonts, `print-object`), and `<sound>` playback attributes such as `dynamics` or `pizzicato`. The `<sound>` navigation attributes (`segno`, `dalsegno`, `coda`, `tocoda`, `dacapo`, `fine`, `forward-repeat`) change the playing order, so they produce `score_unsupported_element`. `<time-modification>` `<normal-type>`/`<normal-dot>` are also skipped.
+- everywhere: `<footnote>`, `<level>`, all attributes not named in this document (positions, colors, fonts, and `print-object` except on a rest's `<note>`), and `<sound>` playback attributes such as `dynamics` or `pizzicato`. The `<sound>` navigation attributes (`segno`, `dalsegno`, `coda`, `tocoda`, `dacapo`, `fine`, `forward-repeat`) change the playing order, so they produce `score_unsupported_element`. `<time-modification>` `<normal-type>`/`<normal-dot>` are also skipped.
 
 ## Limitations
 

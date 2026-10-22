@@ -355,11 +355,18 @@ def test_elided_syllables_join_into_one_lyric() -> None:
     )
 
     assert _events(conversion)[0]["lyrics"] == [
-        {"number": "1", "name": "verse", "syllabic": "middle", "text": "a‿b", "extend": None}
+        {
+            "number": "1",
+            "name": "verse",
+            "syllabic": "middle",
+            "text": "a‿b",
+            "extend": None,
+            "elided": True,
+        }
     ]
 
 
-def test_empty_elision_keeps_the_syllable_boundary() -> None:
+def test_empty_elision_adds_no_text_and_marks_the_lyric_elided() -> None:
     conversion = _convert(
         _measure(
             "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
@@ -367,7 +374,39 @@ def test_empty_elision_keeps_the_syllable_boundary() -> None:
         )
     )
 
-    assert _events(conversion)[0]["lyrics"][0]["text"] == "a\u203fe"
+    lyric = _events(conversion)[0]["lyrics"][0]
+    assert (lyric["text"], lyric["elided"]) == ("ae", True)
+
+
+def test_lyric_without_elision_is_not_elided() -> None:
+    conversion = _convert(
+        _measure(
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+            "<lyric><text>a</text></lyric></note>"
+        )
+    )
+
+    assert _events(conversion)[0]["lyrics"][0]["elided"] is False
+
+
+@pytest.mark.parametrize(("attribute", "hidden"), [(' print-object="no"', True), ("", False)])
+def test_rest_records_whether_it_is_printed(attribute: str, hidden: bool) -> None:
+    conversion = _convert(_measure(f"<note{attribute}><rest/><duration>1</duration></note>"))
+
+    assert _events(conversion)[0]["hidden"] is hidden
+
+
+def test_harmony_kind_is_recorded_as_chord_kind() -> None:
+    conversion = _convert(
+        _measure(
+            '<harmony><root><root-step>A</root-step></root><kind text="m7">minor-seventh</kind>'
+            f"</harmony>{NOTE_C4}"
+        )
+    )
+
+    harmony = _events(conversion)[0]
+    assert (harmony["chord_kind"], harmony["chord_kind_text"]) == ("minor-seventh", "m7")
+    assert "kind_value" not in harmony
 
 
 def test_missing_divisions_gives_null_timing_with_a_warning() -> None:

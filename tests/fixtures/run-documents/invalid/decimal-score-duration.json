@@ -75,8 +75,8 @@
                   "step": "C",
                   "alter": 0
                 },
-                "kind_value": "major",
-                "kind_text": null,
+                "chord_kind": "major",
+                "chord_kind_text": null,
                 "bass": null,
                 "degrees": []
               },
@@ -105,14 +105,16 @@
                     "name": null,
                     "syllabic": "single",
                     "text": "一",
-                    "extend": null
+                    "extend": null,
+                    "elided": false
                   },
                   {
                     "number": "2",
                     "name": null,
                     "syllabic": "single",
                     "text": "二",
-                    "extend": null
+                    "extend": null,
+                    "elided": false
                   }
                 ]
               }

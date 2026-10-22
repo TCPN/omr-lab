@@ -442,6 +442,7 @@ class _PartConverter:
                 self.invalid("A <rest> marked as <chord/> was converted as a separate rest")
             event = self.duration_fields("rest", element, offset, duration)
             event["measure_rest"] = rest.get("measure") == "yes"
+            event["hidden"] = element.get("print-object") == "no"
             events.append(event)
             if lyrics:
                 self.unsupported("<lyric> on a rest")
@@ -590,8 +591,8 @@ class _PartConverter:
             if child.tag == "text":
                 texts.append(child.text or "")
             elif child.tag == "elision":
-                # An empty <elision/> is drawn as the default undertie; keep the boundary.
-                texts.append(child.text or "\u203f")
+                # An empty <elision/> adds no text; "elided" records that syllables were joined.
+                texts.append(child.text or "")
             elif child.tag == "syllabic":
                 value = _text(child)
                 if value in _SYLLABIC:
@@ -612,6 +613,7 @@ class _PartConverter:
             "syllabic": _combined_syllabic(syllabics),
             "text": "".join(texts) if element.find("text") is not None else None,
             "extend": extend,
+            "elided": element.find("elision") is not None,
         }
 
     # -- attributes ----------------------------------------------------------------------
@@ -766,8 +768,8 @@ class _PartConverter:
                 "offset": _nullable_rational(self.offset_of(element)),
                 "staff": self.staff(element),
                 "root": root,
-                "kind_value": _text(kind),
-                "kind_text": None if kind is None else kind.get("text"),
+                "chord_kind": _text(kind),
+                "chord_kind_text": None if kind is None else kind.get("text"),
                 "bass": bass,
                 "degrees": degrees,
             }

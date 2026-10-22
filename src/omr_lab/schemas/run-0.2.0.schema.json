@@ -776,7 +776,8 @@
         "dots",
         "time_modification",
         "tuplets",
-        "measure_rest"
+        "measure_rest",
+        "hidden"
       ],
       "properties": {
         "kind": {
@@ -848,6 +849,10 @@
         "measure_rest": {
           "description": "True for <rest measure=\"yes\">, a whole-measure rest.",
           "type": "boolean"
+        },
+        "hidden": {
+          "description": "True for a rest in <note print-object=\"no\">: a placeholder that is not printed (ABC 'x' rather than 'z').",
+          "type": "boolean"
         }
       }
     },
@@ -860,8 +865,8 @@
         "offset",
         "staff",
         "root",
-        "kind_value",
-        "kind_text",
+        "chord_kind",
+        "chord_kind_text",
         "bass",
         "degrees"
       ],
@@ -884,15 +889,15 @@
         "root": {
           "$ref": "#/$defs/pitchClass"
         },
-        "kind_value": {
+        "chord_kind": {
           "description": "MusicXML <kind> value, e.g. 'major', 'minor-seventh'; null when empty.",
           "type": [
             "string",
             "null"
           ]
         },
-        "kind_text": {
-          "description": "<kind text> as printed (e.g. 'm7'), or null.",
+        "chord_kind_text": {
+          "description": "<kind text> as printed (e.g. 'm7'): null when absent, '' when no kind text is printed.",
           "type": [
             "string",
             "null"
@@ -1247,7 +1252,8 @@
         "name",
         "syllabic",
         "text",
-        "extend"
+        "extend",
+        "elided"
       ],
       "properties": {
         "number": {
@@ -1275,7 +1281,7 @@
           ]
         },
         "text": {
-          "description": "Syllable text; several <text> parts joined with their <elision> text. null when the lyric has no text (an extender-only lyric).",
+          "description": "Syllable text; several <text> parts joined with the text of the <elision> between them (an empty <elision/> adds nothing). null when the lyric has no text (an extender-only lyric).",
           "type": [
             "string",
             "null"
@@ -1305,6 +1311,10 @@
               }
             }
           }
+        },
+        "elided": {
+          "description": "True when the lyric contains <elision>: several syllables sung on this one note.",
+          "type": "boolean"
         }
       }
     }

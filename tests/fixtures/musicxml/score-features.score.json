@@ -65,8 +65,8 @@
                 "step": "G",
                 "alter": 0
               },
-              "kind_value": "major",
-              "kind_text": null,
+              "chord_kind": "major",
+              "chord_kind_text": null,
               "bass": null,
               "degrees": []
             },
@@ -95,14 +95,16 @@
                   "name": null,
                   "syllabic": "single",
                   "text": "我",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 },
                 {
                   "number": "2",
                   "name": null,
                   "syllabic": "single",
                   "text": "你",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 }
               ]
             }
@@ -131,8 +133,8 @@
                 "step": "G",
                 "alter": 0
               },
-              "kind_value": "major",
-              "kind_text": null,
+              "chord_kind": "major",
+              "chord_kind_text": null,
               "bass": null,
               "degrees": []
             },
@@ -161,14 +163,16 @@
                   "name": null,
                   "syllabic": "begin",
                   "text": "讚",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 },
                 {
                   "number": "2",
                   "name": null,
                   "syllabic": "begin",
                   "text": "感",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 }
               ]
             },
@@ -197,14 +201,16 @@
                   "name": null,
                   "syllabic": "end",
                   "text": "美",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 },
                 {
                   "number": "2",
                   "name": null,
                   "syllabic": "end",
                   "text": "謝",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 }
               ]
             },
@@ -237,7 +243,8 @@
                   "text": "主",
                   "extend": {
                     "type": "start"
-                  }
+                  },
+                  "elided": false
                 },
                 {
                   "number": "2",
@@ -246,7 +253,8 @@
                   "text": "神",
                   "extend": {
                     "type": "start"
-                  }
+                  },
+                  "elided": false
                 }
               ]
             }
@@ -265,8 +273,8 @@
                 "step": "D",
                 "alter": 0
               },
-              "kind_value": "major",
-              "kind_text": "",
+              "chord_kind": "major",
+              "chord_kind_text": "",
               "bass": {
                 "step": "F",
                 "alter": 1
@@ -302,7 +310,8 @@
                   "text": null,
                   "extend": {
                     "type": "stop"
-                  }
+                  },
+                  "elided": false
                 }
               ]
             },
@@ -419,8 +428,8 @@
                 "step": "D",
                 "alter": 0
               },
-              "kind_value": "dominant",
-              "kind_text": "7",
+              "chord_kind": "dominant",
+              "chord_kind_text": "7",
               "bass": null,
               "degrees": [
                 {
@@ -461,14 +470,16 @@
                   "name": null,
                   "syllabic": "single",
                   "text": "恩",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 },
                 {
                   "number": "2",
                   "name": null,
                   "syllabic": "single",
                   "text": "愛",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 }
               ]
             }
@@ -511,8 +522,8 @@
                 "step": "C",
                 "alter": 0
               },
-              "kind_value": "major",
-              "kind_text": null,
+              "chord_kind": "major",
+              "chord_kind_text": null,
               "bass": null,
               "degrees": []
             },
@@ -541,14 +552,16 @@
                   "name": null,
                   "syllabic": "begin",
                   "text": "永",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 },
                 {
                   "number": "2",
                   "name": null,
                   "syllabic": "begin",
                   "text": "直",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 }
               ]
             },
@@ -562,7 +575,8 @@
               "dots": 0,
               "time_modification": null,
               "tuplets": [],
-              "measure_rest": false
+              "measure_rest": false,
+              "hidden": false
             },
             {
               "kind": "note",
@@ -645,14 +659,16 @@
                   "name": null,
                   "syllabic": "end",
                   "text": "遠",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 },
                 {
                   "number": "2",
                   "name": null,
                   "syllabic": "end",
                   "text": "到",
-                  "extend": null
+                  "extend": null,
+                  "elided": false
                 }
               ]
             }
