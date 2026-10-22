@@ -441,9 +441,11 @@ def _record_score(state: _RunState, output_dir: Path) -> None:
     _record_result). Loader warnings come before converter warnings; both keep
     their own codes and messages, which already say where the problem is.
     """
-    relative = state.artifacts[_PRIMARY_MUSICXML_KEY]
+    artifact_path = state.artifacts[_PRIMARY_MUSICXML_KEY]
     try:
-        document = load_musicxml(output_dir / relative)
+        # Absolute, so the loader's messages name a path the redactor recognizes even
+        # when output_dir was given as a relative path.
+        document = load_musicxml(output_dir.absolute() / artifact_path)
     except MusicXmlError as exc:
         reason = exc.message
         if exc.code == "musicxml_too_large":
@@ -454,7 +456,7 @@ def _record_score(state: _RunState, output_dir: Path) -> None:
             )
         state.record_error(
             RunErrorCode.MUSICXML_INVALID,
-            f"The engine's MusicXML artifact {relative!r} could not be loaded "
+            f"The engine's MusicXML artifact {artifact_path!r} could not be loaded "
             f"({exc.code}): {reason}",
         )
         return

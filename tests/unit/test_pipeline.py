@@ -1079,7 +1079,7 @@ def test_unwritable_diagnostics_file_adds_a_warning(score: Path, tmp_path: Path)
     assert document["warnings"][0]["message"].startswith("2 engine diagnostics were left out")
 
 
-def _scripted_musicxml(text: str) -> ScriptedEngine:
+def _engine_writing_musicxml(text: str) -> ScriptedEngine:
     return ScriptedEngine(
         build=lambda raw: EngineResult("scripted", success=True, artifacts=_primary(raw, text))
     )
@@ -1093,7 +1093,7 @@ def test_engine_musicxml_is_converted_into_the_score(score: Path, tmp_path: Path
         '<lyric number="1"><text>我</text></lyric></note></measure>',
     )
 
-    document = _written(run_pipeline(score, tmp_path / "run", _scripted_musicxml(text)))
+    document = _written(run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(text)))
 
     assert document["status"] == "succeeded"
     (note,) = document["score"]["parts"][0]["measures"][0]["events"]
@@ -1112,7 +1112,7 @@ def test_engine_musicxml_is_converted_into_the_score(score: Path, tmp_path: Path
 def test_musicxml_that_cannot_be_loaded_fails_the_run(
     score: Path, tmp_path: Path, text: str, loader_code: str
 ) -> None:
-    result = run_pipeline(score, tmp_path / "run", _scripted_musicxml(text))
+    result = run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(text))
 
     document = _written(result)
     assert document["status"] == "failed"
@@ -1125,13 +1125,27 @@ def test_musicxml_that_cannot_be_loaded_fails_the_run(
     assert str(tmp_path) not in result.document_path.read_text(encoding="utf-8")
 
 
+def test_musicxml_error_with_relative_output_dir_is_redacted(
+    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = run_pipeline(score, Path("run"), _engine_writing_musicxml("x"))
+
+    message = _written(result)["error"]["message"]
+    assert "<output_dir>/raw/score.musicxml" in message
+    assert "run/raw" not in message
+
+
 def test_too_large_musicxml_message_names_no_unreachable_setting(
     score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # run_pipeline has no max_bytes/max_elements, so the message must not ask to raise them.
     monkeypatch.setattr(pipeline_module, "load_musicxml", partial(load_musicxml, max_bytes=10))
 
-    document = _written(run_pipeline(score, tmp_path / "run", _scripted_musicxml(MINIMAL_MUSICXML)))
+    document = _written(
+        run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(MINIMAL_MUSICXML))
+    )
 
     message = document["error"]["message"]
     assert "(musicxml_too_large)" in message
@@ -1148,7 +1162,7 @@ def test_loader_and_converter_warnings_are_recorded_in_order(score: Path, tmp_pa
         '<notations><slur type="start"/></notations></note></measure>',
     ).replace("</score-partwise>", '<part id="P2"><measure number="1"/></part></score-partwise>')
 
-    result = run_pipeline(score, tmp_path / "run", _scripted_musicxml(text))
+    result = run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(text))
 
     document = _written(result)
     assert document["status"] == "succeeded"
