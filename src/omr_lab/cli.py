@@ -235,6 +235,16 @@ def _run(
         # the run document cannot store.
         print(f"omr-lab: error: {exc}", file=sys.stderr)
         return EXIT_USAGE
+    except OSError as exc:
+        # Raised only while writing run.json (a full disk, a quota); the directory is
+        # now an aborted run.
+        print(
+            f"omr-lab: error: {output_dir / RUN_DOCUMENT_FILENAME} could not be written "
+            f"({exc.strerror or exc}). {output_dir} now holds an aborted run; keep it for "
+            "inspection and choose a new output directory.",
+            file=sys.stderr,
+        )
+        return EXIT_OUTPUT_DIR
 
     document = result.document
     print(f"Run document: {result.document_path}")

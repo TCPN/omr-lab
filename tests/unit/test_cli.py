@@ -1,9 +1,10 @@
+import errno
 import json
 from pathlib import Path
 
 import pytest
 
-from omr_lab import __version__, cli
+from omr_lab import __version__, cli, pipeline
 from omr_lab.cli import (
     EXIT_ENGINE_UNAVAILABLE,
     EXIT_INTERRUPTED,
@@ -252,3 +253,21 @@ def test_input_name_the_run_document_cannot_store_is_a_usage_error(
 
     assert code == EXIT_USAGE
     assert "omr-lab: error:" in capsys.readouterr().err
+
+
+def test_run_document_that_cannot_be_written_is_reported(
+    image: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def disk_full(path: Path, text: str) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(pipeline, "_write_atomically", disk_full)
+    output = tmp_path / "run"
+
+    code = main(_mock_run(image, output))
+
+    assert code == EXIT_OUTPUT_DIR
+    err = capsys.readouterr().err
+    assert "could not be written (No space left on device)" in err
+    assert "aborted run" in err
+    assert (output / "raw").is_dir() and not (output / "run.json").exists()

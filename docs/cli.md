@@ -53,7 +53,7 @@ A directory that has `raw/` but no `run.json` is reported as an aborted run (a r
 | 3 | Invalid input: missing, not a file, empty, unreadable, or unsupported extension | `invalid_input` |
 | 4 | Engine unavailable (`run`), or a checked engine unavailable (`doctor`) | `engine_unavailable` |
 | 5 | The engine rejected an option name or value | `invalid_option` |
-| 6 | The output directory cannot be used (not a directory, not empty, an aborted run, or not creatable); no `run.json` is written | none |
+| 6 | The output directory cannot be used (not a directory, not empty, an aborted run, or not creatable), or `run.json` could not be written (for example a full disk, which leaves an aborted run); no `run.json` is written | none |
 | 130 | Interrupted with Ctrl-C; `run.json` records `interrupted` | `interrupted` |
 
 Codes 3 to 5 and 1 come with a written `run.json` whose `error` gives the details. These numbers are part of the CLI's interface: scripts may rely on them, and changing one is a breaking change.
