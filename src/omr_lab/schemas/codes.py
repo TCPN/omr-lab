@@ -21,7 +21,6 @@ class RunErrorCode(StrEnum):
     ENGINE_TIMEOUT = "engine_timeout"
     """Reserved: not produced until EngineResult can report a timeout (issue #48)."""
     MUSICXML_INVALID = "musicxml_invalid"
-    """Reserved for MusicXML validation in the pipeline; not produced yet."""
     INTERRUPTED = "interrupted"
     INTERNAL_ERROR = "internal_error"
 
@@ -30,6 +29,7 @@ class RunWarningCode(StrEnum):
     """``warnings[].code`` values of a run document (docs/json-schema.md)."""
 
     SCORE_NOT_NORMALIZED = "score_not_normalized"
+    """No longer produced: a succeeded run always has a score (issue #50). Kept for old records."""
     ARTIFACT_NOT_RECORDED = "artifact_not_recorded"
     ENGINE_DIAGNOSTIC_NOT_RECORDED = "engine_diagnostic_not_recorded"
     UNEXPECTED_ERROR = "unexpected_error"
@@ -38,6 +38,17 @@ class RunWarningCode(StrEnum):
     SCORE_INVALID_VALUE = "score_invalid_value"
     SCORE_DIVISIONS_MISSING = "score_divisions_missing"
     SCORE_TIMING_INCONSISTENT = "score_timing_inconsistent"
+    # Warnings of the MusicXML loader (omr_lab.musicxml.WarningCode), copied as they are.
+    MUSICXML_UNKNOWN_ELEMENT = "musicxml_unknown_element"
+    MUSICXML_UNRESOLVED_ENTITY = "musicxml_unresolved_entity"
+    MUSICXML_PROCESSING_INSTRUCTIONS_DROPPED = "musicxml_processing_instructions_dropped"
+    MUSICXML_XLINK_NAMESPACE_ASSUMED = "musicxml_xlink_namespace_assumed"
+    MUSICXML_PART_MISSING = "musicxml_part_missing"
+    MUSICXML_PART_UNDECLARED = "musicxml_part_undeclared"
+    MUSICXML_PART_WITHOUT_ID = "musicxml_part_without_id"
+    MUSICXML_DUPLICATE_PART = "musicxml_duplicate_part"
+    MUSICXML_MXL_CONTAINER_MISSING = "musicxml_mxl_container_missing"
+    MUSICXML_MXL_CONTAINER_INVALID = "musicxml_mxl_container_invalid"
 
 
 __all__ = ["RunErrorCode", "RunWarningCode"]
