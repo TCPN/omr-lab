@@ -30,6 +30,7 @@ from omr_lab.engines.base import (
     EngineResult,
     InvalidEngineOptionError,
 )
+from omr_lab.musicxml import MusicXmlError, load_musicxml
 from omr_lab.schemas import (
     CURRENT_RUN_SCHEMA_VERSION,
     RunDocumentValidationError,
@@ -38,6 +39,7 @@ from omr_lab.schemas import (
     artifact_path_violation,
     validate_run_document,
 )
+from omr_lab.score import score_from_musicxml
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +79,8 @@ _SERIALIZE_ERRORS = (RunDocumentValidationError, TypeError, ValueError)
 _PRIMARY_MUSICXML_KEY = "musicxml"
 # Kinds of files the pipeline itself records; an engine key with one of them is renamed.
 _PIPELINE_ARTIFACT_KINDS = frozenset({ENGINE_DIAGNOSTICS_KIND})
-
-_SCORE_NOT_NORMALIZED_MESSAGE = (
-    "The pipeline does not convert engine output into the score model yet; "
-    "the recognized notation is only in the raw artifacts."
-)
+# The loader's advice for its own callers (omr_lab.musicxml.document); see _record_score.
+_LOADER_LIMIT_HINT = re.compile(r"\s*Raise max_(?:bytes|elements) if this file is expected\.")
 
 
 class OutputDirectoryError(ValueError):
@@ -119,6 +118,7 @@ class _RunState:
     engine_version: str | None = None
     options: dict[str, EngineOptionValue] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
+    score: dict[str, Any] | None = None
     warnings: list[dict[str, str]] = field(default_factory=list)
     error: dict[str, Any] | None = None
     # Applied to every recorded message, so local paths do not reach run.json.
@@ -155,8 +155,12 @@ def run_pipeline(
     engine's diagnostics (when there are any) and ``run.json`` the run document.
     The input file is only read, never modified or copied.
 
+    On a run that has not failed, the engine's primary MusicXML is converted into
+    the run document's ``score``.
+
     Run failures (invalid input, unavailable engine, invalid option, engine
-    failure, unexpected errors while running the engine) do not raise: they are
+    failure, an engine MusicXML that cannot be loaded, unexpected errors while
+    running the engine) do not raise: they are
     recorded as a failed run document, which is written and returned. A
     KeyboardInterrupt during the run is recorded as an ``interrupted`` run and
     then re-raised. Raises ValueError for arguments that make a run record
@@ -202,8 +206,6 @@ def run_pipeline(
             # Keep the failure already recorded (e.g. engine_failed); it is the cause
             # the user needs, and this error came while reading the rest of the result.
             state.warn(RunWarningCode.UNEXPECTED_ERROR, message)
-    if state.error is None:
-        state.warn(RunWarningCode.SCORE_NOT_NORMALIZED, _SCORE_NOT_NORMALIZED_MESSAGE)
     duration = time.perf_counter() - start
 
     document = _build_document(state, filename, engine_name, started_at, duration)
@@ -243,7 +245,7 @@ def _fallback_document(
         media_type=state.media_type,
         sha256=state.sha256,
         engine_version=state.engine_version,
-        warnings=[w for w in state.warnings if w["code"] != RunWarningCode.SCORE_NOT_NORMALIZED],
+        warnings=state.warnings,
         # The pipeline's own files have fixed, schema-valid paths; keeping them keeps
         # the pointer to the engine diagnostics.
         artifacts={k: v for k, v in state.artifacts.items() if k in _PIPELINE_ARTIFACT_KINDS},
@@ -350,6 +352,8 @@ def _check_and_recognize(
         )
         return
     _record_result(state, result, engine.name, output_dir)
+    if state.error is None:
+        _record_score(state, output_dir)
 
 
 def _check_and_record_input(state: _RunState, input_path: Path) -> bool:
@@ -428,6 +432,38 @@ def _record_result(
             f"{_PRIMARY_MUSICXML_KEY!r} {problem}; this is a bug in the engine adapter.",
             returncode=result.returncode,
         )
+
+
+def _record_score(state: _RunState, output_dir: Path) -> None:
+    """Convert the primary MusicXML artifact into ``score``; fail the run if it cannot be loaded.
+
+    A succeeded engine result always has a recorded ``musicxml`` artifact (see
+    _record_result). Loader warnings come before converter warnings; both keep
+    their own codes and messages, which already say where the problem is.
+    """
+    artifact_path = state.artifacts[_PRIMARY_MUSICXML_KEY]
+    try:
+        # Absolute, so the loader's messages name a path the redactor recognizes even
+        # when output_dir was given as a relative path.
+        document = load_musicxml(output_dir.absolute() / artifact_path)
+    except MusicXmlError as exc:
+        reason = exc.message
+        if exc.code == "musicxml_too_large":
+            # The loader suggests raising max_bytes/max_elements, which run_pipeline
+            # does not expose; say what the limit is instead.
+            reason = _LOADER_LIMIT_HINT.sub("", reason) + (
+                " The pipeline uses the loader's default limits, which cannot be changed per run."
+            )
+        state.record_error(
+            RunErrorCode.MUSICXML_INVALID,
+            # The loader's message already names the file, so it is not repeated here.
+            f"The engine's primary MusicXML could not be loaded ({exc.code}): {reason}",
+        )
+        return
+    conversion = score_from_musicxml(document, source_artifact=_PRIMARY_MUSICXML_KEY)
+    for warning in (*document.warnings, *conversion.warnings):
+        state.warn(RunWarningCode(warning.code), warning.message)
+    state.score = conversion.score
 
 
 def _write_diagnostics(
@@ -571,7 +607,7 @@ def _build_document(
             "duration_seconds": max(duration, 0.0),
             "started_at": started_at.isoformat(timespec="milliseconds"),
         },
-        "score": None,
+        "score": state.score if state.error is None else None,
         "warnings": list(state.warnings),
         "error": state.error,
     }

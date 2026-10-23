@@ -4,11 +4,13 @@ import re
 import sys
 import threading
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
-from unittest.mock import ANY
+from typing import get_args
 
 import pytest
 
+import omr_lab.pipeline as pipeline_module
 from omr_lab.engines import (
     EngineAvailability,
     EngineOptions,
@@ -17,6 +19,8 @@ from omr_lab.engines import (
     resolve_options,
 )
 from omr_lab.engines.mock import MOCK_ENGINE_VERSION, MockEngine
+from omr_lab.musicxml import WarningCode as MusicXmlWarningCode
+from omr_lab.musicxml import load_musicxml
 from omr_lab.pipeline import (
     ENGINE_DIAGNOSTICS_FILENAME,
     RAW_DIRNAME,
@@ -40,11 +44,21 @@ def score(tmp_path: Path) -> Path:
     return path
 
 
-def _primary(raw: Path) -> dict[str, Path]:
+MINIMAL_MUSICXML = (
+    '<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0">'
+    '<part-list><score-part id="P1"><part-name>Voice</part-name></score-part></part-list>'
+    '<part id="P1"><measure number="1"/></part></score-partwise>'
+)
+
+
+def _write_musicxml(path: Path, text: str = MINIMAL_MUSICXML) -> Path:
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _primary(raw: Path, text: str = MINIMAL_MUSICXML) -> dict[str, Path]:
     """Write a primary MusicXML into ``raw`` and return it as artifacts; success needs one."""
-    path = raw / "score.musicxml"
-    path.write_text("x", encoding="utf-8")
-    return {"musicxml": path}
+    return {"musicxml": _write_musicxml(raw / "score.musicxml", text)}
 
 
 def _written(result: PipelineResult) -> dict:
@@ -89,7 +103,8 @@ def test_mock_engine_success_writes_valid_run_document(score: Path, tmp_path: Pa
     assert result.document_path == output_dir / RUN_DOCUMENT_FILENAME
     assert document["status"] == "succeeded"
     assert document["error"] is None
-    assert document["score"] is None
+    assert document["score"]["source"] == {"format": "musicxml", "artifact": "musicxml"}
+    assert [part["id"] for part in document["score"]["parts"]] == ["P1"]
     assert document["input"]["filename"] == "score.png"
     assert document["input"]["media_type"] == "image/png"
     assert len(document["input"]["sha256"]) == 64
@@ -100,7 +115,7 @@ def test_mock_engine_success_writes_valid_run_document(score: Path, tmp_path: Pa
         "engine_log": "raw/mock.log",
         "engine_diagnostics": ENGINE_DIAGNOSTICS_FILENAME,
     }
-    assert [w["code"] for w in document["warnings"]] == ["score_not_normalized"]
+    assert document["warnings"] == []
     assert document["timing"]["duration_seconds"] >= 0
     assert document["timing"]["started_at"]
 
@@ -398,7 +413,7 @@ def test_blank_diagnostics_are_skipped_and_order_is_kept(score: Path, tmp_path: 
 
     document = _written(run_pipeline(score, tmp_path / "run", engine))
 
-    assert document["warnings"] == [{"code": "score_not_normalized", "message": ANY}]
+    assert document["warnings"] == []
     assert document["artifacts"] == {
         "musicxml": "raw/score.musicxml",
         "engine_diagnostics": ENGINE_DIAGNOSTICS_FILENAME,
@@ -519,7 +534,7 @@ def test_fallback_keeps_engine_failure_version_and_diagnostics(score: Path, tmp_
     assert document["options"] == {}
 
 
-def test_fallback_for_succeeded_run_drops_score_not_normalized(score: Path, tmp_path: Path) -> None:
+def test_fallback_for_succeeded_run_has_no_score(score: Path, tmp_path: Path) -> None:
     engine = ScriptedEngine(
         build=lambda raw: EngineResult(
             "scripted", success=True, options={"bad": float("nan")}, artifacts=_primary(raw)
@@ -530,6 +545,7 @@ def test_fallback_for_succeeded_run_drops_score_not_normalized(score: Path, tmp_
 
     assert document["error"]["code"] == "internal_error"
     assert document["engine"]["version"] == "scripted-1"
+    assert document["score"] is None
     assert document["warnings"] == []
 
 
@@ -554,7 +570,7 @@ def test_fallback_falls_back_to_minimal_record_when_error_is_invalid(
 def test_artifact_outside_raw_such_as_run_json_is_not_recorded(score: Path, tmp_path: Path) -> None:
     def build(raw: Path) -> EngineResult:
         (raw.parent / RUN_DOCUMENT_FILENAME).write_text("engine output", encoding="utf-8")
-        (raw / "score.musicxml").write_text("x", encoding="utf-8")
+        _write_musicxml(raw / "score.musicxml")
         return EngineResult(
             "scripted",
             success=True,
@@ -581,7 +597,7 @@ def test_artifact_outside_raw_such_as_run_json_is_not_recorded(score: Path, tmp_
 def test_artifact_path_breaking_a_schema_rule_is_not_recorded(score: Path, tmp_path: Path) -> None:
     def build(raw: Path) -> EngineResult:
         (raw / "a\\b.txt").write_text("x", encoding="utf-8")
-        (raw / "score.musicxml").write_text("x", encoding="utf-8")
+        _write_musicxml(raw / "score.musicxml")
         return EngineResult(
             "scripted",
             success=True,
@@ -1025,7 +1041,7 @@ def test_string_diagnostics_are_one_entry(score: Path, tmp_path: Path) -> None:
 
     document = _written(run_pipeline(score, tmp_path / "run", engine))
 
-    assert [w["code"] for w in document["warnings"]] == ["score_not_normalized"]
+    assert document["warnings"] == []
     log = (tmp_path / "run" / ENGINE_DIAGNOSTICS_FILENAME).read_text(encoding="utf-8")
     assert log == "boom\n"
 
@@ -1061,6 +1077,114 @@ def test_unwritable_diagnostics_file_adds_a_warning(score: Path, tmp_path: Path)
     assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
     assert document["warnings"][0]["code"] == "engine_diagnostic_not_recorded"
     assert document["warnings"][0]["message"].startswith("2 engine diagnostics were left out")
+
+
+def _engine_writing_musicxml(text: str) -> ScriptedEngine:
+    return ScriptedEngine(
+        build=lambda raw: EngineResult("scripted", success=True, artifacts=_primary(raw, text))
+    )
+
+
+def test_engine_musicxml_is_converted_into_the_score(score: Path, tmp_path: Path) -> None:
+    text = MINIMAL_MUSICXML.replace(
+        '<measure number="1"/>',
+        '<measure number="1"><attributes><divisions>1</divisions></attributes>'
+        "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+        '<lyric number="1"><text>我</text></lyric></note></measure>',
+    )
+
+    document = _written(run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(text)))
+
+    assert document["status"] == "succeeded"
+    (note,) = document["score"]["parts"][0]["measures"][0]["events"]
+    assert (note["kind"], note["duration"]) == ("note", "1/4")
+    assert note["lyrics"][0]["text"] == "我"
+    assert document["warnings"] == []
+
+
+@pytest.mark.parametrize(
+    ("text", "loader_code"),
+    [
+        ("x", "musicxml_invalid"),
+        ('<?xml version="1.0"?><score-timewise version="4.0"/>', "musicxml_unsupported"),
+    ],
+)
+def test_musicxml_that_cannot_be_loaded_fails_the_run(
+    score: Path, tmp_path: Path, text: str, loader_code: str
+) -> None:
+    result = run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(text))
+
+    document = _written(result)
+    assert document["status"] == "failed"
+    assert document["error"]["code"] == "musicxml_invalid"
+    message = document["error"]["message"]
+    assert message.startswith(f"The engine's primary MusicXML could not be loaded ({loader_code}):")
+    assert message.count("raw/score.musicxml") == 1
+    assert document["score"] is None
+    assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
+    assert str(tmp_path) not in result.document_path.read_text(encoding="utf-8")
+
+
+def test_musicxml_error_with_relative_output_dir_is_redacted(
+    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    result = run_pipeline(score, Path("run"), _engine_writing_musicxml("x"))
+
+    message = _written(result)["error"]["message"]
+    assert "<output_dir>/raw/score.musicxml" in message
+    assert "run/raw" not in message
+
+
+@pytest.mark.parametrize(
+    ("limit", "detail"),
+    [({"max_bytes": 10}, "10-byte limit"), ({"max_elements": 2}, "element")],
+)
+def test_too_large_musicxml_message_names_no_unreachable_setting(
+    score: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    limit: dict[str, int],
+    detail: str,
+) -> None:
+    # run_pipeline has no max_bytes/max_elements, so the message must not ask to raise them.
+    monkeypatch.setattr(pipeline_module, "load_musicxml", partial(load_musicxml, **limit))
+
+    document = _written(
+        run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(MINIMAL_MUSICXML))
+    )
+
+    message = document["error"]["message"]
+    assert "(musicxml_too_large)" in message
+    assert detail in message
+    assert "max_bytes" not in message and "max_elements" not in message
+    assert "Raise" not in message
+    assert message.endswith("which cannot be changed per run.")
+
+
+def test_loader_and_converter_warnings_are_recorded_in_order(score: Path, tmp_path: Path) -> None:
+    text = MINIMAL_MUSICXML.replace(
+        '<measure number="1"/>',
+        '<measure number="1"><attributes><divisions>1</divisions></attributes>'
+        "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration>"
+        '<notations><slur type="start"/></notations></note></measure>',
+    ).replace("</score-partwise>", '<part id="P2"><measure number="1"/></part></score-partwise>')
+
+    result = run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(text))
+
+    document = _written(result)
+    assert document["status"] == "succeeded"
+    assert [w["code"] for w in document["warnings"]] == [
+        "musicxml_part_undeclared",
+        "score_unsupported_element",
+    ]
+    assert "<slur>" in document["warnings"][1]["message"]
+    assert str(tmp_path) not in result.document_path.read_text(encoding="utf-8")
+
+
+def test_every_musicxml_loader_warning_code_is_a_run_warning_code() -> None:
+    assert set(get_args(MusicXmlWarningCode)) <= {code.value for code in RunWarningCode}
 
 
 def _documented_codes(kind: str) -> set[str]:
