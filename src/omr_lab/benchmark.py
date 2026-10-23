@@ -161,7 +161,7 @@ def run_benchmark(
             "name": manifest.document.get("name"),
             "schema_version": manifest.document["schema_version"],
         },
-        "environment": environment(),
+        "environment": collect_environment(),
         "engine": {
             "name": engine.name,
             "requested_options": requested,
@@ -181,7 +181,7 @@ def run_benchmark(
     return BenchmarkResult(report=report, report_path=report_path, markdown_path=markdown_path)
 
 
-def environment() -> dict[str, str]:
+def collect_environment() -> dict[str, str]:
     """Software and platform facts for the report; no host name, user or path."""
     return {
         "omr_lab_version": __version__,
@@ -346,21 +346,21 @@ def _summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
 def render_markdown(report: dict[str, Any]) -> str:
     """A short human-readable view of a report; report.json stays the full record."""
     manifest = report["manifest"]
-    environment_ = report["environment"]
+    environment = report["environment"]
     engine = report["engine"]
     summary = report["summary"]
     rate = summary["success_rate"]
     lines = [
-        f"# Benchmark report: {_cell(manifest['name'] or manifest['filename'])}",
+        f"# Benchmark report: {_markdown_cell(manifest['name'] or manifest['filename'])}",
         "",
         f"- Generated: {report['generated_at']}",
-        f"- Manifest: `{_cell(manifest['filename'])}` (SHA-256 `{manifest['sha256']}`)",
-        f"- omr-lab {environment_['omr_lab_version']}, "
-        f"{environment_['python_implementation']} {environment_['python_version']}, "
-        f"{environment_['os']} {environment_['os_release']} ({environment_['machine']})",
-        f"- Engine: {_cell(engine['name'])} "
-        f"{_cell(', '.join(summary['engine_versions']) or 'version unknown')}; "
-        f"options {_cell(json.dumps(engine['requested_options'], ensure_ascii=False))}; "
+        f"- Manifest: `{_markdown_cell(manifest['filename'])}` (SHA-256 `{manifest['sha256']}`)",
+        f"- omr-lab {environment['omr_lab_version']}, "
+        f"{environment['python_implementation']} {environment['python_version']}, "
+        f"{environment['os']} {environment['os_release']} ({environment['machine']})",
+        f"- Engine: {_markdown_cell(engine['name'])} "
+        f"{_markdown_cell(', '.join(summary['engine_versions']) or 'version unknown')}; "
+        f"options {_markdown_cell(json.dumps(engine['requested_options'], ensure_ascii=False))}; "
         f"timeout {engine['timeout_seconds']:g} s",
         f"- Samples: {summary['samples']} ({summary['excluded']} excluded, "
         f"{summary['not_run']} not run); attempted {summary['attempted']}: "
@@ -388,13 +388,13 @@ def render_markdown(report: dict[str, Any]) -> str:
                 else f"{entry['problem']['code']}: {entry['problem']['message']}"
             )
         lines.append(
-            f"| {_cell(entry['id'])} | {entry['status']} | {_cell(entry['condition'])} "
-            f"| {duration} | {_cell(detail)} | {_cell(warnings)} |"
+            f"| {_markdown_cell(entry['id'])} | {entry['status']} | {_markdown_cell(entry['condition'])} "
+            f"| {duration} | {_markdown_cell(detail)} | {_markdown_cell(warnings)} |"
         )
     return "\n".join(lines) + "\n"
 
 
-def _cell(text: str) -> str:
+def _markdown_cell(text: str) -> str:
     return " ".join(str(text).split()).replace("|", "\\|")
 
 
@@ -405,7 +405,7 @@ __all__ = [
     "BenchmarkResult",
     "Manifest",
     "ManifestError",
-    "environment",
+    "collect_environment",
     "load_manifest",
     "render_markdown",
     "run_benchmark",

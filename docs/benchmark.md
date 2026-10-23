@@ -60,13 +60,13 @@ Private or unlicensed scores stay outside Git (for example in `data/private/`, w
 
 Two runs of the same manifest and engine on the same machine give the same report except `generated_at` and the durations (a unit test checks this).
 
-A failed or interrupted engine does not stop the benchmark: each failure is recorded in its sample. Ctrl-C stops it without writing a report; the runs already finished stay in `runs/`.
+A failed or timed-out engine run does not stop the benchmark: each failure is recorded in its sample. Ctrl-C stops it without writing a report; the runs already finished stay in `runs/`.
 
 ## Exit codes
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Report written; every sample that was not excluded ran and succeeded. |
+| 0 | Report written; every sample that was not excluded ran and succeeded (also when every sample is excluded, so check `summary.attempted` when gating on a benchmark). |
 | 1 | Report written; at least one sample failed or was not run. |
 | 2 | Invalid command line, including an `--option` value the report cannot store (not valid UTF-8). Nothing is written. |
 | 3 | The manifest cannot be read, is not JSON, breaks the schema, or repeats a sample id. Nothing is written. |
