@@ -16,7 +16,7 @@
 - conversion/: normalized JSON mapping.
 - schemas/: checked-in JSON Schemas and validation; no dependency on engines or the pipeline.
 - pipeline.py: orchestration only. Behavior, output layout, error codes, and the EngineResult-to-run-document mapping: docs/pipeline.md.
-- reporting/: run metadata and benchmark reports.
+- benchmark.py: benchmark manifests and reports; runs each sample through the pipeline. Details: docs/benchmark.md.
 
 ## Engine contract
 - Each adapter implements the Engine protocol: name, check_available(), and recognize().

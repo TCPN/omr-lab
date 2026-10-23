@@ -6,7 +6,7 @@ One redistributable score for the end-to-end test (issue #10): an image to recog
 | --- | --- |
 | `twinkle.musicxml` | Ground truth. *Twinkle, Twinkle, Little Star*: 12 measures, one melody part in C major, 4/4, treble clef, 42 notes (quarters and halves), 22 chord symbols, one lyric verse. |
 | `twinkle.png` | The score rendered from `twinkle.musicxml`: one page, 2480 × 1235 px at 300 dpi, 8-bit grayscale, white background, no degradation. |
-| `manifest.json` | Source, license, condition, renderer and SHA-256 checksums of both files. A unit test checks the checksums, so a changed file must come with an updated manifest. |
+| `manifest.json` | A benchmark manifest ([docs/benchmark.md](../../../docs/benchmark.md)): source, license, condition, renderer and SHA-256 checksums of both files. A unit test checks the checksums, so a changed file must come with an updated manifest. |
 
 ## Provenance and license
 

@@ -1,4 +1,6 @@
 {
+  "schema_version": "0.1.0",
+  "name": "e2e-sample",
   "samples": [
     {
       "id": "twinkle",
