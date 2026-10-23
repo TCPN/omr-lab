@@ -87,10 +87,10 @@ Codes are not an enum in the schema. Codes in use so far:
 | `engine_failed` | error | Engine process exited non-zero or the adapter reported failure. |
 | `invalid_option` | error | The engine rejected an option name or value (`InvalidEngineOptionError`, including `UnknownEngineOptionError`). |
 | `engine_timeout` | error | Engine process exceeded its timeout. |
-| `musicxml_invalid` | error | Engine output could not be parsed or validated as MusicXML. |
+| `musicxml_invalid` | error | The engine's primary MusicXML artifact could not be loaded (missing, unreadable, too large, not valid MusicXML, or unsupported); the message names the loader's own code. |
 | `interrupted` | error | The run was stopped by a `KeyboardInterrupt` (Ctrl-C) before it finished. |
 | `internal_error` | error | Unexpected pipeline error; the message should say what failed. |
-| `score_not_normalized` | warning | Musical content exists only in raw artifacts. |
+| `score_not_normalized` | warning | Musical content exists only in raw artifacts. Written by pipeline versions before issue #50; no longer produced. |
 | `artifact_not_recorded` | warning | An engine artifact was left out of `artifacts` (outside the engine's `raw/` directory, missing, not a regular file, or an unrepresentable path). |
 | `engine_diagnostic_not_recorded` | warning | An `EngineResult.diagnostics` entry was not a string, or the diagnostics file could not be written, so diagnostics were left out. |
 | `unexpected_error` | warning | An unexpected exception after a failure was already recorded; the original `error` is kept. |
@@ -99,8 +99,18 @@ Codes are not an enum in the schema. Codes in use so far:
 | `score_invalid_value` | warning | A source value was malformed or out of range; the field is `null` or the element is missing from `score`. |
 | `score_divisions_missing` | warning | A duration or `<offset>` appeared before any `<divisions>`; that value is `null`, and for a duration that moves the position, so are later offsets in the measure. |
 | `score_timing_inconsistent` | warning | A `<backup>` moved before the start of its measure, or the position became too precise to record (later offsets are `null`); or an `<offset>` pointed before the start of its measure (only its own offset is `null`). |
+| `musicxml_unknown_element` | warning | The engine's MusicXML has a top-level element outside the MusicXML 4.0 schema. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_unresolved_entity` | warning | The engine's MusicXML uses an entity it does not define; that text is left out. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_processing_instructions_dropped` | warning | The engine's MusicXML contains processing instructions; they are not used. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_xlink_namespace_assumed` | warning | The engine's MusicXML uses `xlink:` without declaring it; the standard namespace was assumed. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_part_missing` | warning | A `<score-part>` in the engine's MusicXML has no matching `<part>`. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_part_undeclared` | warning | A `<part>` in the engine's MusicXML is not declared in `<part-list>`. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_part_without_id` | warning | A `<part>` or `<score-part>` in the engine's MusicXML has no `id`. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_duplicate_part` | warning | A part id in the engine's MusicXML is declared or used more than once (the first one is used). See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_mxl_container_missing` | warning | The engine's `.mxl` has no `META-INF/container.xml`; a fallback entry was read. See [musicxml.md](musicxml.md#warnings). |
+| `musicxml_mxl_container_invalid` | warning | The engine's `.mxl` has an unusable `container.xml`; a fallback entry was read. See [musicxml.md](musicxml.md#warnings). |
 
-The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (re-exported by `omr_lab.pipeline`) list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). `musicxml_invalid` is reserved for MusicXML validation in the pipeline.
+The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (re-exported by `omr_lab.pipeline`) list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). The `musicxml_*` warnings are the MusicXML loader's warnings, copied with their own codes and messages.
 
 Messages must not contain absolute local paths: they name the user and private folders, and they are wrong once the run directory is moved. The pipeline replaces the run output directory, the input file's directory and the home directory with `<output_dir>`, `<input_dir>` and `~` in every message and in the diagnostics file.
 

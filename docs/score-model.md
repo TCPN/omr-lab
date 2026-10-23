@@ -6,7 +6,7 @@ The `score` field of a run document holds the music read from one source artifac
 - Converter: `omr_lab.score.score_from_musicxml(document, *, source_artifact=None)` takes a `MusicXmlDocument` from `omr_lab.musicxml` and returns a `ScoreConversion` with `score` (a dict ready for the run document) and `warnings` (`ScoreWarning` objects with `code`, `message` and `to_dict()`).
 - Examples: [`tests/fixtures/musicxml/score-features.musicxml`](../tests/fixtures/musicxml/score-features.musicxml) and its expected conversion [`score-features.score.json`](../tests/fixtures/musicxml/score-features.score.json); a full run document with a score is [`tests/fixtures/run-documents/valid/succeeded-with-score.json`](../tests/fixtures/run-documents/valid/succeeded-with-score.json).
 
-The pipeline does not fill `score` yet: it still writes `score: null` with a `score_not_normalized` warning. A converted score records what the MusicXML says; it is not evidence that the recognition was correct.
+The pipeline fills `score` from the engine's primary MusicXML artifact on every run that has not failed ([pipeline.md](pipeline.md#engineresult-to-run-document)). A converted score records what the MusicXML says; it is not evidence that the recognition was correct.
 
 ## Principles
 
