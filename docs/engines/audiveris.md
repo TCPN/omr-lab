@@ -90,7 +90,7 @@ Verified on 2026-10-14 against the Audiveris handbook (web edition, which shows 
 | Installers bundle a JRE; Linux launcher `/opt/audiveris/bin/Audiveris`; Windows `C:\Program Files\Audiveris\Audiveris.exe`; Scoop example `audiveris -batch -transcribe <image>` | [Install from binaries](https://audiveris.github.io/audiveris/_pages/tutorials/install/binaries/) |
 | Source builds provide `bin/Audiveris` and `bin\Audiveris.bat` launchers | [Build from source](https://audiveris.github.io/audiveris/_pages/tutorials/install/sources/) |
 | Repository license: AGPL-3.0 | [Audiveris/audiveris](https://github.com/Audiveris/audiveris) |
-| `-constant key=value` defines an application constant; `-constant org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength=15` changes the result as expected (2026-10-23, 5.11.0 on Linux). An unknown key is ignored without a message. | `-help` output and runs for issue #55 |
+| `-constant key=value` defines an application constant; `-constant org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength=15` changes the result as expected (2026-10-23, 5.11.0 on Linux). The value applies to that run only: no `run.properties` is written, and a following run without it drops the short staff again. An unknown key is ignored without a message. | `-help` output and runs for issue #55 |
 
 ### Not verified
 

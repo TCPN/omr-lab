@@ -92,6 +92,8 @@ measure is lost that way. ``None`` keeps the Audiveris default.
 """
 
 _MIN_STAFF_LENGTH_CONSTANT = "org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength"
+# A sanity cap against typos, not an Audiveris limit.
+_MAX_MIN_STAFF_LENGTH = 1000
 
 # The options this adapter supports, with their default values; resolve_options()
 # uses it to reject unknown names and to fill in defaults. ``-sheets`` is
@@ -167,13 +169,15 @@ def _tail(text: str, label: str) -> list[str]:
 def _check_min_staff_length(engine_name: str, value: EngineOptionValue) -> None:
     # bool is an int subclass; resolve_options() has already rejected NaN and infinity.
     if value is None or (
-        isinstance(value, int | float) and not isinstance(value, bool) and 0 < value <= 1000
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and 0 < value <= _MAX_MIN_STAFF_LENGTH
     ):
         return
     raise InvalidEngineOptionError(
         f"Option {MIN_STAFF_LENGTH_OPTION!r} for engine {engine_name!r} must be a number of "
-        f"interlines greater than 0 and at most 1000, or null for the Audiveris default; "
-        f"got {value!r}."
+        f"interlines greater than 0 and at most {_MAX_MIN_STAFF_LENGTH}, or null for the "
+        f"Audiveris default; got {value!r}."
     )
 
 
@@ -383,16 +387,16 @@ class AudiverisEngine:
         ``-transcribe`` runs the full recognition and ``-export`` writes MusicXML;
         ``--`` makes the input path an input file even if it starts with ``-``.
         """
-        constants: list[str | Path] = []
+        constant_args: list[str | Path] = []
         min_staff_length = options.get(MIN_STAFF_LENGTH_OPTION)
         if min_staff_length is not None:
-            constants += ["-constant", f"{_MIN_STAFF_LENGTH_CONSTANT}={min_staff_length!r}"]
+            constant_args += ["-constant", f"{_MIN_STAFF_LENGTH_CONSTANT}={min_staff_length!r}"]
         return [
             executable,
             "-batch",
             "-transcribe",
             "-export",
-            *constants,
+            *constant_args,
             "-output",
             output_dir,
             "--",
