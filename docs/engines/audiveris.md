@@ -85,9 +85,9 @@ Verified on 2026-10-14 against the Audiveris handbook (web edition, which shows 
 
 ## License obligations (for human review)
 
-This section records facts for the owner's decision; it does not set policy and is not legal advice.
+This section records facts behind the owner's decision in [ADR 0002](../decisions/0002-project-license-and-agpl-engines.md). It is not legal advice.
 
 - Audiveris is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0), per its repository. Re-check the license of the exact version installed.
 - omr-lab does **not** link, import, vendor, bundle, or modify Audiveris. It locates a separately installed, unmodified launcher and runs it as an external process with command-line arguments, reading the files it writes.
 - Local research use of an unmodified Audiveris, as done here, is the low-obligation case. Obligations to review arise if omr-lab ever **distributes** Audiveris (for example in a Docker image or installer, see OMR-014) or offers it, especially a **modified** version, to users **over a network** (AGPL section 13), as in a hosted cloud service.
-- The project license and the policy for AGPL engines are pending owner decision **#30**. Until it is answered, do not package or redistribute Audiveris with omr-lab and do not deploy it as a service.
+- Policy (owner decision #30, [ADR 0002](../decisions/0002-project-license-and-agpl-engines.md)): omr-lab is MIT-licensed and runs Audiveris only as a separately installed, unmodified external program. Do not package or redistribute Audiveris with omr-lab, and do not deploy it as a service, without the license review that ADR 0002 requires first.
