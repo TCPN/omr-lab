@@ -128,7 +128,8 @@ def run_benchmark(
     Raises ValueError for an invalid ``timeout_seconds``, engine name or options before anything
     is written. ``output_dir`` must be missing or empty (OutputDirectoryError otherwise).
     Failed runs do not stop the benchmark; they are recorded. A KeyboardInterrupt stops
-    it without a report. OSError is raised when the report cannot be written.
+    it without a report. OSError is raised, without a report, when a run document or
+    the report cannot be written (for example a full disk).
     """
     output_dir = Path(output_dir)
     # The same argument checks as run_pipeline, before the output directory is claimed.
@@ -293,13 +294,13 @@ def _checksum_problem(
         # Only regular files are read: a FIFO or device would block or never end.
         if not stat.S_ISREG(path.stat().st_mode):
             return {
-                "code": f"{role}_missing",
+                "code": f"{role}_unreadable",
                 "message": f"{manifest_text!r} is not a regular file.",
             }
         digest = _sha256(path)
     except OSError as exc:
         return {
-            "code": f"{role}_missing",
+            "code": f"{role}_unreadable",
             "message": f"{manifest_text!r} cannot be read: {exc.strerror or exc}.",
         }
     if digest != expected:

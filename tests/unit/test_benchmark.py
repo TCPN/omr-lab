@@ -138,7 +138,7 @@ def test_report_records_every_sample_status(manifest_path: Path, tmp_path: Path)
     assert by_id["skipped"]["run"] is None
     assert by_id["changed"]["status"] == "not_run"
     assert by_id["changed"]["problem"]["code"] == "image_checksum_mismatch"
-    assert by_id["missing"]["problem"]["code"] == "image_missing"
+    assert by_id["missing"]["problem"]["code"] == "image_unreadable"
 
     summary = report["summary"]
     assert summary["samples"] == 5
@@ -247,7 +247,7 @@ def test_non_regular_image_is_not_opened(tmp_path: Path) -> None:
 
     report = run_benchmark(load_manifest(path), tmp_path / "out", MockEngine(), timeout_seconds=1)
     assert report.report["samples"][0]["problem"] == {
-        "code": "image_missing",
+        "code": "image_unreadable",
         "message": "'pipe.png' is not a regular file.",
     }
 

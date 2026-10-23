@@ -269,9 +269,9 @@
               "properties": {
                 "code": {
                   "enum": [
-                    "image_missing",
+                    "image_unreadable",
                     "image_checksum_mismatch",
-                    "ground_truth_missing",
+                    "ground_truth_unreadable",
                     "ground_truth_checksum_mismatch",
                     "run_not_started"
                   ]
