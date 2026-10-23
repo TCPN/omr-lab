@@ -125,7 +125,7 @@ def run_benchmark(
 ) -> BenchmarkResult:
     """Run each manifest sample with ``engine`` and write report.json and report.md.
 
-    Raises ValueError for an invalid ``timeout_seconds`` or engine name before anything
+    Raises ValueError for an invalid ``timeout_seconds``, engine name or options before anything
     is written. ``output_dir`` must be missing or empty (OutputDirectoryError otherwise).
     Failed runs do not stop the benchmark; they are recorded. A KeyboardInterrupt stops
     it without a report. OSError is raised when the report cannot be written.
@@ -142,6 +142,10 @@ def run_benchmark(
     if not isinstance(engine.name, str) or not engine.name:
         raise ValueError(f"Engine name must be a non-empty string, got {engine.name!r}.")
     requested = dict(options or {})
+    try:
+        json.dumps(requested, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Engine options cannot be recorded as UTF-8 JSON: {exc}.") from exc
     generated_at = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     runs_dir = _prepare_output_dir(output_dir)
     entries = [
@@ -170,7 +174,9 @@ def run_benchmark(
     report_path = output_dir / REPORT_JSON_FILENAME
     markdown_path = output_dir / REPORT_MARKDOWN_FILENAME
     # Atomic, so a reader never finds a truncated report.json.
-    _write_atomically(report_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    _write_atomically(
+        report_path, json.dumps(report, ensure_ascii=False, allow_nan=False, indent=2) + "\n"
+    )
     _write_atomically(markdown_path, render_markdown(report))
     return BenchmarkResult(report=report, report_path=report_path, markdown_path=markdown_path)
 

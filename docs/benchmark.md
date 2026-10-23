@@ -68,7 +68,7 @@ A failed or interrupted engine does not stop the benchmark: each failure is reco
 | --- | --- |
 | 0 | Report written; every sample that was not excluded ran and succeeded. |
 | 1 | Report written; at least one sample failed or was not run. |
-| 2 | Invalid command line. |
+| 2 | Invalid command line, including an `--option` value the report cannot store (not valid UTF-8). Nothing is written. |
 | 3 | The manifest cannot be read, is not JSON, breaks the schema, or repeats a sample id. Nothing is written. |
 | 6 | The output directory cannot be used, or the report could not be written. |
 | 130 | Interrupted with Ctrl-C; no report. |

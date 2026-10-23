@@ -223,6 +223,15 @@ def test_invalid_timeout_is_rejected_before_writing(
     assert not (tmp_path / "out").exists()
 
 
+@pytest.mark.parametrize("value", ["\udcff", float("nan"), Path("x")])
+def test_unrecordable_options_are_rejected_before_writing(
+    manifest_path: Path, tmp_path: Path, value: object
+) -> None:
+    with pytest.raises(ValueError, match="Engine options"):
+        _run(manifest_path, tmp_path / "out", options={"x": value})
+    assert not (tmp_path / "out").exists()
+
+
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs os.mkfifo")
 def test_non_regular_image_is_not_opened(tmp_path: Path) -> None:
     os.mkfifo(tmp_path / "pipe.png")  # opening it for reading would block

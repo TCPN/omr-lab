@@ -327,6 +327,11 @@ def _benchmark(
     except OutputDirectoryError as exc:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
         return EXIT_OUTPUT_DIR_UNUSABLE
+    except ValueError as exc:
+        # Arguments the report cannot record, such as an option that is not valid UTF-8;
+        # checked before anything is written.
+        print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
     except KeyboardInterrupt:
         print(
             f"omr-lab: interrupted; no report was written. The finished runs are in {output_dir}",
