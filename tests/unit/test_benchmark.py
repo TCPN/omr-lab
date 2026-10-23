@@ -417,3 +417,18 @@ def test_cli_benchmark_unavailable_engine_writes_nothing(
     argv = ["benchmark", str(manifest_path), "-o", str(output), "--engine", "mock"]
     assert main(argv) == cli.EXIT_ENGINE_UNAVAILABLE
     assert not output.exists()
+
+
+def test_cli_report_validation_failure_is_not_a_usage_error(
+    manifest_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def invalid(report: dict) -> None:
+        raise BenchmarkDocumentValidationError("report", ["$.x: broken"])
+
+    monkeypatch.setattr(benchmark, "validate_benchmark_report", invalid)
+    argv = ["benchmark", str(manifest_path), "-o", str(tmp_path / "out"), "--engine", "mock"]
+    assert main(argv) == EXIT_OUTPUT_DIR_UNUSABLE
+    assert "report failed validation" in capsys.readouterr().err

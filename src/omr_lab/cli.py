@@ -28,6 +28,7 @@ from omr_lab.pipeline import (
     RunErrorCode,
     run_pipeline,
 )
+from omr_lab.schemas.benchmark import BenchmarkDocumentValidationError
 
 EXIT_OK = 0
 """``run`` succeeded, ``doctor`` found every checked engine available, or every
@@ -335,6 +336,14 @@ def _benchmark(
         )
     except OutputDirectoryError as exc:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_OUTPUT_DIR_UNUSABLE
+    except BenchmarkDocumentValidationError as exc:
+        # An internal bug: the finished report does not match its schema.
+        print(
+            f"omr-lab: error: the report failed validation ({exc}); no report was written. "
+            f"The finished runs are in {output_dir}",
+            file=sys.stderr,
+        )
         return EXIT_OUTPUT_DIR_UNUSABLE
     except ValueError as exc:
         # Arguments the report cannot record, such as an option that is not valid UTF-8;

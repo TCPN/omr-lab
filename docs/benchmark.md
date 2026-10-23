@@ -71,5 +71,5 @@ A failed or timed-out engine run does not stop the benchmark: each failure is re
 | 2 | Invalid command line, including an `--option` value the report cannot store (not valid UTF-8). Nothing is written. |
 | 3 | The manifest cannot be read, is not JSON, breaks the schema, or repeats a sample id. Nothing is written. |
 | 4 | The engine is not available (`doctor` reports why); checked once before anything is written. Nothing is written. |
-| 6 | The output directory cannot be used, or the report could not be written. |
+| 6 | The output directory cannot be used, or the report could not be written (including the internal error of a report that fails its own schema; the runs stay in `runs/`). |
 | 130 | Interrupted with Ctrl-C; no report. |
