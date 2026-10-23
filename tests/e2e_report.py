@@ -72,6 +72,11 @@ def correctness(expected: dict, recognized: dict) -> dict:
     def lyrics(score: dict) -> list[str]:
         return [lyric["text"] for note in events(score, "note") for lyric in note["lyrics"]]
 
+    def key_fifths(score: dict) -> int:
+        # No <key> means no key signature, which reads as C major (Audiveris omits it).
+        found = first(score, "key", ("fifths",))
+        return found[0][0] if found else 0
+
     def harmony_roots(score: dict) -> list[tuple]:
         return [
             (event["root"]["step"], event["root"]["alter"], event["chord_kind"])
@@ -85,8 +90,7 @@ def correctness(expected: dict, recognized: dict) -> dict:
             "recognized": sum(len(part["measures"]) for part in recognized["parts"]),
         },
         "parts": {"expected": len(expected["parts"]), "recognized": len(recognized["parts"])},
-        "first_key_matches": first(expected, "key", ("fifths",))
-        == first(recognized, "key", ("fifths",)),
+        "first_key_matches": key_fifths(expected) == key_fifths(recognized),
         "first_time_matches": first(expected, "time", ("beats", "beat_type"))
         == first(recognized, "time", ("beats", "beat_type")),
         "first_clef_matches": first(expected, "clef", ("sign", "line"))

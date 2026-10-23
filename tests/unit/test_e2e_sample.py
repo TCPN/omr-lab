@@ -11,7 +11,7 @@ import struct
 from pathlib import Path
 
 import pytest
-from e2e_report import GROUND_TRUTH, IMAGE, SAMPLE, correctness, expected_score
+from e2e_report import GROUND_TRUTH, IMAGE, SAMPLE, correctness, events, expected_score
 
 from omr_lab import cli
 from omr_lab.cli import EXIT_OK, main
@@ -130,3 +130,15 @@ def test_report_counts_a_wrong_pitch_and_a_missing_note() -> None:
     assert report["notes_pitch_and_duration"]["recognized"] == 41
     assert report["notes_duration_only"]["matched"] == 41
     assert report["lyric_syllables"]["matched"] == 41
+
+
+def test_report_treats_a_missing_key_signature_as_c_major() -> None:
+    # Audiveris writes no <key> for C major; the ground truth has fifths 0.
+    expected = expected_score()
+    recognized = copy.deepcopy(expected)
+    first_measure = recognized["parts"][0]["measures"][0]["events"]
+    first_measure[:] = [event for event in first_measure if event["kind"] != "key"]
+
+    assert correctness(expected, recognized)["first_key_matches"] is True
+    first_measure.insert(0, {**events(expected, "key")[0], "fifths": 1})
+    assert correctness(expected, recognized)["first_key_matches"] is False
