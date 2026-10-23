@@ -402,7 +402,9 @@ def test_unsupported_options_are_rejected(
     assert runner.calls == []
 
 
-@pytest.mark.parametrize(("value", "text"), [(15, "15"), (12.5, "12.5")])
+@pytest.mark.parametrize(
+    ("value", "text"), [(15, "15"), (12.5, "12.5"), (12.3456789, "12.3456789")]
+)
 def test_min_staff_length_is_passed_as_audiveris_constant(
     monkeypatch: pytest.MonkeyPatch,
     launcher: Path,

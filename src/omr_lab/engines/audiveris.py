@@ -386,7 +386,7 @@ class AudiverisEngine:
         constants: list[str | Path] = []
         min_staff_length = options.get(MIN_STAFF_LENGTH_OPTION)
         if min_staff_length is not None:
-            constants += ["-constant", f"{_MIN_STAFF_LENGTH_CONSTANT}={min_staff_length:g}"]
+            constants += ["-constant", f"{_MIN_STAFF_LENGTH_CONSTANT}={min_staff_length!r}"]
         return [
             executable,
             "-batch",
