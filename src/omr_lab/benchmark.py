@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
 from collections import Counter
 from dataclasses import dataclass
@@ -114,11 +115,22 @@ def run_benchmark(
 ) -> BenchmarkResult:
     """Run each manifest sample with ``engine`` and write report.json and report.md.
 
-    ``output_dir`` must be missing or empty (OutputDirectoryError otherwise). Failed runs
-    do not stop the benchmark; they are recorded. A KeyboardInterrupt stops it without
-    a report. OSError is raised when the report cannot be written.
+    Raises ValueError for an invalid ``timeout_seconds`` or engine name before anything
+    is written. ``output_dir`` must be missing or empty (OutputDirectoryError otherwise).
+    Failed runs do not stop the benchmark; they are recorded. A KeyboardInterrupt stops
+    it without a report. OSError is raised when the report cannot be written.
     """
     output_dir = Path(output_dir)
+    # The same argument checks as run_pipeline, before the output directory is claimed.
+    if (
+        isinstance(timeout_seconds, bool)
+        or not isinstance(timeout_seconds, int | float)
+        or not math.isfinite(timeout_seconds)
+        or timeout_seconds <= 0
+    ):
+        raise ValueError("timeout_seconds must be a finite number greater than zero")
+    if not isinstance(engine.name, str) or not engine.name:
+        raise ValueError(f"Engine name must be a non-empty string, got {engine.name!r}.")
     requested = dict(options or {})
     generated_at = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     runs_dir = _prepare_output_dir(output_dir)

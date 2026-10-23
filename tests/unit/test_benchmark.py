@@ -211,6 +211,17 @@ def test_ground_truth_checksum_is_checked(tmp_path: Path) -> None:
     assert entry["problem"]["code"] == "ground_truth_checksum_mismatch"
 
 
+@pytest.mark.parametrize("timeout", [0, -1, float("nan"), True])
+def test_invalid_timeout_is_rejected_before_writing(
+    manifest_path: Path, tmp_path: Path, timeout: float
+) -> None:
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        run_benchmark(
+            load_manifest(manifest_path), tmp_path / "out", MockEngine(), timeout_seconds=timeout
+        )
+    assert not (tmp_path / "out").exists()
+
+
 def test_output_directory_must_be_empty(manifest_path: Path, tmp_path: Path) -> None:
     output = tmp_path / "out"
     output.mkdir()
