@@ -1,0 +1,3 @@
+# Checksummed fixtures (tests/fixtures/e2e/manifest.json) must keep their exact bytes,
+# so no line-ending conversion, for example with core.autocrlf=true on Windows.
+tests/fixtures/e2e/** -text

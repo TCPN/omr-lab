@@ -24,6 +24,8 @@ packages = ["src/omr_lab"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Shared test helpers (tests/e2e_report.py) are imported as top-level modules.
+pythonpath = ["tests"]
 # Marked tests are deselected by default (and in CI). A `-m` given on the
 # command line replaces this one, e.g. `uv run pytest -m integration`.
 addopts = "-ra --strict-markers -p pytester -m 'not integration and not gpu and not network'"

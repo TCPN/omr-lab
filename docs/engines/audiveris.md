@@ -81,7 +81,7 @@ Verified on 2026-10-14 against the Audiveris handbook (web edition, which shows 
 ## Tests
 
 - Unit tests (`tests/unit/test_audiveris_engine.py`) replace `run_command` and executable discovery; they need no Java or Audiveris.
-- Integration tests (`tests/integration/test_audiveris_integration.py`, marker `integration`) run with `uv run pytest -m integration` and skip when Audiveris is not found. The recognition test also needs a score image: no redistributable sample is committed yet (issue #10, decision #29), so set `OMR_LAB_AUDIVERIS_SAMPLE` to a local image path; otherwise it skips with that reason.
+- Integration tests (`tests/integration/test_audiveris_integration.py` and `tests/integration/test_e2e_audiveris.py`, marker `integration`) run with `uv run pytest -m integration` and skip when Audiveris is not found. They recognize the committed sample `tests/fixtures/e2e/twinkle.png` (CC0, see its README); `OMR_LAB_AUDIVERIS_SAMPLE` points the adapter test at another local image. The end-to-end test is described in the README's [End-to-end test](../../README.md#end-to-end-test) section.
 
 ## License obligations (for human review)
 

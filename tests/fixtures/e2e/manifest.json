@@ -1,0 +1,16 @@
+{
+  "samples": [
+    {
+      "id": "twinkle",
+      "image": "twinkle.png",
+      "image_sha256": "48e04b1cb752df3096af50057e8bf21bacb7dce73aae0292d3d036e05a20944e",
+      "ground_truth": "twinkle.musicxml",
+      "ground_truth_sha256": "cfbbfb7f57401bc9c5946c112a72b7331a2d126110e182a3bab8fd717542675b",
+      "work": "Twinkle, Twinkle, Little Star",
+      "source": "Encoded by hand for omr-lab from the traditional melody and the 1806 lyrics; image rendered from that encoding by scripts/render_e2e_sample.py",
+      "license": "CC0-1.0",
+      "condition": "clean digital rendering, 300 dpi, 8-bit grayscale, one page",
+      "renderer": "Verovio 6.3.0 (LGPL-3.0), cairosvg 2.9.1, Pillow 13.0.0; text font Liberation Serif"
+    }
+  ]
+}
