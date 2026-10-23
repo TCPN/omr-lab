@@ -139,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _tolerate_unencodable_output()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command == "doctor":
@@ -151,6 +152,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run(args.input, args.output, args.engine, options, args.timeout)
     parser.print_help()
     return EXIT_OK
+
+
+def _tolerate_unencodable_output() -> None:
+    # Paths are printed as given. One that stdout cannot encode (a non-UTF-8 directory
+    # name on POSIX, or a character outside the ANSI code page of a redirected Windows
+    # stream) must not turn a finished run into a traceback and the wrong exit code.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(errors="backslashreplace")
 
 
 def parse_options(pairs: Sequence[str]) -> EngineOptions:

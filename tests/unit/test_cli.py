@@ -1,5 +1,6 @@
 import errno
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -293,3 +294,17 @@ def test_run_document_that_cannot_be_written_is_reported(
     assert "could not be written (No space left on device)" in err
     assert "aborted run" in err
     assert (output / "raw").is_dir() and not (output / "run.json").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file names can be undecodable bytes")
+def test_output_path_stdout_cannot_encode_does_not_change_the_exit_code(
+    image: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A directory named with a Big5 byte arrives from argv as a lone surrogate.
+    output = tmp_path / "\udcb8"
+
+    code = main(_mock_run(image, output))
+
+    assert code == EXIT_OK
+    assert "Run document:" in capsys.readouterr().out
+    assert (output / "run.json").is_file()

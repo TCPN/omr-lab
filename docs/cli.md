@@ -39,7 +39,7 @@ uv run omr-lab run score.png -o runs/0004 --timeout 1200
 
 `--option` values are read as JSON when they are a JSON scalar: a number (`3`, `0.5`), `true`, `false`, `null`, or a quoted string (`'"3"'` for the text 3). Anything else is plain text, so `outcome=failed` is the string `failed`. A JSON array or object, `NaN` and `Infinity` stay text, because engine options are JSON scalars (`EngineOptions`). The engine decides which keys it accepts; an unknown key fails the run with `invalid_option` and the engine's message.
 
-On every run that writes a record, `run` prints `Run document: DIR/run.json` and then either `Status: succeeded (engine NAME)` on stdout or `Status: failed [CODE]: MESSAGE` on stderr. Each run warning is printed to stderr as `warning [CODE]: MESSAGE`. The run document is the full record; the printed lines are a summary. A succeeded run is not evidence that the music was recognized correctly.
+On every run that writes a record, `run` prints `Run document: DIR/run.json` and then either `Status: succeeded (engine NAME)` on stdout or `Status: failed [CODE]: MESSAGE` on stderr. Each run warning is printed to stderr as `warning [CODE]: MESSAGE`. The run document is the full record; the printed lines are a summary. Characters that the console's encoding cannot show, such as a path that is not valid UTF-8, are printed as backslash escapes instead of stopping the command. A succeeded run is not evidence that the music was recognized correctly.
 
 A directory that has `raw/` but no `run.json` is reported as an aborted run (a run that could not write its record, for example because the disk was full, or another run still in progress). It is left as it is for inspection; choose a new directory.
 
