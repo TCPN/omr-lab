@@ -3,6 +3,7 @@
 The real-engine run of the same sample is tests/integration/test_e2e_audiveris.py.
 """
 
+import copy
 import hashlib
 import json
 import shutil
@@ -10,6 +11,7 @@ import struct
 from pathlib import Path
 
 import pytest
+from e2e_report import GROUND_TRUTH, IMAGE, SAMPLE, correctness, expected_score
 
 from omr_lab import cli
 from omr_lab.cli import EXIT_OK, main
@@ -17,12 +19,6 @@ from omr_lab.engines import EngineAvailability, EngineOptions, EngineResult
 from omr_lab.musicxml import load_musicxml
 from omr_lab.schemas import validate_run_document
 from omr_lab.score import score_from_musicxml
-
-E2E_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "e2e"
-MANIFEST = json.loads((E2E_DIR / "manifest.json").read_text(encoding="utf-8"))
-(SAMPLE,) = MANIFEST["samples"]
-IMAGE = E2E_DIR / SAMPLE["image"]
-GROUND_TRUTH = E2E_DIR / SAMPLE["ground_truth"]
 
 
 class GroundTruthEngine:
@@ -54,10 +50,6 @@ class GroundTruthEngine:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _expected_score() -> dict:
-    return score_from_musicxml(load_musicxml(GROUND_TRUTH), source_artifact="musicxml").score
 
 
 def test_manifest_checksums_match_the_committed_files() -> None:
@@ -103,5 +95,38 @@ def test_sample_runs_through_the_cli_into_a_valid_run_document(
     assert document["status"] == "succeeded"
     assert document["warnings"] == []
     assert document["input"]["filename"] == "twinkle.png"
-    assert document["score"] == _expected_score()
+    assert document["score"] == expected_score()
     assert _sha256(IMAGE) == SAMPLE["image_sha256"]
+
+
+def test_report_helpers_score_the_ground_truth_as_perfect() -> None:
+    expected = expected_score()
+
+    report = correctness(expected, expected)
+
+    assert report["measures"] == {"expected": 12, "recognized": 12}
+    assert report["notes_pitch_and_duration"] == {
+        "expected": 42,
+        "recognized": 42,
+        "matched": 42,
+        "recall": 1.0,
+        "precision": 1.0,
+    }
+    assert report["chord_symbols"]["matched"] == 22
+    assert report["first_key_matches"] and report["first_time_matches"]
+
+
+def test_report_counts_a_wrong_pitch_and_a_missing_note() -> None:
+    expected = expected_score()
+    recognized = copy.deepcopy(expected)
+    first_measure = recognized["parts"][0]["measures"][0]["events"]
+    notes = [event for event in first_measure if event["kind"] == "note"]
+    notes[0]["pitches"][0]["step"] = "D"
+    first_measure.remove(notes[1])
+
+    report = correctness(expected, recognized)
+
+    assert report["notes_pitch_and_duration"]["matched"] == 40
+    assert report["notes_pitch_and_duration"]["recognized"] == 41
+    assert report["notes_duration_only"]["matched"] == 41
+    assert report["lyric_syllables"]["matched"] == 41

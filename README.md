@@ -56,7 +56,7 @@ uv run pytest -m ""                     # everything, marked or not
 ## End-to-end test
 `tests/fixtures/e2e/` holds one redistributable sample: `twinkle.png`, rendered from `twinkle.musicxml`, which is its exact ground truth (12 measures, chord symbols, one lyric verse; provenance and CC0 license in its README). Two tests use it:
 
-- `tests/unit/test_e2e_sample.py` (default suite, no engine): checks the sample's checksums and runs it through `omr-lab run` with a stand-in engine that returns the ground truth, so the CLI, pipeline, MusicXML loading, score conversion and run document are checked end to end.
+- `tests/unit/test_e2e_sample.py` (default suite, no engine): checks the sample's checksums and runs it through `omr-lab run` with a stand-in engine that returns the ground truth, so the CLI, pipeline, MusicXML loading, score conversion and run document are checked end to end. It also tests the correctness report (`tests/e2e_report.py`) that the integration test uses.
 - `tests/integration/test_e2e_audiveris.py` (marker `integration`): runs `omr-lab run` with the real Audiveris. It asserts output generation (exit 0, a valid `run.json` with `status: succeeded`, a loadable MusicXML, a `score`) and reports musical correctness against the ground truth separately, in `correctness.json` next to `run.json`, without asserting it.
 
 ```bash
