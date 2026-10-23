@@ -1117,9 +1117,9 @@ def test_musicxml_that_cannot_be_loaded_fails_the_run(
     document = _written(result)
     assert document["status"] == "failed"
     assert document["error"]["code"] == "musicxml_invalid"
-    assert document["error"]["message"].startswith(
-        f"The engine's MusicXML artifact 'raw/score.musicxml' could not be loaded ({loader_code}):"
-    )
+    message = document["error"]["message"]
+    assert message.startswith(f"The engine's primary MusicXML could not be loaded ({loader_code}):")
+    assert message.count("raw/score.musicxml") == 1
     assert document["score"] is None
     assert document["artifacts"] == {"musicxml": "raw/score.musicxml"}
     assert str(tmp_path) not in result.document_path.read_text(encoding="utf-8")
@@ -1137,11 +1137,19 @@ def test_musicxml_error_with_relative_output_dir_is_redacted(
     assert "run/raw" not in message
 
 
+@pytest.mark.parametrize(
+    ("limit", "detail"),
+    [({"max_bytes": 10}, "10-byte limit"), ({"max_elements": 2}, "element")],
+)
 def test_too_large_musicxml_message_names_no_unreachable_setting(
-    score: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    score: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    limit: dict[str, int],
+    detail: str,
 ) -> None:
     # run_pipeline has no max_bytes/max_elements, so the message must not ask to raise them.
-    monkeypatch.setattr(pipeline_module, "load_musicxml", partial(load_musicxml, max_bytes=10))
+    monkeypatch.setattr(pipeline_module, "load_musicxml", partial(load_musicxml, **limit))
 
     document = _written(
         run_pipeline(score, tmp_path / "run", _engine_writing_musicxml(MINIMAL_MUSICXML))
@@ -1149,8 +1157,9 @@ def test_too_large_musicxml_message_names_no_unreachable_setting(
 
     message = document["error"]["message"]
     assert "(musicxml_too_large)" in message
-    assert "10-byte limit" in message
-    assert "max_bytes" not in message and "Raise" not in message
+    assert detail in message
+    assert "max_bytes" not in message and "max_elements" not in message
+    assert "Raise" not in message
     assert message.endswith("which cannot be changed per run.")
 
 

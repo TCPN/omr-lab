@@ -456,8 +456,8 @@ def _record_score(state: _RunState, output_dir: Path) -> None:
             )
         state.record_error(
             RunErrorCode.MUSICXML_INVALID,
-            f"The engine's MusicXML artifact {artifact_path!r} could not be loaded "
-            f"({exc.code}): {reason}",
+            # The loader's message already names the file, so it is not repeated here.
+            f"The engine's primary MusicXML could not be loaded ({exc.code}): {reason}",
         )
         return
     conversion = score_from_musicxml(document, source_artifact=_PRIMARY_MUSICXML_KEY)
