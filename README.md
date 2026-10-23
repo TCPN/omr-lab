@@ -53,6 +53,18 @@ uv run pytest -m ""                     # everything, marked or not
 `--strict-markers` is on, so an unregistered marker is an error; register new markers in
 `pyproject.toml`. If no test matches the selection, pytest exits with code 5.
 
+## End-to-end test
+`tests/fixtures/e2e/` holds one redistributable sample: `twinkle.png`, rendered from `twinkle.musicxml`, which is its exact ground truth (12 measures, chord symbols, one lyric verse; provenance and CC0 license in its README). Two tests use it:
+
+- `tests/unit/test_e2e_sample.py` (default suite, no engine): checks the sample's checksums and runs it through `omr-lab run` with a stand-in engine that returns the ground truth, so the CLI, pipeline, MusicXML loading, score conversion and run document are checked end to end.
+- `tests/integration/test_e2e_audiveris.py` (marker `integration`): runs `omr-lab run` with the real Audiveris. It asserts output generation (exit 0, a valid `run.json` with `status: succeeded`, a loadable MusicXML, a `score`) and reports musical correctness against the ground truth separately, in `correctness.json` next to `run.json`, without asserting it.
+
+```bash
+OMR_LAB_E2E_OUTPUT=outputs/e2e uv run pytest -m integration -s tests/integration/test_e2e_audiveris.py
+```
+
+`OMR_LAB_E2E_OUTPUT` keeps each run directory (`outputs/e2e/twinkle-<UTC timestamp>/`, ignored by Git) as evidence; without it the run goes to pytest's temporary directory. The test skips when Audiveris is not installed.
+
 ## Source of truth
 - `AGENTS.md`: coding-agent rules (`CLAUDE.md` imports it for Claude Code)
 - `docs/architecture.md`: boundaries and data flow

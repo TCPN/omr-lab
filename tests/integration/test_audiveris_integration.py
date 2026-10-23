@@ -3,10 +3,10 @@
 Deselected by default; run with ``uv run pytest -m integration``. They skip when
 Audiveris cannot be found (see docs/engines/audiveris.md for setup).
 
-Recognition needs a score image. No redistributable sample is committed yet
-(sample provenance is issue #10 and decision #29), so the recognition test reads
-the image path from the ``OMR_LAB_AUDIVERIS_SAMPLE`` environment variable and
-skips when it is not set.
+The recognition test uses the committed end-to-end sample
+(tests/fixtures/e2e/twinkle.png, see its README.md) unless the
+``OMR_LAB_AUDIVERIS_SAMPLE`` environment variable names another local score image.
+The full input-to-run.json check is tests/integration/test_e2e_audiveris.py.
 """
 
 import os
@@ -19,6 +19,7 @@ from omr_lab.engines import AudiverisEngine
 pytestmark = pytest.mark.integration
 
 SAMPLE_ENV_VAR = "OMR_LAB_AUDIVERIS_SAMPLE"
+DEFAULT_SAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "e2e" / "twinkle.png"
 
 
 @pytest.fixture(scope="module")
@@ -38,13 +39,7 @@ def test_check_available_reports_version(engine: AudiverisEngine) -> None:
 
 
 def test_recognize_sample_produces_musicxml(engine: AudiverisEngine, tmp_path: Path) -> None:
-    sample = os.environ.get(SAMPLE_ENV_VAR)
-    if not sample:
-        pytest.skip(
-            f"No redistributable sample score is committed yet (issue #10, decision #29); "
-            f"set {SAMPLE_ENV_VAR} to a local score image to run this test."
-        )
-    sample_path = Path(sample)
+    sample_path = Path(os.environ.get(SAMPLE_ENV_VAR) or DEFAULT_SAMPLE)
     original = sample_path.read_bytes()
 
     result = engine.recognize(sample_path, tmp_path / "out", timeout_seconds=600)
