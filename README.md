@@ -63,7 +63,7 @@ uv run pytest -m ""                     # everything, marked or not
 OMR_LAB_E2E_OUTPUT=outputs/e2e uv run pytest -m integration -s tests/integration/test_e2e_audiveris.py
 ```
 
-`OMR_LAB_E2E_OUTPUT` keeps each run directory (`outputs/e2e/twinkle-<UTC timestamp>/`, ignored by Git) as evidence; without it the run goes to pytest's temporary directory. The test skips when Audiveris is not installed.
+`OMR_LAB_E2E_OUTPUT` keeps each run directory (`outputs/e2e/twinkle-<UTC timestamp>/`, ignored by Git; the timestamp has microseconds, so repeated runs never share a directory) as evidence; without it the run goes to pytest's temporary directory. The test skips when Audiveris is not installed.
 
 ## Source of truth
 - `AGENTS.md`: coding-agent rules (`CLAUDE.md` imports it for Claude Code)

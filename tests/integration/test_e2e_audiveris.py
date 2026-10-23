@@ -10,8 +10,8 @@ reported, not asserted, because a valid output is not a correct one. The report 
 written to ``correctness.json`` in the run directory and printed (use ``-s`` to see it).
 
 Set ``OMR_LAB_E2E_OUTPUT`` to a directory to keep the evidence: each run then writes
-a new ``twinkle-<UTC timestamp>`` run directory there instead of in pytest's temporary
-directory.
+a new ``twinkle-<UTC timestamp>`` run directory there (the timestamp has microseconds)
+instead of in pytest's temporary directory.
 """
 
 from __future__ import annotations
@@ -45,7 +45,8 @@ def _run_dir(tmp_path: Path) -> Path:
     root = os.environ.get(OUTPUT_ENV_VAR)
     if not root:
         return tmp_path / "run"
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    # Microseconds keep repeated runs apart; the CLI refuses a non-empty directory.
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     return Path(root) / f"{SAMPLE['id']}-{stamp}"
 
 
@@ -55,7 +56,9 @@ def test_sample_end_to_end_with_audiveris(audiveris_available: None, tmp_path: P
     code = main(["run", str(IMAGE), "-o", str(run_dir), "--engine", "audiveris"])
 
     # Output generation: asserted.
-    document = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    document_path = run_dir / "run.json"
+    assert document_path.is_file(), f"no run.json (exit code {code}); see the captured stderr"
+    document = json.loads(document_path.read_text(encoding="utf-8"))
     validate_run_document(document)
     assert code == EXIT_OK, document.get("error")
     assert document["status"] == "succeeded"

@@ -13,13 +13,13 @@ import os
 from pathlib import Path
 
 import pytest
+from e2e_report import IMAGE
 
 from omr_lab.engines import AudiverisEngine
 
 pytestmark = pytest.mark.integration
 
 SAMPLE_ENV_VAR = "OMR_LAB_AUDIVERIS_SAMPLE"
-DEFAULT_SAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "e2e" / "twinkle.png"
 
 
 @pytest.fixture(scope="module")
@@ -39,7 +39,7 @@ def test_check_available_reports_version(engine: AudiverisEngine) -> None:
 
 
 def test_recognize_sample_produces_musicxml(engine: AudiverisEngine, tmp_path: Path) -> None:
-    sample_path = Path(os.environ.get(SAMPLE_ENV_VAR) or DEFAULT_SAMPLE)
+    sample_path = Path(os.environ.get(SAMPLE_ENV_VAR) or IMAGE)
     original = sample_path.read_bytes()
 
     result = engine.recognize(sample_path, tmp_path / "out", timeout_seconds=600)
