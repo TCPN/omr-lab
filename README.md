@@ -6,7 +6,7 @@ Local-first, modular Optical Music Recognition (OMR) pipeline:
 
 ## Status
 - Phase 1: Local OMR Foundation
-- Initial engine candidate: Audiveris, adapter in `omr_lab.engines.AudiverisEngine`; setup, verified CLI, and AGPL notes in `docs/engines/audiveris.md` (license policy pending decision #30)
+- Initial engine candidate: Audiveris, adapter in `omr_lab.engines.AudiverisEngine`; setup, verified CLI, and AGPL notes in `docs/engines/audiveris.md` (run only as an unmodified external program, see [ADR 0002](docs/decisions/0002-project-license-and-agpl-engines.md))
 - Second candidate: homr
 - Interchange format: MusicXML
 - Python, uv, pytest, Ruff
@@ -78,6 +78,9 @@ OMR_LAB_E2E_OUTPUT=outputs/e2e uv run pytest -m integration -s tests/integration
 - `docs/engines/`: per-engine setup, verified CLI behavior, and license notes
 - `src/omr_lab/`: Python package
 - `tests/`: automated tests
+
+## License
+omr-lab is released under the [MIT License](LICENSE). OMR engines are installed separately and keep their own licenses; Audiveris is AGPL-3.0. The policy for such engines is [ADR 0002](docs/decisions/0002-project-license-and-agpl-engines.md).
 
 ## Collaboration
 ChatGPT plans and reviews; GitHub Issues define bounded tasks; Codex and Claude Code implement and test; a human reviews, merges, and answers `decision: needed` issues. Durable decisions must be written to this repository rather than relying on chat history.
