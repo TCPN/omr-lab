@@ -388,8 +388,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 else f"{entry['problem']['code']}: {entry['problem']['message']}"
             )
         lines.append(
-            f"| {_markdown_cell(entry['id'])} | {entry['status']} | {_markdown_cell(entry['condition'])} "
-            f"| {duration} | {_markdown_cell(detail)} | {_markdown_cell(warnings)} |"
+            f"| {_markdown_cell(entry['id'])} | {entry['status']} "
+            f"| {_markdown_cell(entry['condition'])} | {duration} "
+            f"| {_markdown_cell(detail)} | {_markdown_cell(warnings)} |"
         )
     return "\n".join(lines) + "\n"
 
