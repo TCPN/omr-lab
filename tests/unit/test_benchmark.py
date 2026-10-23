@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -220,6 +221,20 @@ def test_invalid_timeout_is_rejected_before_writing(
             load_manifest(manifest_path), tmp_path / "out", MockEngine(), timeout_seconds=timeout
         )
     assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs os.mkfifo")
+def test_non_regular_image_is_not_opened(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / "pipe.png")  # opening it for reading would block
+    path = tmp_path / "manifest.json"
+    sample = _sample("a", "pipe.png", "a" * 64)
+    path.write_text(json.dumps({"schema_version": "0.1.0", "samples": [sample]}), encoding="utf-8")
+
+    report = run_benchmark(load_manifest(path), tmp_path / "out", MockEngine(), timeout_seconds=1)
+    assert report.report["samples"][0]["problem"] == {
+        "code": "image_missing",
+        "message": "'pipe.png' is not a regular file.",
+    }
 
 
 def test_output_directory_must_be_empty(manifest_path: Path, tmp_path: Path) -> None:

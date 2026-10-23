@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import platform
+import stat
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -283,6 +284,12 @@ def _checksum_problem(
     role: str, path: Path, manifest_text: str, expected: str
 ) -> dict[str, str] | None:
     try:
+        # Only regular files are read: a FIFO or device would block or never end.
+        if not stat.S_ISREG(path.stat().st_mode):
+            return {
+                "code": f"{role}_missing",
+                "message": f"{manifest_text!r} is not a regular file.",
+            }
         digest = _sha256(path)
     except OSError as exc:
         return {
