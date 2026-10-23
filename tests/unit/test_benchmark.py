@@ -271,6 +271,11 @@ def test_duplicate_ids_and_bad_json_are_manifest_errors(tmp_path: Path) -> None:
     path.write_text("{", encoding="utf-8")
     with pytest.raises(ManifestError, match="not UTF-8 JSON"):
         load_manifest(path)
+    path.write_text(
+        '{"schema_version": "0.1.0", "samples": [{"source": "\\ud83c"}]}', encoding="utf-8"
+    )
+    with pytest.raises(ManifestError, match="unpaired surrogate"):
+        load_manifest(path)
     with pytest.raises(ManifestError, match="cannot be read"):
         load_manifest(tmp_path / "none.json")
 

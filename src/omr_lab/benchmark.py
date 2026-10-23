@@ -91,6 +91,14 @@ def load_manifest(path: Path | str) -> Manifest:
     except (UnicodeDecodeError, ValueError) as exc:
         raise ManifestError(f"Manifest {str(path)!r} is not UTF-8 JSON: {exc}.") from exc
     try:
+        # json accepts escapes of unpaired surrogates ("\\ud83c"), which cannot be
+        # written back as UTF-8; reject them before any sample runs.
+        json.dumps(document, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ManifestError(
+            f"Manifest {str(path)!r} contains an unpaired surrogate escape: {exc}."
+        ) from exc
+    try:
         validate_benchmark_manifest(document)
     except BenchmarkDocumentValidationError as exc:
         raise ManifestError(f"Manifest {str(path)!r}: {exc}") from exc
