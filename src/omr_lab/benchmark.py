@@ -18,7 +18,12 @@ from typing import Any
 
 from omr_lab import __version__
 from omr_lab.engines import Engine, EngineOptions
-from omr_lab.pipeline import RUN_DOCUMENT_FILENAME, OutputDirectoryError, run_pipeline
+from omr_lab.pipeline import (
+    RUN_DOCUMENT_FILENAME,
+    OutputDirectoryError,
+    _path_redactor,
+    run_pipeline,
+)
 from omr_lab.schemas.benchmark import (
     BENCHMARK_REPORT_SCHEMA_VERSION,
     BenchmarkDocumentValidationError,
@@ -65,7 +70,7 @@ class BenchmarkResult:
 
     @property
     def all_succeeded(self) -> bool:
-        """True when every sample that was not excluded ran and succeeded."""
+        """True when no sample failed or was left not run (also when all are excluded)."""
         summary = self.report["summary"]
         return summary["failed"] == 0 and summary["not_run"] == 0
 
@@ -121,11 +126,6 @@ def run_benchmark(
         _run_sample(manifest, sample, runs_dir, engine, timeout_seconds, requested)
         for sample in manifest.samples
     ]
-    for entry in entries:
-        if entry["run"] is not None:
-            entry["run"]["document"] = (
-                Path(entry["run"]["document"]).relative_to(output_dir).as_posix()
-            )
     report = {
         "schema_version": BENCHMARK_REPORT_SCHEMA_VERSION,
         "generated_at": generated_at,
@@ -237,15 +237,14 @@ def _run_sample(
     except ValueError as exc:
         # Arguments that make a run record impossible, such as an image file name the
         # run document cannot store.
-        # The message may name local paths; keep them out of the report.
-        message = str(exc).replace(str(runs_dir.parent), "<output_dir>")
-        message = message.replace(str(manifest.base_dir), "<manifest_dir>")
-        entry["problem"] = {"code": "run_not_started", "message": message}
+        # The message may name local paths; redact them the way run documents do.
+        redact = _path_redactor(image, runs_dir.parent)
+        entry["problem"] = {"code": "run_not_started", "message": redact(str(exc))}
         return entry
     document = result.document
     entry["status"] = document["status"]
     entry["run"] = {
-        "document": str(runs_dir / sample["id"] / RUN_DOCUMENT_FILENAME),
+        "document": f"{RUNS_DIRNAME}/{sample['id']}/{RUN_DOCUMENT_FILENAME}",
         "status": document["status"],
         "error_code": document["error"]["code"] if document["error"] else None,
         "engine_version": document["engine"]["version"],
@@ -256,19 +255,21 @@ def _run_sample(
     return entry
 
 
-def _checksum_problem(role: str, path: Path, written: str, expected: str) -> dict[str, str] | None:
+def _checksum_problem(
+    role: str, path: Path, manifest_text: str, expected: str
+) -> dict[str, str] | None:
     try:
         digest = _sha256(path)
     except OSError as exc:
         return {
             "code": f"{role}_missing",
-            "message": f"{written!r} cannot be read: {exc.strerror or exc}.",
+            "message": f"{manifest_text!r} cannot be read: {exc.strerror or exc}.",
         }
     if digest != expected:
         return {
             "code": f"{role}_checksum_mismatch",
             "message": (
-                f"{written!r} has SHA-256 {digest}, but the manifest expects {expected}. "
+                f"{manifest_text!r} has SHA-256 {digest}, but the manifest expects {expected}. "
                 "Update the manifest only if the file was changed on purpose."
             ),
         }

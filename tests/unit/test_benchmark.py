@@ -286,6 +286,30 @@ def test_run_not_started_message_has_no_local_path(
     assert str(tmp_path) not in json.dumps(report)
 
 
+def test_run_not_started_redacts_whole_path_components_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A manifest loaded by a relative path from its own directory: its base dir is ".",
+    # which must not turn every "." in the message into a placeholder.
+    image = _write(tmp_path / "data" / "a.png", b"png")
+    (tmp_path / "data" / "manifest.json").write_text(
+        json.dumps({"schema_version": "0.1.0", "samples": [_sample("a", "a.png", image)]}),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path / "data")
+
+    def refuse(input_path: Path, *args: object, **kwargs: object) -> None:
+        raise ValueError(f"Input file name {input_path.name!r} is not valid. Rename data.")
+
+    monkeypatch.setattr(benchmark, "run_pipeline", refuse)
+    report = run_benchmark(
+        load_manifest("manifest.json"), "data", MockEngine(), timeout_seconds=1
+    ).report
+    assert report["samples"][0]["problem"]["message"] == (
+        "Input file name 'a.png' is not valid. Rename data."
+    )
+
+
 def test_markdown_escapes_table_cells(manifest_path: Path, tmp_path: Path) -> None:
     report = _run(manifest_path, tmp_path / "out").report
     report["samples"][2]["exclusion_reason"] = "a | b\nc"
