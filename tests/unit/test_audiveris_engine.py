@@ -9,6 +9,7 @@ from omr_lab.engines import (
     AudiverisEngine,
     CommandResult,
     Engine,
+    InvalidEngineOptionError,
     LauncherLookup,
     UnknownEngineOptionError,
 )
@@ -354,7 +355,7 @@ def test_recognize_builds_verified_batch_command(
     assert result.returncode == 0
     assert result.version == "5.10.0"
     assert result.artifacts == {"musicxml": run_dir / "score.mxl"}
-    assert result.options == {}
+    assert result.options == {"min_staff_length": None}
     assert any("INFO done" in line for line in result.diagnostics)
     assert score.read_bytes() == b"not really a png"
 
@@ -390,14 +391,53 @@ def test_runs_sharing_an_output_dir_get_separate_run_directories(
 
 
 @pytest.mark.parametrize("name", ["sheets", "device"])
-def test_no_options_are_supported_yet(
+def test_unsupported_options_are_rejected(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path, name: str
 ) -> None:
     # -sheets is deferred until its multi-value parsing is verified on a real install.
     runner = _install(monkeypatch, FakeRunner())
 
-    with pytest.raises(UnknownEngineOptionError, match=r"Supported options: \(none\)"):
+    with pytest.raises(UnknownEngineOptionError, match=r"Supported options: min_staff_length"):
         _engine(launcher).recognize(score, tmp_path / "out", timeout_seconds=5, options={name: "1"})
+    assert runner.calls == []
+
+
+@pytest.mark.parametrize(
+    ("value", "text"), [(15, "15"), (12.5, "12.5"), (12.3456789, "12.3456789")]
+)
+def test_min_staff_length_is_passed_as_audiveris_constant(
+    monkeypatch: pytest.MonkeyPatch,
+    launcher: Path,
+    score: Path,
+    tmp_path: Path,
+    value: float,
+    text: str,
+) -> None:
+    runner = _install(monkeypatch, FakeRunner())
+
+    result = _engine(launcher).recognize(
+        score, tmp_path / "out", timeout_seconds=5, options={"min_staff_length": value}
+    )
+
+    args = list(runner.calls[-1][0])
+    position = args.index("-constant")
+    assert args[position + 1] == (
+        f"org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength={text}"
+    )
+    assert position < args.index("--")
+    assert result.options == {"min_staff_length": value}
+
+
+@pytest.mark.parametrize("value", [0, -1, 1001, True, "15"])
+def test_invalid_min_staff_length_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path, value: object
+) -> None:
+    runner = _install(monkeypatch, FakeRunner())
+
+    with pytest.raises(InvalidEngineOptionError, match="min_staff_length"):
+        _engine(launcher).recognize(
+            score, tmp_path / "out", timeout_seconds=5, options={"min_staff_length": value}
+        )
     assert runner.calls == []
 
 
@@ -411,7 +451,7 @@ def test_missing_executable_returns_failure_result(
 
     assert result.success is False
     assert "AUDIVERIS_EXE" in (result.error or "")
-    assert result.options == {}
+    assert result.options == {"min_staff_length": None}
     assert runner.calls == []
 
 
