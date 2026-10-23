@@ -13,9 +13,11 @@ import os
 from pathlib import Path
 
 import pytest
-from e2e_report import IMAGE
+from e2e_report import IMAGE, expected_score
 
 from omr_lab.engines import AudiverisEngine
+from omr_lab.musicxml import load_musicxml
+from omr_lab.score import score_from_musicxml
 
 pytestmark = pytest.mark.integration
 
@@ -50,3 +52,22 @@ def test_recognize_sample_produces_musicxml(engine: AudiverisEngine, tmp_path: P
     assert all(path.is_file() for path in result.artifacts.values())
     assert sample_path.read_bytes() == original
     # A produced file is not proof of correct recognition; see docs/engine-interface.md.
+
+
+def _measure_counts(score: dict) -> list[int]:
+    return [len(part["measures"]) for part in score["parts"]]
+
+
+def test_min_staff_length_keeps_the_short_last_staff(
+    engine: AudiverisEngine, tmp_path: Path
+) -> None:
+    # Audiveris ignores an unknown -constant key silently, so this guards against the
+    # constant behind min_staff_length being renamed (issue #55). The committed sample's
+    # last staff is about 20 interlines long, under the default limit of 30.
+    result = engine.recognize(
+        IMAGE, tmp_path / "out", timeout_seconds=600, options={"min_staff_length": 15}
+    )
+
+    assert result.success is True, (result.error, result.diagnostics)
+    recognized = score_from_musicxml(load_musicxml(result.artifacts["musicxml"])).score
+    assert _measure_counts(recognized) == _measure_counts(expected_score())
