@@ -1,5 +1,7 @@
 # Benchmark Protocol
 
+The manifest and report formats and the `omr-lab benchmark` command are in [benchmark.md](benchmark.md).
+
 ## Dataset
 Use only scores with redistribution permission or keep private data outside Git. Record source/license, condition, checksum, and ground-truth availability. Include clean scans, phone photos, skew/perspective and curved pages only when relevant.
 

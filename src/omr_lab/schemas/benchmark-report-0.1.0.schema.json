@@ -1,0 +1,362 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omr-lab:schema:benchmark-report:0.1.0",
+  "title": "OMR Lab benchmark report",
+  "description": "Generated record of one benchmark: the manifest, environment and engine configuration, and one entry per manifest sample (run, failed, excluded or not run); see docs/benchmark.md. A generated report is not ground truth.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "manifest",
+    "environment",
+    "engine",
+    "samples",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "generated_at": {
+      "description": "UTC RFC 3339 timestamp at which the benchmark started.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "sha256",
+        "name",
+        "schema_version"
+      ],
+      "properties": {
+        "filename": {
+          "description": "Base name of the manifest file (no directory, so no local path).",
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "type": "string"
+        }
+      }
+    },
+    "environment": {
+      "description": "The machine the benchmark ran on; no host name, user name or path.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "omr_lab_version",
+        "python_version",
+        "python_implementation",
+        "os",
+        "os_release",
+        "machine"
+      ],
+      "properties": {
+        "omr_lab_version": {
+          "type": "string"
+        },
+        "python_version": {
+          "type": "string"
+        },
+        "python_implementation": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        },
+        "os_release": {
+          "type": "string"
+        },
+        "machine": {
+          "type": "string"
+        }
+      }
+    },
+    "engine": {
+      "description": "The engine configuration requested for every sample. Each run's effective options and engine version are in its sample entry.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "requested_options",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requested_options": {
+          "$ref": "#/$defs/options"
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "samples": {
+      "description": "One entry per manifest sample, in manifest order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sample"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "samples",
+        "excluded",
+        "not_run",
+        "attempted",
+        "succeeded",
+        "failed",
+        "success_rate",
+        "engine_versions",
+        "error_codes",
+        "run_duration_seconds"
+      ],
+      "properties": {
+        "samples": {
+          "$ref": "#/$defs/count"
+        },
+        "excluded": {
+          "$ref": "#/$defs/count"
+        },
+        "not_run": {
+          "$ref": "#/$defs/count"
+        },
+        "attempted": {
+          "description": "Samples given to the pipeline: succeeded + failed.",
+          "$ref": "#/$defs/count"
+        },
+        "succeeded": {
+          "$ref": "#/$defs/count"
+        },
+        "failed": {
+          "$ref": "#/$defs/count"
+        },
+        "success_rate": {
+          "description": "succeeded / attempted, rounded to 3 decimals, or null when nothing was attempted. Pipeline completion, not musical correctness.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "engine_versions": {
+          "description": "Distinct engine versions recorded by the runs, sorted; null versions are left out.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error_codes": {
+          "description": "Number of failed runs per run error code.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "run_duration_seconds": {
+          "description": "Sum of the attempted runs' durations.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "image",
+        "image_sha256",
+        "ground_truth",
+        "source",
+        "license",
+        "condition",
+        "exclusion_reason",
+        "problem",
+        "run",
+        "correctness"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "description": "'succeeded' and 'failed' are the run's status; 'excluded' comes from the manifest; 'not_run' means a check before the run failed (see problem).",
+          "enum": [
+            "succeeded",
+            "failed",
+            "excluded",
+            "not_run"
+          ]
+        },
+        "image": {
+          "description": "The image path as written in the manifest.",
+          "type": "string"
+        },
+        "image_sha256": {
+          "description": "The checksum the manifest expects.",
+          "$ref": "#/$defs/sha256"
+        },
+        "ground_truth": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "condition": {
+          "type": "string"
+        },
+        "exclusion_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "problem": {
+          "description": "Why a 'not_run' sample was not run; null otherwise.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "enum": [
+                    "image_missing",
+                    "image_checksum_mismatch",
+                    "ground_truth_missing",
+                    "ground_truth_checksum_mismatch",
+                    "run_not_started"
+                  ]
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        },
+        "run": {
+          "description": "Summary of the sample's run document; null when the sample was not run.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "document",
+                "status",
+                "error_code",
+                "engine_version",
+                "options",
+                "duration_seconds",
+                "warning_codes"
+              ],
+              "properties": {
+                "document": {
+                  "description": "Path of the run document relative to the report's directory.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "enum": [
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "error_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "engine_version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "options": {
+                  "description": "Effective options recorded in the run document.",
+                  "$ref": "#/$defs/options"
+                },
+                "duration_seconds": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "warning_codes": {
+                  "description": "Number of run warnings per warning code.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/$defs/count"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "correctness": {
+          "description": "Musical correctness against the ground truth. Always null in report 0.1.0: correctness is reviewed separately until the metrics of issue #24 exist.",
+          "type": "null"
+        }
+      }
+    }
+  }
+}

@@ -13,9 +13,9 @@ The following tasks have been created as open GitHub Issues:
 - OMR-007 — [#9 Implement CLI for local recognition](https://github.com/TCPN/omr-lab/issues/9)
 - OMR-008 — [#10 Add end-to-end test with a sample score](https://github.com/TCPN/omr-lab/issues/10)
 
-## M2–M4 (proposed issue bodies)
+## M2–M4
 
-OMR-009 through OMR-014 remain proposed task descriptions in this directory, not live GitHub Issues. Create them when the earlier milestones are ready.
+M2 — Benchmark and Preprocessing Baseline is live: OMR-009 is [#57](https://github.com/TCPN/omr-lab/issues/57), OMR-010 is [#58](https://github.com/TCPN/omr-lab/issues/58), together with #23, #24 and #55. OMR-011 through OMR-014 remain proposed task descriptions in this directory, not live GitHub Issues. Create them when the earlier milestones are ready.
 
 ## Tracking setup
 

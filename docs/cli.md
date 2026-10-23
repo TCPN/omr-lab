@@ -1,6 +1,6 @@
 # Command-Line Interface
 
-`omr-lab` is installed with the package (`uv sync`, then `uv run omr-lab ...`). It has two commands: `doctor` checks what this machine can run, and `run` recognizes one file with the pipeline ([pipeline.md](pipeline.md)). `omr-lab --help` and `omr-lab COMMAND --help` describe every option.
+`omr-lab` is installed with the package (`uv sync`, then `uv run omr-lab ...`). It has three commands: `doctor` checks what this machine can run, `run` recognizes one file with the pipeline ([pipeline.md](pipeline.md)), and `benchmark` runs every sample of a manifest and writes a report ([benchmark.md](benchmark.md)). `omr-lab --help` and `omr-lab COMMAND --help` describe every option.
 
 ## doctor
 
@@ -42,6 +42,14 @@ uv run omr-lab run score.png -o runs/0004 --timeout 1200
 On every run that writes a record, `run` prints `Run document: DIR/run.json` and then either `Status: succeeded (engine NAME)` on stdout or `Status: failed [CODE]: MESSAGE` on stderr. Each run warning is printed to stderr as `warning [CODE]: MESSAGE`. The run document is the full record; the printed lines are a summary. Characters that the console's encoding cannot show, such as a path that is not valid UTF-8, are printed as backslash escapes instead of stopping the command. A succeeded run is not evidence that the music was recognized correctly.
 
 A directory that has `raw/` but no `run.json` is reported as an aborted run (a run that could not write its record, for example because the disk was full, or another run still in progress). It is left as it is for inspection; choose a new directory.
+
+## benchmark
+
+```bash
+uv run omr-lab benchmark tests/fixtures/e2e/manifest.json -o benchmarks/reports/generated/0001 --engine mock
+```
+
+`MANIFEST` and `-o`/`--output DIR` (missing or empty) are required; `--engine`, `--option` and `--timeout` are as for `run` and apply to every sample. It prints the report paths and one line per sample. The manifest, report and exit codes are described in [benchmark.md](benchmark.md); the table below is for `doctor` and `run`.
 
 ## Exit codes
 

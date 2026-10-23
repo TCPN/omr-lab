@@ -1,4 +1,4 @@
-"""Command-line interface: ``omr-lab doctor`` and ``omr-lab run`` (docs/cli.md).
+"""Command-line interface: ``omr-lab doctor``, ``run`` and ``benchmark`` (docs/cli.md).
 
 The CLI only parses arguments, builds engines and reports results; recognition
 itself is ``omr_lab.pipeline.run_pipeline``. Exit codes are part of the
@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TextIO
 
 from omr_lab import __version__
+from omr_lab.benchmark import ManifestError, load_manifest, run_benchmark
 from omr_lab.engines import AudiverisEngine, Engine, EngineOptions, EngineOptionValue
 from omr_lab.engines.mock import MockEngine
 from omr_lab.pipeline import (
@@ -29,19 +30,22 @@ from omr_lab.pipeline import (
 )
 
 EXIT_OK = 0
-"""``run`` succeeded, or ``doctor`` found every checked engine available."""
+"""``run`` succeeded, ``doctor`` found every checked engine available, or every
+``benchmark`` sample that was not excluded succeeded."""
 EXIT_RUN_FAILED = 1
-"""The run failed for another reason (engine failure, invalid MusicXML, internal error)."""
+"""The run failed for another reason (engine failure, invalid MusicXML, internal error),
+or a ``benchmark`` sample failed or was not run (the report is still written)."""
 EXIT_USAGE = 2
 """Invalid command line (also argparse's own exit status for usage errors)."""
 EXIT_INVALID_INPUT = 3
-"""The input file is missing, unreadable, empty, or of an unsupported type."""
+"""The input file is missing, unreadable, empty, or of an unsupported type; or the
+``benchmark`` manifest cannot be read or is invalid."""
 EXIT_ENGINE_UNAVAILABLE = 4
 """The engine's prerequisites are missing (``run``), or an engine is unavailable (``doctor``)."""
 EXIT_INVALID_OPTION = 5
 """The engine rejected an ``--option`` name or value."""
 EXIT_OUTPUT_DIR_UNUSABLE = 6
-"""The output directory cannot be used; no run document was written."""
+"""The output directory cannot be used; no run document (or report) was written."""
 EXIT_INTERRUPTED = 130
 """Stopped with Ctrl-C (128 + SIGINT, the shell convention)."""
 
@@ -110,13 +114,38 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Run output directory; it must not exist or be empty.",
     )
-    run.add_argument(
+    _add_engine_arguments(run, engine_names)
+
+    benchmark = subparsers.add_parser(
+        "benchmark",
+        help="Run every sample of a benchmark manifest and write a report.",
+        description=(
+            "Run each sample of MANIFEST with one engine and write OUTPUT/report.json, "
+            "OUTPUT/report.md and one run directory per sample in OUTPUT/runs/. OUTPUT must "
+            "be missing or empty. Exits with "
+            f"{EXIT_RUN_FAILED} when a sample failed or was not run. See docs/benchmark.md."
+        ),
+    )
+    benchmark.add_argument("manifest", type=Path, help="Benchmark manifest (JSON).")
+    benchmark.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        required=True,
+        help="Benchmark output directory; it must not exist or be empty.",
+    )
+    _add_engine_arguments(benchmark, engine_names)
+    return parser
+
+
+def _add_engine_arguments(parser: argparse.ArgumentParser, engine_names: list[str]) -> None:
+    parser.add_argument(
         "--engine",
         choices=engine_names,
         default=DEFAULT_ENGINE,
         help=f"Engine adapter to use (default: {DEFAULT_ENGINE}).",
     )
-    run.add_argument(
+    parser.add_argument(
         "--option",
         dest="options",
         action="append",
@@ -128,14 +157,13 @@ def build_parser() -> argparse.ArgumentParser:
             "(so outcome=failed and outcome='\"failed\"' are the same)."
         ),
     )
-    run.add_argument(
+    parser.add_argument(
         "--timeout",
         type=_parse_timeout_seconds,
         default=DEFAULT_TIMEOUT_SECONDS,
         metavar="SECONDS",
         help=f"Engine timeout in seconds (default: {DEFAULT_TIMEOUT_SECONDS:g}).",
     )
-    return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -144,12 +172,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "doctor":
         return _doctor(args.engine, sys.stdout)
-    if args.command == "run":
+    if args.command in ("run", "benchmark"):
         try:
             options = parse_options(args.options)
         except ValueError as exc:
             parser.error(str(exc))
-        return _run(args.input, args.output, args.engine, options, args.timeout)
+        if args.command == "run":
+            return _run(args.input, args.output, args.engine, options, args.timeout)
+        return _benchmark(args.manifest, args.output, args.engine, options, args.timeout)
     parser.print_help()
     return EXIT_OK
 
@@ -272,6 +302,61 @@ def _run(
     error = document["error"]
     print(f"Status: failed [{error['code']}]: {error['message']}", file=sys.stderr)
     return _EXIT_BY_ERROR_CODE.get(error["code"], EXIT_RUN_FAILED)
+
+
+def _benchmark(
+    manifest_path: Path,
+    output_dir: Path,
+    engine_name: str,
+    options: EngineOptions,
+    timeout_seconds: float,
+) -> int:
+    try:
+        manifest = load_manifest(manifest_path)
+    except ManifestError as exc:
+        print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+    try:
+        result = run_benchmark(
+            manifest,
+            output_dir,
+            ENGINES[engine_name](),
+            timeout_seconds=timeout_seconds,
+            options=options,
+        )
+    except OutputDirectoryError as exc:
+        print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_OUTPUT_DIR_UNUSABLE
+    except KeyboardInterrupt:
+        print(
+            f"omr-lab: interrupted; no report was written. The finished runs are in {output_dir}",
+            file=sys.stderr,
+        )
+        return EXIT_INTERRUPTED
+    except OSError as exc:
+        print(
+            f"omr-lab: error: the benchmark could not write its files in {output_dir} "
+            f"({exc.strerror or exc}); no complete report was written.",
+            file=sys.stderr,
+        )
+        return EXIT_OUTPUT_DIR_UNUSABLE
+
+    summary = result.report["summary"]
+    print(f"Report: {result.report_path}")
+    print(f"Summary: {result.markdown_path}")
+    for entry in result.report["samples"]:
+        detail = ""
+        if entry["run"] is not None and entry["run"]["error_code"]:
+            detail = f" [{entry['run']['error_code']}]"
+        elif entry["problem"] is not None:
+            detail = f" [{entry['problem']['code']}]"
+        print(f"  {entry['id']}: {entry['status']}{detail}")
+    print(
+        f"Samples: {summary['samples']}, excluded {summary['excluded']}, "
+        f"not run {summary['not_run']}, succeeded {summary['succeeded']}, "
+        f"failed {summary['failed']}"
+    )
+    return EXIT_OK if result.all_succeeded else EXIT_RUN_FAILED
 
 
 def _aborted_run_message(output_dir: Path) -> str | None:
