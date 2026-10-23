@@ -23,9 +23,9 @@ Each sample:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | yes | Unique in the manifest; lowercase letters, digits, `_`, `.`, `-` (up to 64, starting with a letter or digit). Also the name of its run directory. |
+| `id` | yes | Unique in the manifest; lowercase letters, digits, `_`, `.`, `-` (up to 64, starting with a letter or digit, not ending with `.`, and not a Windows device name such as `con` or `nul`). Also the name of its run directory. |
 | `image`, `image_sha256` | yes | Input image or PDF, relative to the manifest's directory (`/` separators, `..` allowed, no absolute path), and its SHA-256. |
-| `ground_truth`, `ground_truth_sha256` | no | MusicXML ground truth and its SHA-256; a `ground_truth` needs its checksum. |
+| `ground_truth`, `ground_truth_sha256` | no | MusicXML ground truth and its SHA-256; a `ground_truth` path needs a non-null checksum. |
 | `source`, `license`, `condition` | yes | Provenance, license (SPDX identifier where possible) and input condition (clean rendering, phone photo, skew, ...). |
 | `work`, `renderer`, `notes` | no | Title, tools that rendered a synthetic image, free text. |
 | `excluded` | no | `{"reason": "..."}` keeps the sample in the manifest but does not run it; reports list it with the reason. |
@@ -53,7 +53,7 @@ Private or unlicensed scores stay outside Git (for example in `data/private/`, w
 - `engine`: name, `requested_options` and `timeout_seconds` as given. The version and effective options each run actually used are in its sample entry, because an engine can change between samples.
 - `samples`: one entry per manifest sample, in manifest order, with the manifest's `image`, `image_sha256`, `ground_truth`, `source`, `license`, `condition`, and:
   - `status`: `succeeded` or `failed` (the run's status), `excluded` (from the manifest; `exclusion_reason` gives why) or `not_run` (`problem` gives why).
-  - `problem`: for `not_run`, a `code` and `message`. Before a run, the image and the ground truth are read and their SHA-256 compared with the manifest: `image_missing`, `image_checksum_mismatch`, `ground_truth_missing`, `ground_truth_checksum_mismatch`. `run_not_started` is a run the pipeline refused to start (for example an image file name the run document cannot store).
+  - `problem`: for `not_run`, a `code` and `message`. Before a run, the image and the ground truth are read and their SHA-256 compared with the manifest: `image_missing`, `image_checksum_mismatch`, `ground_truth_missing`, `ground_truth_checksum_mismatch`. `run_not_started` is a run the pipeline refused to start (for example an image file name the run document cannot store); local paths in its message are replaced by `<output_dir>` and `<manifest_dir>`.
   - `run`: for samples that ran, the run document path relative to the report, its status and `error_code`, `engine_version`, effective `options`, `duration_seconds`, and `warning_codes` (number of warnings per code). The run document has the details.
   - `correctness`: always `null` in this version. Musical correctness is reviewed separately until the metrics of issue #24 exist; a succeeded run is not a correctly recognized score.
 - `summary`: counts of samples, `excluded`, `not_run`, `attempted` (= `succeeded` + `failed`), `success_rate` (succeeded / attempted, 3 decimals, `null` when nothing ran), distinct `engine_versions`, failed runs per `error_codes`, and the summed `run_duration_seconds`.

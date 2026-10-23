@@ -237,7 +237,10 @@ def _run_sample(
     except ValueError as exc:
         # Arguments that make a run record impossible, such as an image file name the
         # run document cannot store.
-        entry["problem"] = {"code": "run_not_started", "message": str(exc)}
+        # The message may name local paths; keep them out of the report.
+        message = str(exc).replace(str(runs_dir.parent), "<output_dir>")
+        message = message.replace(str(manifest.base_dir), "<manifest_dir>")
+        entry["problem"] = {"code": "run_not_started", "message": message}
         return entry
     document = result.document
     entry["status"] = document["status"]

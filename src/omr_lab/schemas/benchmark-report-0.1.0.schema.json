@@ -191,15 +191,8 @@
       "pattern": "^[0-9a-f]{64}$"
     },
     "options": {
-      "type": "object",
-      "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean",
-          "null"
-        ]
-      }
+      "description": "Engine options; any JSON values, like the run document's options.",
+      "type": "object"
     },
     "sample": {
       "type": "object",

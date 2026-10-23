@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from omr_lab import cli
+from omr_lab import benchmark, cli
 from omr_lab.benchmark import (
     REPORT_JSON_FILENAME,
     REPORT_MARKDOWN_FILENAME,
@@ -229,6 +229,13 @@ def test_output_directory_must_be_empty(manifest_path: Path, tmp_path: Path) -> 
         (lambda d: d["samples"][0].update(image_sha256="ABC"), "image_sha256"),
         (lambda d: d["samples"][0].pop("license"), "license"),
         (lambda d: d["samples"][0].update(ground_truth="a.musicxml"), "ground_truth_sha256"),
+        (
+            lambda d: d["samples"][0].update(ground_truth="a.musicxml", ground_truth_sha256=None),
+            "ground_truth_sha256",
+        ),
+        (lambda d: d["samples"][0].update(id="a."), "id"),
+        (lambda d: d["samples"][0].update(id="nul"), "reserves"),
+        (lambda d: d["samples"][0].update(id="com1.txt"), "reserves"),
         (lambda d: d["samples"][0].update(excluded={}), "reason"),
         (lambda d: d["samples"][0].update(extra=1), "extra"),
         (lambda d: d.update(samples=[]), "samples"),
@@ -255,6 +262,28 @@ def test_duplicate_ids_and_bad_json_are_manifest_errors(tmp_path: Path) -> None:
         load_manifest(path)
     with pytest.raises(ManifestError, match="cannot be read"):
         load_manifest(tmp_path / "none.json")
+
+
+def test_ground_truth_null_is_allowed_without_a_path() -> None:
+    sample = _sample("a", "a.png", "a" * 64, ground_truth=None, ground_truth_sha256=None)
+    validate_benchmark_manifest({"schema_version": "0.1.0", "samples": [sample]})
+
+
+def test_run_not_started_message_has_no_local_path(
+    manifest_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(input_path: Path, output_dir: Path, *args: object, **kwargs: object) -> None:
+        # As run_pipeline does for a run directory it cannot use (on Windows, "a." and "a").
+        raise OutputDirectoryError(f"Output directory {str(output_dir)!r} is already used.")
+
+    monkeypatch.setattr(benchmark, "run_pipeline", refuse)
+    report = _run(manifest_path, tmp_path / "out").report
+    problem = report["samples"][0]["problem"]
+    assert problem == {
+        "code": "run_not_started",
+        "message": f"Output directory {'<output_dir>/runs/good'!r} is already used.",
+    }
+    assert str(tmp_path) not in json.dumps(report)
 
 
 def test_markdown_escapes_table_cells(manifest_path: Path, tmp_path: Path) -> None:

@@ -49,11 +49,39 @@
           "ground_truth_sha256"
         ]
       },
+      "if": {
+        "required": [
+          "ground_truth"
+        ],
+        "properties": {
+          "ground_truth": {
+            "type": "string"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ground_truth_sha256": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
       "properties": {
         "id": {
-          "description": "Stable sample identifier, unique in the manifest; also the name of the sample's run directory.",
+          "description": "Stable sample identifier, unique in the manifest; also the name of the sample's run directory, so it must be a portable directory name.",
           "type": "string",
-          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+          "allOf": [
+            {
+              "description": "must be 1 to 64 lowercase letters, digits, '_', '.' or '-', starting with a letter or digit and not ending with '.'",
+              "pattern": "^[a-z0-9]([a-z0-9_.-]{0,62}[a-z0-9_-])?$"
+            },
+            {
+              "description": "must not be a name Windows reserves for devices, such as 'con' or 'nul'",
+              "not": {
+                "pattern": "^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\\..*)?$"
+              }
+            }
+          ]
         },
         "image": {
           "description": "Input image or PDF, relative to the manifest's directory.",
