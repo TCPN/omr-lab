@@ -332,7 +332,10 @@ def _summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "attempted": attempted,
         "succeeded": statuses["succeeded"],
         "failed": statuses["failed"],
-        "success_rate": round(statuses["succeeded"] / attempted, 3) if attempted else None,
+        # Rounded down, so one failure among thousands never shows as 100%.
+        "success_rate": (
+            math.floor(statuses["succeeded"] * 1000 / attempted) / 1000 if attempted else None
+        ),
         "engine_versions": sorted(
             {run["engine_version"] for run in runs if run["engine_version"] is not None}
         ),

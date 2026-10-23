@@ -151,7 +151,7 @@
           "$ref": "#/$defs/count"
         },
         "success_rate": {
-          "description": "succeeded / attempted, rounded to 3 decimals, or null when nothing was attempted. Pipeline completion, not musical correctness.",
+          "description": "succeeded / attempted, rounded down to 3 decimals, or null when nothing was attempted. Pipeline completion, not musical correctness.",
           "type": [
             "number",
             "null"

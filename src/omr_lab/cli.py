@@ -316,11 +316,20 @@ def _benchmark(
     except ManifestError as exc:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
         return EXIT_INVALID_INPUT
+    # Checked once, as `run` does, so a missing engine is exit 4 and not N failed samples.
+    engine = ENGINES[engine_name]()
+    availability = engine.check_available()
+    if not availability.available:
+        print(
+            f"omr-lab: error: {engine_name}: {availability.message or 'not available'}",
+            file=sys.stderr,
+        )
+        return EXIT_ENGINE_UNAVAILABLE
     try:
         result = run_benchmark(
             manifest,
             output_dir,
-            ENGINES[engine_name](),
+            engine,
             timeout_seconds=timeout_seconds,
             options=options,
         )

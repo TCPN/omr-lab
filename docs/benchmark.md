@@ -56,7 +56,7 @@ Private or unlicensed scores stay outside Git (for example in `data/private/`, w
   - `problem`: for `not_run`, a `code` and `message`. Before a run, the image and the ground truth are read and their SHA-256 compared with the manifest: `image_missing` (also when it is not a regular file), `image_checksum_mismatch`, `ground_truth_missing`, `ground_truth_checksum_mismatch`. `run_not_started` is a run the pipeline refused to start (for example an image file name the run document cannot store); local paths in its message are replaced by `<output_dir>`, `<input_dir>` (the image's directory) and `~`, as in run documents.
   - `run`: for samples that ran, the run document path relative to the report, its status and `error_code`, `engine_version`, effective `options`, `duration_seconds`, and `warning_codes` (number of warnings per code). The run document has the details.
   - `correctness`: always `null` in this version. Musical correctness is reviewed separately until the metrics of issue #24 exist; a succeeded run is not a correctly recognized score.
-- `summary`: counts of samples, `excluded`, `not_run`, `attempted` (= `succeeded` + `failed`), `success_rate` (succeeded / attempted, 3 decimals, `null` when nothing ran), distinct `engine_versions`, failed runs per `error_codes`, and the summed `run_duration_seconds`.
+- `summary`: counts of samples, `excluded`, `not_run`, `attempted` (= `succeeded` + `failed`), `success_rate` (succeeded / attempted, rounded down to 3 decimals, `null` when nothing ran), distinct `engine_versions`, failed runs per `error_codes`, and the summed `run_duration_seconds`.
 
 Two runs of the same manifest and engine on the same machine give the same report except `generated_at` and the durations (a unit test checks this).
 
@@ -70,5 +70,6 @@ A failed or timed-out engine run does not stop the benchmark: each failure is re
 | 1 | Report written; at least one sample failed or was not run. |
 | 2 | Invalid command line, including an `--option` value the report cannot store (not valid UTF-8). Nothing is written. |
 | 3 | The manifest cannot be read, is not JSON, breaks the schema, or repeats a sample id. Nothing is written. |
+| 4 | The engine is not available (`doctor` reports why); checked once before anything is written. Nothing is written. |
 | 6 | The output directory cannot be used, or the report could not be written. |
 | 130 | Interrupted with Ctrl-C; no report. |

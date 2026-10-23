@@ -15,7 +15,13 @@ from omr_lab.benchmark import (
     render_markdown,
     run_benchmark,
 )
-from omr_lab.cli import EXIT_INVALID_INPUT, EXIT_OK, EXIT_OUTPUT_DIR_UNUSABLE, EXIT_RUN_FAILED, main
+from omr_lab.cli import (
+    EXIT_INVALID_INPUT,
+    EXIT_OK,
+    EXIT_OUTPUT_DIR_UNUSABLE,
+    EXIT_RUN_FAILED,
+    main,
+)
 from omr_lab.engines import EngineOptions, EngineResult
 from omr_lab.engines.mock import MOCK_ENGINE_VERSION, MockEngine
 from omr_lab.pipeline import OutputDirectoryError
@@ -393,3 +399,21 @@ def test_cli_benchmark_succeeds_on_the_e2e_manifest(tmp_path: Path) -> None:
     report = json.loads((tmp_path / "out" / REPORT_JSON_FILENAME).read_text(encoding="utf-8"))
     assert report["manifest"]["name"] == "e2e-sample"
     assert report["summary"]["succeeded"] == 1
+
+
+def test_success_rate_rounds_down() -> None:
+    run = {"engine_version": None, "error_code": None, "duration_seconds": 0.0}
+    entries = [{"status": "succeeded", "run": run}] * 2999 + [
+        {"status": "failed", "run": {**run, "error_code": "engine_failed"}}
+    ]
+    assert benchmark._summary(entries)["success_rate"] == 0.999
+
+
+def test_cli_benchmark_unavailable_engine_writes_nothing(
+    manifest_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(cli.ENGINES, "mock", lambda: MockEngine(available=False))
+    output = tmp_path / "out"
+    argv = ["benchmark", str(manifest_path), "-o", str(output), "--engine", "mock"]
+    assert main(argv) == cli.EXIT_ENGINE_UNAVAILABLE
+    assert not output.exists()
