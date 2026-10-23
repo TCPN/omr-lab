@@ -1,4 +1,5 @@
-"""Command-line interface: ``omr-lab doctor``, ``run`` and ``benchmark`` (docs/cli.md).
+"""Command-line interface: ``omr-lab doctor``, ``run``, ``benchmark`` and ``synthesize``
+(docs/cli.md).
 
 The CLI only parses arguments, builds engines and reports results; recognition
 itself is ``omr_lab.pipeline.run_pipeline``. Exit codes are part of the
@@ -39,10 +40,12 @@ or a ``benchmark`` sample failed or was not run (the report is still written).""
 EXIT_USAGE = 2
 """Invalid command line (also argparse's own exit status for usage errors)."""
 EXIT_INVALID_INPUT = 3
-"""The input file is missing, unreadable, empty, or of an unsupported type; or the
-``benchmark`` manifest cannot be read or is invalid."""
+"""The input file is missing, unreadable, empty, or of an unsupported type; the
+``benchmark`` manifest cannot be read or is invalid; or the ``synthesize`` specification
+or one of its source scores cannot be read, is invalid, or cannot be rendered."""
 EXIT_ENGINE_UNAVAILABLE = 4
-"""The engine's prerequisites are missing (``run``), or an engine is unavailable (``doctor``)."""
+"""The engine's prerequisites are missing (``run``), an engine is unavailable (``doctor``),
+or a rendering package or text font is missing (``synthesize``)."""
 EXIT_INVALID_OPTION = 5
 """The engine rejected an ``--option`` name or value."""
 EXIT_OUTPUT_DIR_UNUSABLE = 6
@@ -136,6 +139,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Benchmark output directory; it must not exist or be empty.",
     )
     _add_engine_arguments(benchmark, engine_names)
+
+    synthesize = subparsers.add_parser(
+        "synthesize",
+        help="Render and degrade a synthetic benchmark corpus from a specification.",
+        description=(
+            "Render each source score of SPEC with Verovio, apply each variant's "
+            "degradations with seeded random parameters, and write OUTPUT/images/, "
+            "OUTPUT/ground-truth/ and OUTPUT/manifest.json (a benchmark manifest that "
+            "records every parameter). OUTPUT must be missing or empty. Needs the "
+            "'synthetic' extra. See docs/synthetic-corpus.md."
+        ),
+    )
+    synthesize.add_argument("spec", type=Path, help="Corpus specification (JSON).")
+    synthesize.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        required=True,
+        help="Corpus output directory; it must not exist or be empty.",
+    )
+    synthesize.add_argument(
+        "--seed",
+        type=_parse_seed,
+        help="Corpus seed to use instead of the specification's seed.",
+    )
     return parser
 
 
@@ -181,6 +209,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "run":
             return _run(args.input, args.output, args.engine, options, args.timeout)
         return _benchmark(args.manifest, args.output, args.engine, options, args.timeout)
+    if args.command == "synthesize":
+        return _synthesize(args.spec, args.output, args.seed)
     parser.print_help()
     return EXIT_OK
 
@@ -232,6 +262,20 @@ def _parse_timeout_seconds(text: str) -> float:
     if not math.isfinite(value) or value <= 0:
         raise argparse.ArgumentTypeError(f"{text!r} must be a finite number greater than zero")
     return value
+
+
+def _parse_seed(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not an integer") from None
+    if not 0 <= value <= _MAX_SEED:
+        raise argparse.ArgumentTypeError(f"{text!r} must be between 0 and {_MAX_SEED}")
+    return value
+
+
+# The largest integer a JSON number keeps exactly in every common reader.
+_MAX_SEED = 2**53 - 1
 
 
 def _doctor(engine_name: str | None, out: TextIO) -> int:
@@ -380,6 +424,53 @@ def _benchmark(
         f"failed {summary['failed']}"
     )
     return EXIT_OK if result.all_succeeded else EXIT_RUN_FAILED
+
+
+def _synthesize(spec_path: Path, output_dir: Path, seed: int | None) -> int:
+    # Imported here: the rest of the CLI must work without the optional extra.
+    from omr_lab.synthetic import (
+        CorpusSpecError,
+        SourceError,
+        SyntheticDependencyError,
+        generate_corpus,
+        load_corpus_spec,
+    )
+
+    try:
+        spec = load_corpus_spec(spec_path)
+    except CorpusSpecError as exc:
+        print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+    try:
+        result = generate_corpus(spec, output_dir, seed=seed)
+    except SyntheticDependencyError as exc:
+        print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_ENGINE_UNAVAILABLE
+    except SourceError as exc:
+        print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_INVALID_INPUT
+    except OutputDirectoryError as exc:
+        print(f"omr-lab: error: {exc}", file=sys.stderr)
+        return EXIT_OUTPUT_DIR_UNUSABLE
+    except KeyboardInterrupt:
+        print(
+            f"omr-lab: interrupted; no manifest was written. Partial files are in {output_dir}",
+            file=sys.stderr,
+        )
+        return EXIT_INTERRUPTED
+    except OSError as exc:
+        print(
+            f"omr-lab: error: the corpus could not be written in {output_dir} "
+            f"({exc.strerror or exc}); no manifest was written.",
+            file=sys.stderr,
+        )
+        return EXIT_OUTPUT_DIR_UNUSABLE
+    samples = result.manifest["samples"]
+    print(f"Manifest: {result.manifest_path}")
+    for sample in samples:
+        print(f"  {sample['id']}: {sample['image']}")
+    print(f"Samples: {len(samples)}")
+    return EXIT_OK
 
 
 def _aborted_run_message(output_dir: Path) -> str | None:

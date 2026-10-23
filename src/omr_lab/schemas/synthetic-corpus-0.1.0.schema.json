@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omr-lab:schema:synthetic-corpus:0.1.0",
+  "title": "OMR Lab synthetic corpus specification",
+  "description": "What `omr-lab synthesize` renders and how it degrades it: source scores, variants and the corpus seed; see docs/synthetic-corpus.md. Parameter names and ranges of each degradation kind, and unique ids, are checked by the loader.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "seed",
+    "sources",
+    "variants"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "name": {
+      "description": "Name of the corpus; also the generated manifest's name.",
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "seed": {
+      "description": "Corpus seed. Each sample's seed is derived from it and the sample's source and variant ids, so adding a source or variant does not change the other samples.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "text_fonts": {
+      "description": "Default text fonts for titles, chord symbols and lyrics, in order of preference; the first one installed is used. Default: Liberation Serif, Times New Roman.",
+      "$ref": "#/$defs/fonts"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "variants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/variant"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "description": "must be 1 to 30 lowercase letters, digits or '-', starting and ending with a letter or digit",
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,28}[a-z0-9])?$"
+    },
+    "fonts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001F\"&<>,]+$"
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "musicxml",
+        "source",
+        "license"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "musicxml": {
+          "description": "Uncompressed MusicXML score, relative to the specification's directory; it is rendered and is the ground truth of every sample made from it. It must fit on one page.",
+          "type": "string",
+          "minLength": 1
+        },
+        "work": {
+          "type": "string"
+        },
+        "source": {
+          "description": "Where the score comes from; copied into the manifest.",
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "description": "License of the score and the images made from it, preferably an SPDX identifier.",
+          "type": "string",
+          "minLength": 1
+        },
+        "text_fonts": {
+          "description": "Text fonts for this source, replacing the corpus default (for example a CJK font for Chinese lyrics).",
+          "$ref": "#/$defs/fonts"
+        }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "condition",
+        "degradations"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "condition": {
+          "description": "The manifest's condition text for samples of this variant.",
+          "type": "string",
+          "minLength": 1
+        },
+        "degradations": {
+          "description": "Applied in order to the clean rendering; empty for the clean image.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/degradation"
+          }
+        }
+      }
+    },
+    "degradation": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "rotate",
+            "perspective",
+            "curvature",
+            "blur",
+            "noise",
+            "lighting",
+            "jpeg"
+          ]
+        }
+      },
+      "additionalProperties": {
+        "description": "A parameter: a fixed number, or a range drawn uniformly per sample.",
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "min",
+              "max"
+            ],
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "name": "synthetic-v1",
+  "description": "Single-melody lead sheets with chord symbols and lyrics, clean and degraded.",
+  "seed": 20261023,
+  "sources": [
+    {
+      "id": "twinkle",
+      "musicxml": "../../tests/fixtures/e2e/twinkle.musicxml",
+      "work": "Twinkle, Twinkle, Little Star",
+      "source": "omr-lab end-to-end fixture (tests/fixtures/e2e/README.md): traditional melody, lyrics by Jane Taylor (1806), chord symbols and encoding written for omr-lab",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "ode-to-joy",
+      "musicxml": "sources/ode-to-joy.musicxml",
+      "work": "Ode to Joy",
+      "source": "omr-lab encoding (benchmarks/synthetic/README.md): melody by Ludwig van Beethoven (1824), lyrics by Friedrich Schiller (1785), chord symbols written for omr-lab",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "amazing-grace",
+      "musicxml": "sources/amazing-grace.musicxml",
+      "work": "Amazing Grace",
+      "source": "omr-lab encoding (benchmarks/synthetic/README.md): tune New Britain (1829), two verses by John Newton (1779), chord symbols written for omr-lab",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "xiao-yu-di-da",
+      "musicxml": "sources/xiao-yu-di-da.musicxml",
+      "work": "小雨滴答",
+      "source": "omr-lab encoding (benchmarks/synthetic/README.md): traditional melody (Frère Jacques), two verses of Chinese lyrics and chord symbols written for omr-lab",
+      "license": "CC0-1.0",
+      "text_fonts": ["Noto Serif CJK TC", "Noto Sans CJK TC", "WenQuanYi Zen Hei"]
+    }
+  ],
+  "variants": [
+    {
+      "id": "clean",
+      "condition": "clean digital rendering",
+      "degradations": []
+    },
+    {
+      "id": "scan",
+      "condition": "simulated flatbed scan: slight skew, mild blur and noise",
+      "degradations": [
+        {"kind": "rotate", "degrees": {"min": -2, "max": 2}},
+        {"kind": "blur", "radius": {"min": 0.5, "max": 1.2}},
+        {"kind": "noise", "sigma": {"min": 4, "max": 10}}
+      ]
+    },
+    {
+      "id": "photo",
+      "condition": "simulated phone photo: perspective, page curvature, uneven lighting, JPEG",
+      "degradations": [
+        {"kind": "perspective", "strength": {"min": 0.02, "max": 0.06}},
+        {"kind": "curvature", "amplitude": {"min": 0.005, "max": 0.015}},
+        {"kind": "lighting", "strength": {"min": 0.2, "max": 0.45}, "angle": {"min": 0, "max": 360}},
+        {"kind": "blur", "radius": {"min": 0.8, "max": 1.8}},
+        {"kind": "noise", "sigma": {"min": 6, "max": 14}},
+        {"kind": "jpeg", "quality": {"min": 45, "max": 75}}
+      ]
+    }
+  ]
+}
