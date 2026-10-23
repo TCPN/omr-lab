@@ -23,6 +23,7 @@ from omr_lab.pipeline import (
     RUN_DOCUMENT_FILENAME,
     OutputDirectoryError,
     _path_redactor,
+    _write_atomically,
     run_pipeline,
 )
 from omr_lab.schemas.benchmark import (
@@ -159,10 +160,9 @@ def run_benchmark(
     validate_benchmark_report(report)
     report_path = output_dir / REPORT_JSON_FILENAME
     markdown_path = output_dir / REPORT_MARKDOWN_FILENAME
-    report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
-    )
-    markdown_path.write_text(render_markdown(report), encoding="utf-8", newline="\n")
+    # Atomic, so a reader never finds a truncated report.json.
+    _write_atomically(report_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+    _write_atomically(markdown_path, render_markdown(report))
     return BenchmarkResult(report=report, report_path=report_path, markdown_path=markdown_path)
 
 
@@ -210,7 +210,7 @@ def _run_sample(
     runs_dir: Path,
     engine: Engine,
     timeout_seconds: float,
-    options: dict[str, Any],
+    requested_options: dict[str, Any],
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "id": sample["id"],
@@ -244,7 +244,11 @@ def _run_sample(
         return entry
     try:
         result = run_pipeline(
-            image, runs_dir / sample["id"], engine, timeout_seconds=timeout_seconds, options=options
+            image,
+            runs_dir / sample["id"],
+            engine,
+            timeout_seconds=timeout_seconds,
+            options=requested_options,
         )
     except ValueError as exc:
         # Arguments that make a run record impossible, such as an image file name the

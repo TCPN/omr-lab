@@ -43,14 +43,15 @@ def load_benchmark_report_schema() -> dict[str, Any]:
     return _load("benchmark-report", BENCHMARK_REPORT_SCHEMA_VERSION)
 
 
+_SCHEMA_VERSIONS = {
+    "benchmark-manifest": BENCHMARK_MANIFEST_SCHEMA_VERSION,
+    "benchmark-report": BENCHMARK_REPORT_SCHEMA_VERSION,
+}
+
+
 @cache
 def _validator(name: str) -> Draft202012Validator:
-    version = (
-        BENCHMARK_MANIFEST_SCHEMA_VERSION
-        if name == "benchmark-manifest"
-        else BENCHMARK_REPORT_SCHEMA_VERSION
-    )
-    schema = _load(name, version)
+    schema = _load(name, _SCHEMA_VERSIONS[name])
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema)
 
