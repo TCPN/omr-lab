@@ -166,7 +166,7 @@ def _tail(text: str, label: str) -> list[str]:
     return [header, *shown]
 
 
-def _check_min_staff_length(engine_name: str, value: EngineOptionValue) -> None:
+def _validate_min_staff_length(engine_name: str, value: EngineOptionValue) -> None:
     # bool is an int subclass; resolve_options() has already rejected NaN and infinity.
     if value is None or (
         isinstance(value, int | float)
@@ -386,7 +386,9 @@ class AudiverisEngine:
 
         ``-transcribe`` runs the full recognition and ``-export`` writes MusicXML;
         ``--`` makes the input path an input file even if it starts with ``-``.
+        ``options`` must already be validated, as ``recognize`` does.
         """
+        # Audiveris application constants, as -constant key=value pairs.
         constant_args: list[str | Path] = []
         min_staff_length = options.get(MIN_STAFF_LENGTH_OPTION)
         if min_staff_length is not None:
@@ -439,7 +441,7 @@ class AudiverisEngine:
         after a failed run for inspection.
         """
         effective = resolve_options(self.name, options, SUPPORTED_OPTIONS)
-        _check_min_staff_length(self.name, effective[MIN_STAFF_LENGTH_OPTION])
+        _validate_min_staff_length(self.name, effective[MIN_STAFF_LENGTH_OPTION])
 
         if not input_path.is_file():
             return self._failure_result(
