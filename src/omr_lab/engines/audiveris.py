@@ -38,6 +38,7 @@ from omr_lab.engines.base import (
     EngineOptions,
     EngineOptionValue,
     EngineResult,
+    InvalidEngineOptionError,
     resolve_options,
     run_command,
 )
@@ -82,11 +83,21 @@ _VERSION_PATTERN = re.compile(r"^\s*-?\s*Version:\s*(\S+)", re.IGNORECASE | re.M
 
 _MAX_LOG_LINES = 20
 
+MIN_STAFF_LENGTH_OPTION = "min_staff_length"
+"""Option: shortest staff Audiveris keeps, in interlines (issue #55).
+
+Audiveris drops every staff shorter than its ``LinesRetriever.minStaffLength``
+constant (30 interlines in 5.11), without a warning; a short last line with one
+measure is lost that way. ``None`` keeps the Audiveris default.
+"""
+
+_MIN_STAFF_LENGTH_CONSTANT = "org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength"
+
 # The options this adapter supports, with their default values; resolve_options()
-# uses it to reject unknown names and to fill in defaults. None are supported yet:
-# ``-sheets`` is documented, but how it parses several ids/ranges has not been
-# verified against a real installation, so it is deferred.
-SUPPORTED_OPTIONS: Mapping[str, EngineOptionValue] = {}
+# uses it to reject unknown names and to fill in defaults. ``-sheets`` is
+# documented, but how it parses several ids/ranges has not been verified against
+# a real installation, so it is deferred.
+SUPPORTED_OPTIONS: Mapping[str, EngineOptionValue] = {MIN_STAFF_LENGTH_OPTION: None}
 
 WhichFunc = Callable[[str], str | None]
 
@@ -151,6 +162,19 @@ def _tail(text: str, label: str) -> list[str]:
     shown = lines[-_MAX_LOG_LINES:]
     header = f"{label} (last {len(shown)} of {len(lines)} lines):"
     return [header, *shown]
+
+
+def _check_min_staff_length(engine_name: str, value: EngineOptionValue) -> None:
+    # bool is an int subclass; resolve_options() has already rejected NaN and infinity.
+    if value is None or (
+        isinstance(value, int | float) and not isinstance(value, bool) and 0 < value <= 1000
+    ):
+        return
+    raise InvalidEngineOptionError(
+        f"Option {MIN_STAFF_LENGTH_OPTION!r} for engine {engine_name!r} must be a number of "
+        f"interlines greater than 0 and at most 1000, or null for the Audiveris default; "
+        f"got {value!r}."
+    )
 
 
 def _command_diagnostics(command: CommandResult) -> list[str]:
@@ -359,12 +383,16 @@ class AudiverisEngine:
         ``-transcribe`` runs the full recognition and ``-export`` writes MusicXML;
         ``--`` makes the input path an input file even if it starts with ``-``.
         """
-        del options  # No options are mapped to arguments yet.
+        constants: list[str | Path] = []
+        min_staff_length = options.get(MIN_STAFF_LENGTH_OPTION)
+        if min_staff_length is not None:
+            constants += ["-constant", f"{_MIN_STAFF_LENGTH_CONSTANT}={min_staff_length:g}"]
         return [
             executable,
             "-batch",
             "-transcribe",
             "-export",
+            *constants,
             "-output",
             output_dir,
             "--",
@@ -407,6 +435,7 @@ class AudiverisEngine:
         after a failed run for inspection.
         """
         effective = resolve_options(self.name, options, SUPPORTED_OPTIONS)
+        _check_min_staff_length(self.name, effective[MIN_STAFF_LENGTH_OPTION])
 
         if not input_path.is_file():
             return self._failure_result(

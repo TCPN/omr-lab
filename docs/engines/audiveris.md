@@ -35,7 +35,13 @@ When Audiveris is missing or `-version` fails without printing a version, `check
 
 ### Options
 
-The adapter supports no options yet (`SUPPORTED_OPTIONS` is empty); any option name raises `UnknownEngineOptionError` ("Supported options: (none)"). `-sheets` is documented, but how it parses several ids/ranges has not been verified, so sheet selection is deferred until it has been checked against a real installation. Other Audiveris flags (`-constant`, `-step`, `-force`, `-save`, `-print`, `-swap`, `-playlist`) are not exposed either.
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `min_staff_length` | `null` (Audiveris default, 30) | Shortest staff Audiveris keeps, in interlines (the distance between two staff lines). A number greater than 0 and at most 1000. It is passed as `-constant org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength=<value>`. Lower it when a score has a short last line; see [Short staves are dropped](#short-staves-are-dropped). |
+
+Any other option name raises `UnknownEngineOptionError`, and an invalid `min_staff_length` raises `InvalidEngineOptionError`, before Audiveris runs. Example: `omr-lab run score.png -o runs/0001 --option min_staff_length=15`.
+
+`-sheets` is documented, but how it parses several ids/ranges has not been verified, so sheet selection is deferred until it has been checked against a real installation. Other Audiveris constants and flags (`-step`, `-force`, `-save`, `-print`, `-swap`, `-playlist`) are not exposed.
 
 ### Output layout
 
@@ -53,6 +59,24 @@ The adapter supports no options yet (`SUPPORTED_OPTIONS` is empty); any option n
 - Safety: the input file is never written. `.omr` project files are refused as input (Audiveris uses them as input *and* output and would modify them). Because Audiveris writes into a fresh, empty run directory, its output cannot replace the input file or any other existing file.
 - A successful result only means MusicXML was produced, not that the music was recognized correctly.
 
+## Short staves are dropped
+
+Audiveris silently drops every staff that is shorter than its `LinesRetriever.minStaffLength` constant: 30 interlines in 5.11.0. The staff and all its measures are missing from the MusicXML, the log has no warning, and the run still succeeds. A short last line of a song, such as a single closing measure, is the typical case (issue #55).
+
+Evidence (Audiveris 5.11.0, the end-to-end sample `tests/fixtures/e2e/twinkle.png`, interline 21 px):
+
+| Layout of the sample | Last staff | Audiveris result |
+| --- | --- | --- |
+| 5 + 6 + 1 measures (the committed sample) | 430 px, about 20 interlines | 2 systems, 11 measures: measure 12 is lost |
+| 5 + 5 + 2 measures | 778 px, about 37 interlines | 3 systems, 12 measures |
+| 4 + 4 + 4 measures | 1471 px | 3 systems, 12 measures |
+| 5 + 6 + 1, last line stretched to full width | full width | 3 systems, 12 measures |
+| 5 + 6 + 1 with `min_staff_length=15` | 430 px | 3 systems, 12 measures; 42 of 42 notes matched (one extra note) |
+
+These runs used the Linux `.deb` of 5.11.0 extracted without installing, in a container without Tesseract languages, so chord symbols and lyrics were not recognized there; staff detection does not depend on OCR. The other layouts were rendered with the same Verovio settings as the sample and system breaks set in the MusicXML. The staff detection log line `Systems: #1[1] #2[2]` already lacks the third system, while `Retrieved raw line clusters: 3` shows that the lines were found and then discarded by length.
+
+Lowering `min_staff_length` keeps such staves. It is not the default because a lower limit may also accept other long horizontal lines as staves; check the result on the corpus before relying on it. omr-lab does not add measures that the engine did not report, and a run alone cannot tell that a staff was dropped: compare the measure count with the ground truth (the benchmark and end-to-end correctness reports do this).
+
 ## Verified CLI facts
 
 Verified on 2026-10-14 against the Audiveris handbook (web edition, which shows `-version` sample output for 5.10.0):
@@ -66,6 +90,7 @@ Verified on 2026-10-14 against the Audiveris handbook (web edition, which shows 
 | Installers bundle a JRE; Linux launcher `/opt/audiveris/bin/Audiveris`; Windows `C:\Program Files\Audiveris\Audiveris.exe`; Scoop example `audiveris -batch -transcribe <image>` | [Install from binaries](https://audiveris.github.io/audiveris/_pages/tutorials/install/binaries/) |
 | Source builds provide `bin/Audiveris` and `bin\Audiveris.bat` launchers | [Build from source](https://audiveris.github.io/audiveris/_pages/tutorials/install/sources/) |
 | Repository license: AGPL-3.0 | [Audiveris/audiveris](https://github.com/Audiveris/audiveris) |
+| `-constant key=value` defines an application constant; `-constant org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength=15` changes the result as expected (2026-10-23, 5.11.0 on Linux). An unknown key is ignored without a message. | `-help` output and runs for issue #55 |
 
 ### Not verified
 
