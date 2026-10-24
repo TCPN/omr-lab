@@ -16,6 +16,7 @@ with fontconfig for this process.
 
 from __future__ import annotations
 
+import atexit
 import base64
 import ctypes
 import ctypes.util
@@ -204,8 +205,9 @@ def register_music_font() -> Path:
             "The fontconfig library is needed to give cairosvg Verovio's music font. "
             "Install it, for example with `sudo apt install fontconfig`."
         )
-    # Kept for the life of the process: fontconfig reads the file when text is drawn.
+    # Kept for the life of the process, as fontconfig reads the file when text is drawn.
     directory = Path(tempfile.mkdtemp(prefix="omr-lab-fonts-"))
+    atexit.register(shutil.rmtree, directory, ignore_errors=True)
     path = directory / f"{MUSIC_FONT}.woff2"
     path.write_bytes(base64.b64decode(match.group(1)))
     add_file = ctypes.CDLL(library).FcConfigAppFontAddFile
