@@ -58,9 +58,10 @@ class CorpusSpecError(ValueError):
 class SourceSpec:
     id: str
     musicxml: Path
-    musicxml_text: str
+    musicxml_as_written: str
     """The ``musicxml`` value as written in the specification, for messages."""
-    source: str
+    provenance: str
+    """The manifest's ``source`` text."""
     license: str
     text_fonts: tuple[str, ...]
     work: str | None = None
@@ -142,8 +143,8 @@ def load_corpus_spec(path: Path | str) -> CorpusSpec:
         SourceSpec(
             id=source["id"],
             musicxml=path.parent / source["musicxml"],
-            musicxml_text=source["musicxml"],
-            source=source["source"],
+            musicxml_as_written=source["musicxml"],
+            provenance=source["source"],
             license=source["license"],
             text_fonts=tuple(source.get("text_fonts", default_fonts)),
             work=source.get("work"),

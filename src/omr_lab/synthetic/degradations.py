@@ -55,12 +55,12 @@ def _rotate(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
 
 def _perspective(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     width, height = image.size
-    c = [float(v) for v in params["corners"]]
+    insets = [float(v) for v in params["corners"]]
     target = [
-        (c[0] * width, c[1] * height),
-        (width - c[2] * width, c[3] * height),
-        (width - c[4] * width, height - c[5] * height),
-        (c[6] * width, height - c[7] * height),
+        (insets[0] * width, insets[1] * height),
+        (width - insets[2] * width, insets[3] * height),
+        (width - insets[4] * width, height - insets[5] * height),
+        (insets[6] * width, height - insets[7] * height),
     ]
     page = [(0.0, 0.0), (float(width), 0.0), (float(width), float(height)), (0.0, float(height))]
     # Pillow's coefficients map each output pixel back to the input: target -> page.
@@ -75,11 +75,11 @@ def _perspective(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
 
 
 def _perspective_coefficients(
-    source: list[tuple[float, float]], target: list[tuple[float, float]]
+    from_points: list[tuple[float, float]], to_points: list[tuple[float, float]]
 ) -> tuple[float, ...]:
     rows = []
     values = []
-    for (x, y), (u, v) in zip(source, target, strict=True):
+    for (x, y), (u, v) in zip(from_points, to_points, strict=True):
         rows.append([x, y, 1, 0, 0, 0, -u * x, -u * y])
         rows.append([0, 0, 0, x, y, 1, -v * x, -v * y])
         values += [u, v]
@@ -144,6 +144,7 @@ def _to_image(pixels: np.ndarray) -> Image.Image:
     return Image.fromarray(np.clip(np.rint(pixels), 0, 255).astype(np.uint8))
 
 
+# Every kind in spec.DEGRADATION_PARAMETERS has an entry; a unit test checks this.
 _APPLY: dict[str, Callable[[Image.Image, Mapping[str, Any]], Image.Image]] = {
     "rotate": _rotate,
     "perspective": _perspective,
@@ -153,4 +154,3 @@ _APPLY: dict[str, Callable[[Image.Image, Mapping[str, Any]], Image.Image]] = {
     "lighting": _lighting,
     "jpeg": _jpeg,
 }
-assert set(_APPLY) == set(DEGRADATION_PARAMETERS)

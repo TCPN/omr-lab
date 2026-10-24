@@ -78,13 +78,15 @@ def generate_corpus(
     except render.TextFontUnavailableError as exc:
         raise SyntheticDependencyError(str(exc)) from exc
     # Every source is read and rendered before anything is written.
-    truths: dict[str, bytes] = {}
-    cleans = {}
+    ground_truth_bytes: dict[str, bytes] = {}
+    clean_images = {}
     for source in spec.sources:
-        truths[source.id] = _read_source(source)
+        ground_truth_bytes[source.id] = _read_source(source)
         try:
-            cleans[source.id] = render.render_page(
-                _source_text(source, truths[source.id]), source.musicxml.name, fonts[source.id]
+            clean_images[source.id] = render.render_page(
+                _source_text(source, ground_truth_bytes[source.id]),
+                source.musicxml.name,
+                fonts[source.id],
             )
         except render.RenderError as exc:
             raise SourceError(f"Source {source.id!r}: {exc}") from exc
@@ -94,9 +96,9 @@ def generate_corpus(
     samples = []
     for source in spec.sources:
         truth_name = f"{GROUND_TRUTH_DIRNAME}/{source.id}.musicxml"
-        truth_bytes = truths[source.id]
+        truth_bytes = ground_truth_bytes[source.id]
         (output_dir / truth_name).write_bytes(truth_bytes)
-        clean = cleans[source.id]
+        clean = clean_images[source.id]
         renderer = render.renderer_description(fonts[source.id])
         for variant in spec.variants:
             sample_id = f"{source.id}-{variant.id}"
@@ -151,14 +153,14 @@ def _source_text(source: SourceSpec, data: bytes) -> str:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise SourceError(
-            f"Source {source.id!r} ({source.musicxml_text}) is not UTF-8 ({exc.reason} at "
+            f"Source {source.id!r} ({source.musicxml_as_written}) is not UTF-8 ({exc.reason} at "
             f"byte {exc.start}); save it as UTF-8."
         ) from exc
 
 
 def _read_source(source: SourceSpec) -> bytes:
     """Check that the source is valid, uncompressed MusicXML and return its bytes."""
-    where = f"Source {source.id!r} ({source.musicxml_text})"
+    where = f"Source {source.id!r} ({source.musicxml_as_written})"
     try:
         document = load_musicxml(source.musicxml)
     except MusicXmlError as exc:
@@ -196,7 +198,7 @@ def _sample(
         sample["work"] = source.work
     sample.update(
         {
-            "source": source.source,
+            "source": source.provenance,
             "license": source.license,
             "condition": variant.condition,
             "renderer": renderer,

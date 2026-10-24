@@ -206,6 +206,13 @@ def test_every_kind_has_a_test_case() -> None:
     assert {item["kind"] for item in EVERY_KIND} == set(DEGRADATION_PARAMETERS)
 
 
+def test_degradation_kinds_agree_across_schema_rules_and_implementations(degradations) -> None:
+    from omr_lab.schemas.synthetic import load_synthetic_corpus_schema
+
+    schema_kinds = load_synthetic_corpus_schema()["$defs"]["degradation"]["properties"]["kind"]
+    assert set(schema_kinds["enum"]) == set(DEGRADATION_PARAMETERS) == set(degradations._APPLY)
+
+
 def test_resolved_parameters_repeat_for_a_seed_and_stay_in_range(degradations) -> None:
     import numpy as np
 
