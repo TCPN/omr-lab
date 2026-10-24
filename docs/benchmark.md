@@ -11,11 +11,11 @@ uv run omr-lab benchmark tests/fixtures/e2e/manifest.json \
 
 ## Manifest
 
-A UTF-8 JSON file validated against `src/omr_lab/schemas/benchmark-manifest-0.1.0.schema.json`. [`tests/fixtures/e2e/manifest.json`](../tests/fixtures/e2e/manifest.json) is an example.
+A UTF-8 JSON file validated against `src/omr_lab/schemas/benchmark-manifest-<version>.schema.json` for its `schema_version`. Both versions are read: 0.2.0 adds the optional `synthesis` field and is what `omr-lab synthesize` writes; 0.1.0 files such as [`tests/fixtures/e2e/manifest.json`](../tests/fixtures/e2e/manifest.json) stay valid.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `schema_version` | yes | `"0.1.0"` |
+| `schema_version` | yes | `"0.2.0"` or `"0.1.0"` |
 | `name`, `description` | no | Name of the set (copied into reports) and free text. |
 | `samples` | yes | One or more samples, run and reported in this order. |
 
@@ -28,6 +28,7 @@ Each sample:
 | `ground_truth`, `ground_truth_sha256` | no | MusicXML ground truth and its SHA-256; a `ground_truth` path needs a non-null checksum. |
 | `source`, `license`, `condition` | yes | Provenance, license (SPDX identifier where possible) and input condition (clean rendering, phone photo, skew, ...). |
 | `work`, `renderer`, `notes` | no | Title, tools that rendered a synthetic image, free text. |
+| `synthesis` | no (0.2.0 only) | How a synthetic image was generated: corpus name and seed, source and variant ids, sample seed and the resolved degradation parameters ([synthetic-corpus.md](synthetic-corpus.md#output)). |
 | `excluded` | no | `{"reason": "..."}` keeps the sample in the manifest but does not run it; reports list it with the reason. |
 
 Private or unlicensed scores stay outside Git (for example in `data/private/`, which is ignored); only their manifests may be committed if they contain no score content, and only when the data use is decided (issue #29).

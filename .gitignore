@@ -24,3 +24,4 @@ outputs/
 tmp/
 data/private/
 benchmarks/reports/generated/
+benchmarks/synthetic/generated/

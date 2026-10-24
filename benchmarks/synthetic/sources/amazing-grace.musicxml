@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <work><work-title>Amazing Grace</work-title></work>
+  <identification>
+    <creator type="composer">Traditional (New Britain, 1829)</creator>
+    <creator type="lyricist">John Newton (1779)</creator>
+    <rights>Public domain melody and lyrics. This encoding: CC0 1.0, written for omr-lab (see benchmarks/synthetic/README.md).</rights>
+  </identification>
+  <part-list><score-part id="P1"><part-name>Melody</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="0" implicit="yes">
+      <attributes><divisions>2</divisions><key><fifths>1</fifths><mode>major</mode></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>begin</syllabic><text>A</text></lyric><lyric number="2"><syllabic>single</syllabic><text>'Twas</text></lyric></note>
+    </measure>
+    <measure number="1">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>middle</syllabic><text>maz</text></lyric><lyric number="2"><syllabic>single</syllabic><text>grace</text></lyric></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam><lyric number="1"><syllabic>end</syllabic><text>ing</text></lyric><lyric number="2"><syllabic>single</syllabic><text>that</text></lyric></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam></note>
+    </measure>
+    <measure number="2">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>grace!</text></lyric><lyric number="2"><syllabic>single</syllabic><text>taught</text></lyric></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>how</text></lyric><lyric number="2"><syllabic>single</syllabic><text>my</text></lyric></note>
+    </measure>
+    <measure number="3">
+      <harmony><root><root-step>E</root-step></root><kind>minor</kind></harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>sweet</text></lyric><lyric number="2"><syllabic>single</syllabic><text>heart</text></lyric></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>the</text></lyric><lyric number="2"><syllabic>single</syllabic><text>to</text></lyric></note>
+    </measure>
+    <measure number="4">
+      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>sound</text></lyric><lyric number="2"><syllabic>single</syllabic><text>fear,</text></lyric></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>That</text></lyric><lyric number="2"><syllabic>single</syllabic><text>And</text></lyric></note>
+    </measure>
+    <measure number="5">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>saved</text></lyric><lyric number="2"><syllabic>single</syllabic><text>grace</text></lyric></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam><lyric number="1"><syllabic>single</syllabic><text>a</text></lyric><lyric number="2"><syllabic>single</syllabic><text>my</text></lyric></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam></note>
+    </measure>
+    <measure number="6">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>wretch</text></lyric><lyric number="2"><syllabic>single</syllabic><text>fears</text></lyric></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>like</text></lyric><lyric number="2"><syllabic>begin</syllabic><text>re</text></lyric></note>
+    </measure>
+    <measure number="7">
+      <harmony><root><root-step>D</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>6</duration><tie type="start"/><voice>1</voice><type>half</type><dot/><notations><tied type="start"/></notations><lyric number="1"><syllabic>single</syllabic><text>me!</text></lyric><lyric number="2"><syllabic>end</syllabic><text>lieved;</text></lyric></note>
+    </measure>
+    <measure number="8">
+      <harmony><root><root-step>D</root-step></root><kind>dominant</kind></harmony>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><tie type="stop"/><voice>1</voice><type>half</type><notations><tied type="stop"/></notations></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>I</text></lyric><lyric number="2"><syllabic>single</syllabic><text>How</text></lyric></note>
+    </measure>
+    <measure number="9">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>once</text></lyric><lyric number="2"><syllabic>begin</syllabic><text>pre</text></lyric></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam><lyric number="1"><syllabic>single</syllabic><text>was</text></lyric><lyric number="2"><syllabic>end</syllabic><text>cious</text></lyric></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam></note>
+    </measure>
+    <measure number="10">
+      <harmony><root><root-step>G</root-step></root><kind>dominant</kind></harmony>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>lost,</text></lyric><lyric number="2"><syllabic>single</syllabic><text>did</text></lyric></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>but</text></lyric><lyric number="2"><syllabic>single</syllabic><text>that</text></lyric></note>
+    </measure>
+    <measure number="11">
+      <harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>now</text></lyric><lyric number="2"><syllabic>single</syllabic><text>grace</text></lyric></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam><lyric number="1"><syllabic>single</syllabic><text>am</text></lyric><lyric number="2"><syllabic>begin</syllabic><text>ap</text></lyric></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam></note>
+    </measure>
+    <measure number="12">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>found,</text></lyric><lyric number="2"><syllabic>end</syllabic><text>pear</text></lyric></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>Was</text></lyric><lyric number="2"><syllabic>single</syllabic><text>The</text></lyric></note>
+    </measure>
+    <measure number="13">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>blind,</text></lyric><lyric number="2"><syllabic>single</syllabic><text>hour</text></lyric></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><lyric number="1"><syllabic>single</syllabic><text>but</text></lyric><lyric number="2"><syllabic>single</syllabic><text>I</text></lyric></note>
+    </measure>
+    <measure number="14">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>now</text></lyric><lyric number="2"><syllabic>single</syllabic><text>first</text></lyric></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam><lyric number="1"><syllabic>single</syllabic><text>I</text></lyric><lyric number="2"><syllabic>begin</syllabic><text>be</text></lyric></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam></note>
+    </measure>
+    <measure number="15">
+      <harmony><root><root-step>D</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>half</type><lyric number="1"><syllabic>single</syllabic><text>see.</text></lyric><lyric number="2"><syllabic>end</syllabic><text>lieved!</text></lyric></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="16">
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>

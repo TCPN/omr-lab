@@ -1,6 +1,6 @@
 # Command-Line Interface
 
-`omr-lab` is installed with the package (`uv sync`, then `uv run omr-lab ...`). It has three commands: `doctor` checks what this machine can run, `run` recognizes one file with the pipeline ([pipeline.md](pipeline.md)), and `benchmark` runs every sample of a manifest and writes a report ([benchmark.md](benchmark.md)). `omr-lab --help` and `omr-lab COMMAND --help` describe every option.
+`omr-lab` is installed with the package (`uv sync`, then `uv run omr-lab ...`). It has four commands: `doctor` checks what this machine can run, `run` recognizes one file with the pipeline ([pipeline.md](pipeline.md)), `benchmark` runs every sample of a manifest and writes a report ([benchmark.md](benchmark.md)), and `synthesize` renders and degrades a synthetic corpus ([synthetic-corpus.md](synthetic-corpus.md)). `omr-lab --help` and `omr-lab COMMAND --help` describe every option.
 
 ## doctor
 
@@ -50,6 +50,15 @@ uv run omr-lab benchmark tests/fixtures/e2e/manifest.json -o benchmarks/reports/
 ```
 
 `MANIFEST` and `-o`/`--output DIR` (missing or empty) are required; `--engine`, `--option` and `--timeout` are as for `run` and apply to every sample. It prints the report paths and one line per sample. The manifest, report and exit codes are described in [benchmark.md](benchmark.md); the table below is for `doctor` and `run`.
+
+## synthesize
+
+```bash
+uv sync --extra synthetic
+uv run omr-lab synthesize benchmarks/synthetic/corpus.json -o benchmarks/synthetic/generated/v1
+```
+
+`SPEC` and `-o`/`--output DIR` (missing or empty) are required; `--seed N` replaces the specification's corpus seed. It prints the manifest path and one line per image. The specification, output and exit codes are described in [synthetic-corpus.md](synthetic-corpus.md); it needs the optional `synthetic` extra.
 
 ## Exit codes
 
