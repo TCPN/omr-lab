@@ -158,8 +158,12 @@ def _to_image(pixels: np.ndarray) -> Image.Image:
 
 
 # Parameters each kind needs when applied: its own, plus the values resolve() draws.
+_DRAWN_PARAMETERS: dict[str, tuple[str, ...]] = {
+    "perspective": ("corner_insets",),
+    "noise": ("noise_seed",),
+}
 _RECORDED_PARAMETERS: dict[str, tuple[str, ...]] = {
-    kind: (*rules, *{"perspective": ("corner_insets",), "noise": ("noise_seed",)}.get(kind, ()))
+    kind: (*rules, *_DRAWN_PARAMETERS.get(kind, ()))
     for kind, rules in DEGRADATION_PARAMETERS.items()
 }
 

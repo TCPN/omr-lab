@@ -429,6 +429,7 @@ def _benchmark(
 def _synthesize(spec_path: Path, output_dir: Path, seed: int | None) -> int:
     # Imported here: the rest of the CLI must work without the optional extra.
     from omr_lab.synthetic import (
+        IMAGES_DIRNAME,
         CorpusSpecError,
         SourceError,
         SyntheticDependencyError,
@@ -441,6 +442,16 @@ def _synthesize(spec_path: Path, output_dir: Path, seed: int | None) -> int:
     except CorpusSpecError as exc:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
         return EXIT_INVALID_INPUT
+    # The generator creates OUTPUT/images/ exclusively when it starts writing; until
+    # then, OUTPUT holds nothing of this run and must not be called partial output.
+    images_dir = output_dir / IMAGES_DIRNAME
+    images_existed = _exists(images_dir)
+
+    def cleanup_hint() -> str:
+        if not images_existed and _exists(images_dir):
+            return f" Remove {output_dir}, which holds partial files, before retrying."
+        return " Nothing was written."
+
     try:
         result = generate_corpus(spec, output_dir, seed=seed)
     except SyntheticDependencyError as exc:
@@ -453,17 +464,12 @@ def _synthesize(spec_path: Path, output_dir: Path, seed: int | None) -> int:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
         return EXIT_OUTPUT_DIR_UNUSABLE
     except KeyboardInterrupt:
-        print(
-            f"omr-lab: interrupted; no manifest was written. Remove {output_dir}, which "
-            "holds partial files, before retrying.",
-            file=sys.stderr,
-        )
+        print(f"omr-lab: interrupted; no manifest was written.{cleanup_hint()}", file=sys.stderr)
         return EXIT_INTERRUPTED
     except OSError as exc:
         print(
             f"omr-lab: error: the corpus could not be written in {output_dir} "
-            f"({exc.strerror or exc}); no manifest was written. Remove {output_dir} before "
-            "retrying.",
+            f"({exc.strerror or exc}); no manifest was written.{cleanup_hint()}",
             file=sys.stderr,
         )
         return EXIT_OUTPUT_DIR_UNUSABLE
@@ -473,6 +479,13 @@ def _synthesize(spec_path: Path, output_dir: Path, seed: int | None) -> int:
         print(f"  {sample['id']}: {sample['image']}")
     print(f"Samples: {len(samples)}")
     return EXIT_OK
+
+
+def _exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
 
 
 def _aborted_run_message(output_dir: Path) -> str | None:

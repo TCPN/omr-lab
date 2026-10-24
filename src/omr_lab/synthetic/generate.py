@@ -251,6 +251,7 @@ def _sha256(path: Path) -> str:
 
 
 __all__ = [
+    "IMAGES_DIRNAME",
     "CorpusResult",
     "SourceError",
     "SyntheticDependencyError",

@@ -6,6 +6,7 @@ loading and checking a specification does not.
 """
 
 from omr_lab.synthetic.generate import (
+    IMAGES_DIRNAME,
     CorpusResult,
     SourceError,
     SyntheticDependencyError,
@@ -15,6 +16,7 @@ from omr_lab.synthetic.generate import (
 from omr_lab.synthetic.spec import CorpusSpec, CorpusSpecError, load_corpus_spec
 
 __all__ = [
+    "IMAGES_DIRNAME",
     "CorpusResult",
     "CorpusSpec",
     "CorpusSpecError",

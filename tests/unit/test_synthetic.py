@@ -11,6 +11,7 @@ from omr_lab import synthetic
 from omr_lab.benchmark import load_manifest, run_benchmark
 from omr_lab.cli import (
     EXIT_ENGINE_UNAVAILABLE,
+    EXIT_INTERRUPTED,
     EXIT_INVALID_INPUT,
     EXIT_OK,
     EXIT_OUTPUT_DIR_UNUSABLE,
@@ -503,6 +504,45 @@ def test_cli_writes_a_corpus_and_refuses_a_used_directory(renderer, tmp_path: Pa
     assert main(["synthesize", str(spec_path), "-o", str(out)]) == EXIT_OK
     assert "Samples: 1" in capsys.readouterr().out
     assert main(["synthesize", str(spec_path), "-o", str(out)]) == EXIT_OUTPUT_DIR_UNUSABLE
+
+
+@pytest.mark.parametrize("pre_existing", [False, True])
+def test_cli_interrupt_before_writing_does_not_call_the_directory_partial(
+    renderer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys, pre_existing: bool
+) -> None:
+    from omr_lab.synthetic import render
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(render, "render_page", interrupted)
+    spec_path = _write_spec(tmp_path / "spec", _spec_document(text_fonts=[renderer.family]))
+    out = tmp_path / "out"
+    if pre_existing:
+        out.mkdir()
+        (out / "mine.txt").write_text("user file", encoding="utf-8")
+
+    assert main(["synthesize", str(spec_path), "-o", str(out)]) == EXIT_INTERRUPTED
+
+    err = capsys.readouterr().err
+    assert "Nothing was written" in err and "Remove" not in err
+
+
+def test_cli_interrupt_after_writing_started_says_to_remove_the_directory(
+    renderer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    from omr_lab.synthetic import degradations
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(degradations, "apply", interrupted)
+    spec_path = _write_spec(tmp_path / "spec", _spec_document(text_fonts=[renderer.family]))
+    out = tmp_path / "out"
+
+    assert main(["synthesize", str(spec_path), "-o", str(out)]) == EXIT_INTERRUPTED
+
+    assert f"Remove {out}" in capsys.readouterr().err
 
 
 def test_cli_explains_how_to_install_missing_rendering_packages(
