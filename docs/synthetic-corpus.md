@@ -42,7 +42,7 @@ A UTF-8 JSON file validated against `src/omr_lab/schemas/synthetic-corpus-0.1.0.
 
 Every source is rendered once and combined with every variant. Sample ids are `<source id>-<variant id>`, so ids are 1 to 30 lowercase letters, digits or `-`, and must be unique within sources and within variants.
 
-A source must be uncompressed MusicXML that the [MusicXML loader](musicxml.md) accepts and that fits on one page. The file is copied unchanged into the corpus as the ground truth of all its samples, so clean and degraded images of one source share one ground truth.
+A source must be uncompressed, UTF-8 encoded MusicXML (a byte-order mark is allowed) that the [MusicXML loader](musicxml.md) accepts and that fits on one page. The file is copied unchanged into the corpus as the ground truth of all its samples, so clean and degraded images of one source share one ground truth.
 
 ### Degradations
 
@@ -98,7 +98,7 @@ Each sample has the usual manifest fields (`source`, `license` and `work` from t
 | --- | --- |
 | 0 | The corpus and manifest were written. |
 | 2 | Invalid command line (for example a negative `--seed`). |
-| 3 | The specification cannot be read or is invalid, or a source is not valid MusicXML, is compressed, or renders to more than one page. |
+| 3 | The specification cannot be read or is invalid, or a source is not valid MusicXML, is compressed, is not UTF-8, or renders to more than one page. |
 | 4 | A rendering package, the cairo library, or every listed text font is missing. |
 | 6 | The output directory cannot be used, or writing failed; no manifest was written. |
 | 130 | Interrupted; no manifest was written. |
