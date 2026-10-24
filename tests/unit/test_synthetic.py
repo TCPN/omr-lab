@@ -226,7 +226,7 @@ def test_resolved_parameters_repeat_for_a_seed_and_stay_in_range(degradations) -
     assert -3 <= by_kind["rotate"]["degrees"] <= 3
     assert isinstance(by_kind["jpeg"]["quality"], int)
     assert 40 <= by_kind["jpeg"]["quality"] <= 70
-    corners = by_kind["perspective"]["corners"]
+    corners = by_kind["perspective"]["corner_insets"]
     assert len(corners) == 8 and all(0 <= c <= 0.05 for c in corners)
     assert isinstance(by_kind["noise"]["noise_seed"], int)
     assert 0 <= by_kind["noise"]["noise_seed"] < 2**53
@@ -248,6 +248,13 @@ def test_each_degradation_changes_the_image_reproducibly(degradations, page, kin
     assert result.tobytes() != page.tobytes()
     assert result.tobytes() == again.tobytes()
     assert page.getpixel((0, 0)) == 255  # the input is not modified
+
+
+def test_apply_names_a_missing_or_unknown_parameter_set(degradations, page) -> None:
+    with pytest.raises(ValueError, match="missing parameters: corner_insets"):
+        degradations.apply(page, "perspective", {"strength": 0.05})
+    with pytest.raises(ValueError, match="Unknown degradation kind 'warp'"):
+        degradations.apply(page, "warp", {})
 
 
 def test_rotation_keeps_the_whole_page_and_fills_with_white(degradations, page) -> None:

@@ -63,7 +63,7 @@ Areas uncovered by a geometric change are white. Images are 8-bit grayscale PNG,
 ## Reproducibility
 
 - Each sample has its own seed, derived from the corpus seed and its source and variant ids (`omr_lab.synthetic.sample_seed`). Adding a source or variant does not change the other samples. Sample seeds and noise seeds stay below 2^53, so the numbers survive JSON readers that parse them as doubles.
-- All random choices are drawn first and recorded as plain numbers in the manifest, including the corner offsets of `perspective` and a `noise_seed` for `noise`. Applying the recorded degradations to the clean image (`omr_lab.synthetic.degradations.apply`) reproduces the degraded image, without the seed.
+- All random choices are drawn first and recorded as plain numbers in the manifest, including the `corner_insets` of `perspective` and a `noise_seed` for `noise`. Applying the recorded degradations to the clean image (`omr_lab.synthetic.degradations.apply`) reproduces the degraded image, without the seed.
 - The same specification, seed, package versions and fonts give byte-identical images; a unit test checks this. Other versions of Verovio, cairosvg, Pillow, NumPy or the text font can change pixels, so the manifest records the versions and the font in each sample's `renderer`, and the checksums of the files that were actually written.
 
 ## Text fonts

@@ -36,7 +36,7 @@ def resolve(degradation: DegradationSpec, rng: np.random.Generator) -> ResolvedP
     if degradation.kind == "perspective":
         # Inward offset of each corner (top-left x, y; top-right x, y; bottom-right x, y;
         # bottom-left x, y) as a fraction of the width or height.
-        resolved["corners"] = [float(v) for v in rng.uniform(0, resolved["strength"], 8)]
+        resolved["corner_insets"] = [float(v) for v in rng.uniform(0, resolved["strength"], 8)]
     elif degradation.kind == "noise":
         # 53 bits, so the recorded value survives JSON readers that use doubles.
         resolved["noise_seed"] = int(rng.integers(0, 2**53))
@@ -44,7 +44,16 @@ def resolve(degradation: DegradationSpec, rng: np.random.Generator) -> ResolvedP
 
 
 def apply(image: Image.Image, kind: str, params: Mapping[str, Any]) -> Image.Image:
-    """Apply one resolved degradation to a grayscale image and return a new image."""
+    """Apply one resolved degradation to a grayscale image and return a new image.
+
+    Raises ValueError for an unknown kind or a missing parameter, for example in a
+    manifest edited by hand.
+    """
+    if kind not in _APPLY:
+        raise ValueError(f"Unknown degradation kind {kind!r}; known: {', '.join(_APPLY)}")
+    missing = [name for name in _RECORDED_PARAMETERS[kind] if name not in params]
+    if missing:
+        raise ValueError(f"Degradation {kind!r} is missing parameters: {', '.join(missing)}")
     return _APPLY[kind](image, params)
 
 
@@ -56,7 +65,7 @@ def _rotate(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
 
 def _perspective(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     width, height = image.size
-    insets = [float(v) for v in params["corners"]]
+    insets = [float(v) for v in params["corner_insets"]]
     target = [
         (insets[0] * width, insets[1] * height),
         (width - insets[2] * width, insets[3] * height),
@@ -144,6 +153,12 @@ def _jpeg(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
 def _to_image(pixels: np.ndarray) -> Image.Image:
     return Image.fromarray(np.clip(np.rint(pixels), 0, 255).astype(np.uint8))
 
+
+# Parameters each kind needs when applied: its own, plus the values resolve() draws.
+_RECORDED_PARAMETERS: dict[str, tuple[str, ...]] = {
+    kind: (*rules, *{"perspective": ("corner_insets",), "noise": ("noise_seed",)}.get(kind, ()))
+    for kind, rules in DEGRADATION_PARAMETERS.items()
+}
 
 # Every kind in spec.DEGRADATION_PARAMETERS has an entry; a unit test checks this.
 _APPLY: dict[str, Callable[[Image.Image, Mapping[str, Any]], Image.Image]] = {
