@@ -51,7 +51,7 @@ def apply(image: Image.Image, kind: str, params: Mapping[str, Any]) -> Image.Ima
     """
     if kind not in _APPLY:
         raise ValueError(f"Unknown degradation kind {kind!r}; known: {', '.join(_APPLY)}")
-    missing = [name for name in _RECORDED_PARAMETERS[kind] if name not in params]
+    missing = [name for name in _PARAMETERS_NEEDED_BY_APPLY[kind] if name not in params]
     if missing:
         raise ValueError(f"Degradation {kind!r} is missing parameters: {', '.join(missing)}")
     return _APPLY[kind](image, params)
@@ -158,12 +158,12 @@ def _to_image(pixels: np.ndarray) -> Image.Image:
 
 
 # Parameters each kind needs when applied: its own, plus the values resolve() draws.
-_DRAWN_PARAMETERS: dict[str, tuple[str, ...]] = {
+_EXTRA_DRAWN_PARAMETERS: dict[str, tuple[str, ...]] = {
     "perspective": ("corner_insets",),
     "noise": ("noise_seed",),
 }
-_RECORDED_PARAMETERS: dict[str, tuple[str, ...]] = {
-    kind: (*rules, *_DRAWN_PARAMETERS.get(kind, ()))
+_PARAMETERS_NEEDED_BY_APPLY: dict[str, tuple[str, ...]] = {
+    kind: (*rules, *_EXTRA_DRAWN_PARAMETERS.get(kind, ()))
     for kind, rules in DEGRADATION_PARAMETERS.items()
 }
 

@@ -65,7 +65,7 @@ class RenderError(RuntimeError):
     """A source score cannot be rendered (not loadable, or more than one page)."""
 
 
-class TextFontUnavailableError(RuntimeError):
+class FontUnavailableError(RuntimeError):
     """No text font of a source is installed and has every character of its text, or
     the music font cannot be made available to cairosvg."""
 
@@ -98,45 +98,47 @@ def choose_text_font(
     """
     fc_match, fc_list = shutil.which("fc-match"), shutil.which("fc-list")
     if fc_match is None or fc_list is None:
-        raise TextFontUnavailableError(
+        raise FontUnavailableError(
             "fc-match and fc-list (from fontconfig) are needed to check that the text "
             f"fonts {', '.join(candidates)} are installed. Install them, for example with "
             "`sudo apt install fontconfig`."
         )
     lacking: list[str] = []
     for family in candidates:
-        if not _is_installed(fc_match, family):
+        if not _family_is_installed(fc_match, family):
             continue
-        if _covers(fc_list, family, characters):
+        if _family_has_glyphs(fc_list, family, characters):
             return TextFont(family=family)
         lacking.append(family)
     if lacking:
         # One fc-list call per character, so only once no candidate is left.
         details = "; ".join(
             f"{family} lacks "
-            + _describe([c for c in sorted(characters) if not _covers(fc_list, family, {c})])
+            + _describe(
+                [c for c in sorted(characters) if not _family_has_glyphs(fc_list, family, {c})]
+            )
             for family in lacking
         )
-        raise TextFontUnavailableError(
+        raise FontUnavailableError(
             f"No installed text font has every character of the score's text ({details}). "
             "List a font that has them in text_fonts (for example Noto Sans CJK TC from "
             "fonts-noto-cjk for Chinese lyrics)."
         )
-    raise TextFontUnavailableError(
+    raise FontUnavailableError(
         f"None of the text fonts {', '.join(candidates)} is installed. Install one of them "
         "(for example `sudo apt install fonts-liberation`, or fonts-noto-cjk for Chinese "
         "lyrics) or list an installed font in the specification's text_fonts."
     )
 
 
-def _is_installed(fc_match: str, family: str) -> bool:
+def _family_is_installed(fc_match: str, family: str) -> bool:
     result = _fontconfig(fc_match, "--format=%{family}", _fontconfig_literal(family))
     # fontconfig lists a font's names in several languages, comma-separated, and
     # falls back to another font when the family is missing.
     return family.casefold() in {name.strip().casefold() for name in result.split(",")}
 
 
-def _covers(fc_list: str, family: str, characters: frozenset[str] | set[str]) -> bool:
+def _family_has_glyphs(fc_list: str, family: str, characters: frozenset[str] | set[str]) -> bool:
     """Whether the family has a font with a glyph for every character."""
     if not characters:
         return True
@@ -149,7 +151,7 @@ def _covers(fc_list: str, family: str, characters: frozenset[str] | set[str]) ->
 def _fontconfig(program: str, *args: str) -> str:
     result = run_command([program, *args], timeout_seconds=_FONTCONFIG_TIMEOUT_SECONDS)
     if not result.succeeded:
-        raise TextFontUnavailableError(
+        raise FontUnavailableError(
             f"{program} {' '.join(args)} failed: {result.error or result.stderr.strip()}"
         )
     return result.stdout
@@ -191,20 +193,20 @@ def register_music_font() -> Path:
 
     The font is the WOFF2 file that Verovio embeds in its SVG output, taken from
     Verovio's data directory and added to fontconfig's application fonts for this
-    process. Raises TextFontUnavailableError when that is not possible.
+    process. Raises FontUnavailableError when that is not possible.
     """
     css = Path(verovio.__file__).parent / "data" / f"{MUSIC_FONT}.css"
     try:
         match = re.search(r"base64,([A-Za-z0-9+/=]+)", css.read_text(encoding="utf-8"))
     except OSError as exc:
-        raise TextFontUnavailableError(f"Cannot read Verovio's {MUSIC_FONT} font: {exc}") from exc
+        raise FontUnavailableError(f"Cannot read Verovio's {MUSIC_FONT} font: {exc}") from exc
     if match is None:
-        raise TextFontUnavailableError(
+        raise FontUnavailableError(
             f"{css} has no embedded {MUSIC_FONT} font; update omr_lab.synthetic.render."
         )
     library = ctypes.util.find_library("fontconfig")
     if library is None:
-        raise TextFontUnavailableError(
+        raise FontUnavailableError(
             "The fontconfig library is needed to give cairosvg Verovio's music font. "
             "Install it, for example with `sudo apt install fontconfig`."
         )
@@ -217,7 +219,7 @@ def register_music_font() -> Path:
     add_file.argtypes = (ctypes.c_void_p, ctypes.c_char_p)
     add_file.restype = ctypes.c_int
     if not add_file(None, bytes(path)):
-        raise TextFontUnavailableError(
+        raise FontUnavailableError(
             f"fontconfig could not load Verovio's {MUSIC_FONT} font from {path}."
         )
     return path

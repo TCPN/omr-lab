@@ -313,7 +313,7 @@ def renderer():
 
     try:
         font = render.choose_text_font(("Liberation Serif", "Times New Roman", "DejaVu Serif"))
-    except render.TextFontUnavailableError as exc:
+    except render.FontUnavailableError as exc:
         pytest.skip(str(exc))
     return font
 
@@ -492,7 +492,7 @@ def test_fonts_are_never_used_unchecked(renderer, monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(render.shutil, "which", lambda name: None)
 
-    with pytest.raises(render.TextFontUnavailableError, match="fontconfig"):
+    with pytest.raises(render.FontUnavailableError, match="fontconfig"):
         render.choose_text_font((renderer.family,))
 
 

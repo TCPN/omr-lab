@@ -118,10 +118,10 @@ def load_corpus_spec(path: Path | str) -> CorpusSpec:
         "variants", document["variants"]
     )
     variants = []
-    for v_index, variant in enumerate(document["variants"]):
+    for variant_index, variant in enumerate(document["variants"]):
         degradations = []
-        for d_index, degradation in enumerate(variant["degradations"]):
-            where = f"$.variants[{v_index}].degradations[{d_index}]"
+        for degradation_index, degradation in enumerate(variant["degradations"]):
+            where = f"$.variants[{variant_index}].degradations[{degradation_index}]"
             params, found = _degradation_params(where, degradation)
             problems += found
             degradations.append(DegradationSpec(kind=degradation["kind"], params=params))

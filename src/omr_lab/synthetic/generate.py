@@ -78,7 +78,7 @@ def generate_corpus(
     corpus_seed = spec.seed if seed is None else seed
     try:
         render.register_music_font()
-    except render.TextFontUnavailableError as exc:
+    except render.FontUnavailableError as exc:
         raise SyntheticDependencyError(str(exc)) from exc
     # Every source is read and rendered before anything is written.
     ground_truth_bytes: dict[str, bytes] = {}
@@ -95,7 +95,7 @@ def generate_corpus(
             fonts[source.id] = render.choose_text_font(
                 source.text_fonts, render.text_characters(svg)
             )
-        except render.TextFontUnavailableError as exc:
+        except render.FontUnavailableError as exc:
             raise SyntheticDependencyError(f"Source {source.id!r}: {exc}") from exc
         clean_images[source.id] = render.rasterize(svg, fonts[source.id])
 
@@ -103,9 +103,9 @@ def generate_corpus(
     _prepare_output_dir(output_dir)
     samples = []
     for source in spec.sources:
-        truth_name = f"{GROUND_TRUTH_DIRNAME}/{source.id}.musicxml"
-        truth_bytes = ground_truth_bytes[source.id]
-        (output_dir / truth_name).write_bytes(truth_bytes)
+        ground_truth_name = f"{GROUND_TRUTH_DIRNAME}/{source.id}.musicxml"
+        ground_truth_file_bytes = ground_truth_bytes[source.id]
+        (output_dir / ground_truth_name).write_bytes(ground_truth_file_bytes)
         clean = clean_images[source.id]
         renderer = render.renderer_description(fonts[source.id])
         for variant in spec.variants:
@@ -128,8 +128,8 @@ def generate_corpus(
                     sample_id=sample_id,
                     image_name=image_name,
                     image_sha256=_sha256(output_dir / image_name),
-                    truth_name=truth_name,
-                    truth_sha256=hashlib.sha256(truth_bytes).hexdigest(),
+                    ground_truth_name=ground_truth_name,
+                    ground_truth_sha256=hashlib.sha256(ground_truth_file_bytes).hexdigest(),
                     renderer=renderer,
                     seed=seed_value,
                     degradations=applied_degradations,
@@ -189,8 +189,8 @@ def _sample(
     sample_id: str,
     image_name: str,
     image_sha256: str,
-    truth_name: str,
-    truth_sha256: str,
+    ground_truth_name: str,
+    ground_truth_sha256: str,
     renderer: str,
     seed: int,
     degradations: list[dict[str, Any]],
@@ -199,8 +199,8 @@ def _sample(
         "id": sample_id,
         "image": image_name,
         "image_sha256": image_sha256,
-        "ground_truth": truth_name,
-        "ground_truth_sha256": truth_sha256,
+        "ground_truth": ground_truth_name,
+        "ground_truth_sha256": ground_truth_sha256,
     }
     if source.work is not None:
         sample["work"] = source.work
