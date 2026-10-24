@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import io
 import json
 import re
 import shutil
@@ -26,6 +27,7 @@ from omr_lab.synthetic.spec import DEGRADATION_PARAMETERS, DegradationSpec
 
 REPO = Path(__file__).resolve().parents[2]
 TWINKLE = REPO / "tests" / "fixtures" / "e2e" / "twinkle.musicxml"
+SCORE_FEATURES = REPO / "tests" / "fixtures" / "musicxml" / "score-features.musicxml"
 COMMITTED_SPEC = REPO / "benchmarks" / "synthetic" / "corpus.json"
 
 # One value inside each parameter's range, for tests that apply every kind.
@@ -519,6 +521,35 @@ def test_text_font_without_the_lyric_characters_is_a_dependency_error(
     with pytest.raises(SyntheticDependencyError, match=r"lacks 雨 \(U\+96E8\)"):
         generate_corpus(load_corpus_spec(spec_path), tmp_path / "out")
     assert not (tmp_path / "out").exists()
+
+
+def test_music_symbols_in_text_are_drawn_in_the_music_font(renderer) -> None:
+    import cairosvg
+    import numpy as np
+    from PIL import Image
+
+    from omr_lab.synthetic import render
+
+    # The fixture's D/F# chord symbol and metronome mark put SMuFL characters in text.
+    svg = render.render_svg(SCORE_FEATURES.read_text(encoding="utf-8"), SCORE_FEATURES.name)
+    assert 'font-family="Leipzig"' in svg
+    characters = render.text_characters(svg)
+    assert {"D", "F", "M"} <= characters
+    assert not [c for c in characters if 0xE000 <= ord(c) <= 0xF8FF]
+
+    render.register_music_font()
+
+    def draw(family: str) -> np.ndarray:
+        sharp = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">'
+            f'<text x="20" y="60" font-family="{family}" font-size="48">&#xE262;</text></svg>'
+        )
+        png = cairosvg.svg2png(bytestring=sharp.encode(), background_color="white")
+        with Image.open(io.BytesIO(png)) as image:
+            return np.asarray(image.convert("L"))
+
+    # Without the font, cairosvg draws the same placeholder box for any family.
+    assert (draw(render.MUSIC_FONT) != draw("No Such Font Omr Lab")).any()
 
 
 # --- CLI ---------------------------------------------------------------------------

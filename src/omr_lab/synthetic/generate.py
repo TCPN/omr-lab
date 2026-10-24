@@ -76,6 +76,10 @@ def generate_corpus(
         ) from exc
 
     corpus_seed = spec.seed if seed is None else seed
+    try:
+        render.register_music_font()
+    except render.TextFontUnavailableError as exc:
+        raise SyntheticDependencyError(str(exc)) from exc
     # Every source is read and rendered before anything is written.
     ground_truth_bytes: dict[str, bytes] = {}
     fonts = {}

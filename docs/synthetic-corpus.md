@@ -70,6 +70,8 @@ Areas uncovered by a geometric change are white. Images are 8-bit grayscale PNG,
 
 Verovio sets the title, chord symbols and lyrics in one font family, and cairosvg draws all text with that one font, without falling back to another font for missing characters. Chinese lyrics therefore need a CJK font, set with `text_fonts` on the source. The generator lays out each source first, collects the characters of its text, and picks the first listed font that fontconfig has installed under exactly that name (`fc-match`) and that has a glyph for every one of those characters (`fc-list` with a `charset`). It exits with code 4 when no listed font qualifies, naming the characters each installed font lacks, or when `fc-match` or `fc-list` is missing (`sudo apt install fontconfig`): a font that cannot be checked is never used, because a missing font or glyph would render the lyrics blank while the ground truth keeps them.
 
+Music symbols inside text, such as the ♯ of an `F#` chord symbol or the note of a metronome mark, are set by Verovio in its music font, Leipzig, which it embeds in the SVG's CSS. cairosvg ignores that CSS and would draw those symbols as placeholder boxes, so the generator takes the same Leipzig font from Verovio's data directory and adds it to fontconfig for the running process (through the fontconfig library). These symbols are not part of the text-font check. A source that makes Verovio use any other font family is rejected with exit code 3.
+
 The text font changes the image, so corpora generated on machines with different fonts differ. The committed specification prefers Noto CJK fonts for Chinese (`sudo apt install fonts-noto-cjk`) and falls back to WenQuanYi Zen Hei.
 
 ## Output
@@ -98,8 +100,8 @@ Each sample has the usual manifest fields (`source`, `license` and `work` from t
 | --- | --- |
 | 0 | The corpus and manifest were written. |
 | 2 | Invalid command line (for example a negative `--seed`). |
-| 3 | The specification cannot be read or is invalid, or a source is not valid MusicXML, is compressed, is not UTF-8, or renders to more than one page. |
-| 4 | A rendering package, the cairo library, `fc-match` or `fc-list` is missing, or no listed text font is installed with every character of a source's text. |
+| 3 | The specification cannot be read or is invalid, or a source is not valid MusicXML, is compressed, is not UTF-8, renders to more than one page, or uses a font other than the text font and Leipzig. |
+| 4 | A rendering package, the cairo or fontconfig library, `fc-match` or `fc-list` is missing, Verovio's music font cannot be loaded, or no listed text font is installed with every character of a source's text. |
 | 6 | The output directory cannot be used, or writing failed; no manifest was written. |
 | 130 | Interrupted; no manifest was written. |
 
