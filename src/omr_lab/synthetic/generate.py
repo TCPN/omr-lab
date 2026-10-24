@@ -83,7 +83,9 @@ def generate_corpus(
     for source in spec.sources:
         truths[source.id] = _read_source(source)
         try:
-            cleans[source.id] = render.render_page(source.musicxml, fonts[source.id])
+            cleans[source.id] = render.render_page(
+                _source_text(source, truths[source.id]), source.musicxml.name, fonts[source.id]
+            )
         except render.RenderError as exc:
             raise SourceError(f"Source {source.id!r}: {exc}") from exc
 
@@ -137,6 +139,21 @@ def generate_corpus(
     manifest_path = output_dir / MANIFEST_FILENAME
     _write_atomically(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     return CorpusResult(manifest=manifest, manifest_path=manifest_path)
+
+
+def _source_text(source: SourceSpec, data: bytes) -> str:
+    """Decode a source for Verovio, which takes text: only UTF-8 (a BOM is dropped).
+
+    The MusicXML loader also accepts encodings such as UTF-16 or ISO-8859-1 that the
+    XML declaration names; those are rejected here rather than decoded wrongly.
+    """
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise SourceError(
+            f"Source {source.id!r} ({source.musicxml_text}) is not UTF-8 ({exc.reason} at "
+            f"byte {exc.start}); save it as UTF-8."
+        ) from exc
 
 
 def _read_source(source: SourceSpec) -> bytes:

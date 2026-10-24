@@ -13,7 +13,6 @@ import io
 import shutil
 from dataclasses import dataclass
 from importlib.metadata import version
-from pathlib import Path
 
 import cairosvg
 import numpy
@@ -92,17 +91,18 @@ def choose_text_font(candidates: tuple[str, ...]) -> TextFont:
     )
 
 
-def render_page(musicxml: Path, font: TextFont) -> Image.Image:
-    """Render ``musicxml`` (one page) to an 8-bit grayscale image on white."""
+def render_page(musicxml: str, name: str, font: TextFont) -> Image.Image:
+    """Render the MusicXML text (one page) to an 8-bit grayscale image on white.
+
+    ``name`` identifies the score in error messages.
+    """
     toolkit = verovio.toolkit()
     toolkit.setOptions(VEROVIO_OPTIONS)
-    if not toolkit.loadData(musicxml.read_text(encoding="utf-8")):
-        raise RenderError(f"Verovio could not load {musicxml.name}.")
+    if not toolkit.loadData(musicxml):
+        raise RenderError(f"Verovio could not load {name}.")
     pages = toolkit.getPageCount()
     if pages != 1:
-        raise RenderError(
-            f"{musicxml.name} renders to {pages} pages; a synthetic source must fit on one."
-        )
+        raise RenderError(f"{name} renders to {pages} pages; a synthetic source must fit on one.")
     svg = toolkit.renderToSVG(1)
     if _VEROVIO_FONT_ATTRIBUTE not in svg:
         raise RenderError(

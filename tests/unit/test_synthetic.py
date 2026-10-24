@@ -364,6 +364,37 @@ def test_source_that_is_not_musicxml_is_rejected_before_writing(renderer, tmp_pa
     assert not (tmp_path / "out").exists()
 
 
+def test_source_that_is_not_utf8_is_rejected_before_writing(renderer, tmp_path: Path) -> None:
+    from omr_lab.synthetic import SourceError, generate_corpus
+
+    spec_path = _write_spec(tmp_path / "spec", _spec_document(text_fonts=[renderer.family]))
+    source = tmp_path / "spec" / "twinkle.musicxml"
+    text = TWINKLE.read_text(encoding="utf-8").replace("Twinkle, Twinkle", "Schöner Stern")
+    text = text.replace('encoding="UTF-8"', 'encoding="ISO-8859-1"', 1)
+    source.write_bytes(text.encode("latin-1"))
+    assert load_musicxml(source).container == "musicxml"  # valid XML, just not UTF-8
+
+    with pytest.raises(SourceError, match="is not UTF-8"):
+        generate_corpus(load_corpus_spec(spec_path), tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
+def test_utf8_source_with_bom_is_rendered(renderer, tmp_path: Path) -> None:
+    from omr_lab.synthetic import generate_corpus
+
+    document = _spec_document(text_fonts=[renderer.family])
+    document["variants"] = document["variants"][:1]
+    spec_path = _write_spec(tmp_path / "spec", document)
+    source = tmp_path / "spec" / "twinkle.musicxml"
+    source.write_bytes(b"\xef\xbb\xbf" + TWINKLE.read_bytes())
+
+    result = generate_corpus(load_corpus_spec(spec_path), tmp_path / "out")
+
+    # The ground truth is the source file unchanged, BOM included.
+    sample = result.manifest["samples"][0]
+    assert (tmp_path / "out" / sample["ground_truth"]).read_bytes() == source.read_bytes()
+
+
 def test_missing_text_font_is_a_dependency_error(renderer, tmp_path: Path) -> None:
     from omr_lab.synthetic import SyntheticDependencyError, generate_corpus
     from omr_lab.synthetic.render import choose_text_font
