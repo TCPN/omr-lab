@@ -4,7 +4,8 @@ The layout matches scripts/render_e2e_sample.py: A4 at 300 dpi, 2480 px wide, th
 height trimmed to the music. Verovio sets all text (title, chord symbols, lyrics) in
 one font family on the SVG root; it is replaced with the chosen text font, because
 cairosvg draws text with that one font and has no per-glyph fallback, so Times would
-leave Chinese lyrics blank.
+leave Chinese lyrics blank. The chosen font must therefore be installed and contain
+every character of the score's text, which fontconfig checks before rasterizing.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import io
 import re
 import shutil
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from importlib.metadata import version
 
@@ -39,7 +41,7 @@ VEROVIO_OPTIONS = {
 OUTPUT_WIDTH_PX = 2480
 DPI = 300
 _VEROVIO_FONT_ATTRIBUTE = 'font-family="Times, serif"'
-_FC_MATCH_TIMEOUT_SECONDS = 30.0
+_FONTCONFIG_TIMEOUT_SECONDS = 30.0
 
 
 class RenderError(RuntimeError):
@@ -47,13 +49,14 @@ class RenderError(RuntimeError):
 
 
 class TextFontUnavailableError(RuntimeError):
-    """None of a source's text fonts is installed."""
+    """No text font of a source is installed and has every character of its text."""
 
 
 @dataclass(frozen=True, slots=True)
 class TextFont:
     family: str
-    """A family fontconfig has installed under exactly this name."""
+    """A family fontconfig has installed under exactly this name, with every character
+    of the text it is used for."""
 
 
 def renderer_description(font: TextFont) -> str:
@@ -65,38 +68,88 @@ def renderer_description(font: TextFont) -> str:
     )
 
 
-def choose_text_font(candidates: tuple[str, ...]) -> TextFont:
-    """Return the first candidate fontconfig has installed under that exact family name.
+def choose_text_font(
+    candidates: tuple[str, ...], characters: frozenset[str] = frozenset()
+) -> TextFont:
+    """Return the first candidate that fontconfig has installed under that exact family
+    name and that has a glyph for each of ``characters``.
 
     An unchecked font is never used: cairosvg would silently draw text in a missing
-    font as blanks, while the ground truth still has every lyric.
+    font, or characters the font lacks, as blanks, while the ground truth still has
+    every lyric.
     """
-    fc_match = shutil.which("fc-match")
-    if fc_match is None:
+    fc_match, fc_list = shutil.which("fc-match"), shutil.which("fc-list")
+    if fc_match is None or fc_list is None:
         raise TextFontUnavailableError(
-            "fc-match (from fontconfig) is needed to check that the text fonts "
-            f"{', '.join(candidates)} are installed. Install it, for example with "
+            "fc-match and fc-list (from fontconfig) are needed to check that the text "
+            f"fonts {', '.join(candidates)} are installed. Install them, for example with "
             "`sudo apt install fontconfig`."
         )
+    lacking: dict[str, list[str]] = {}
     for family in candidates:
-        result = run_command(
-            [fc_match, "--format=%{family}", _fontconfig_literal(family)],
-            timeout_seconds=_FC_MATCH_TIMEOUT_SECONDS,
-        )
-        if not result.succeeded:
-            raise TextFontUnavailableError(
-                f"fc-match failed for {family!r}: {result.error or result.stderr.strip()}"
-            )
-        # fontconfig lists a font's names in several languages, comma-separated, and
-        # falls back to another font when the family is missing.
-        names = {name.strip().casefold() for name in result.stdout.split(",")}
-        if family.casefold() in names:
+        if not _is_installed(fc_match, family):
+            continue
+        if _covers(fc_list, family, characters):
             return TextFont(family=family)
+        lacking[family] = [c for c in sorted(characters) if not _covers(fc_list, family, {c})]
+    if lacking:
+        details = "; ".join(
+            f"{family} lacks {_describe(missing)}" for family, missing in lacking.items()
+        )
+        raise TextFontUnavailableError(
+            f"No installed text font has every character of the score's text ({details}). "
+            "List a font that has them in text_fonts (for example Noto Sans CJK TC from "
+            "fonts-noto-cjk for Chinese lyrics)."
+        )
     raise TextFontUnavailableError(
         f"None of the text fonts {', '.join(candidates)} is installed. Install one of them "
         "(for example `sudo apt install fonts-liberation`, or fonts-noto-cjk for Chinese "
         "lyrics) or list an installed font in the specification's text_fonts."
     )
+
+
+def _is_installed(fc_match: str, family: str) -> bool:
+    result = _fontconfig(fc_match, "--format=%{family}", _fontconfig_literal(family))
+    # fontconfig lists a font's names in several languages, comma-separated, and
+    # falls back to another font when the family is missing.
+    return family.casefold() in {name.strip().casefold() for name in result.split(",")}
+
+
+def _covers(fc_list: str, family: str, characters: frozenset[str] | set[str]) -> bool:
+    """Whether the family has a font with a glyph for every character."""
+    if not characters:
+        return True
+    charset = " ".join(f"{ord(c):x}" for c in sorted(characters))
+    pattern = f":family={_fontconfig_literal(family)}:charset={charset}"
+    # fc-list prints the fonts that match the whole pattern, and nothing otherwise.
+    return bool(_fontconfig(fc_list, "--format=%{family}\n", pattern).strip())
+
+
+def _fontconfig(program: str, *args: str) -> str:
+    result = run_command([program, *args], timeout_seconds=_FONTCONFIG_TIMEOUT_SECONDS)
+    if not result.succeeded:
+        raise TextFontUnavailableError(
+            f"{program} {' '.join(args)} failed: {result.error or result.stderr.strip()}"
+        )
+    return result.stdout
+
+
+def _describe(characters: list[str], limit: int = 10) -> str:
+    shown = ", ".join(f"{c} (U+{ord(c):04X})" for c in characters[:limit])
+    more = len(characters) - limit
+    return shown + (f" and {more} more" if more > 0 else "")
+
+
+def text_characters(svg: str) -> frozenset[str]:
+    """The characters of the text Verovio draws (title, chord symbols, lyrics)."""
+    characters: set[str] = set()
+    for element in ET.fromstring(svg).iter():
+        tag = element.tag.rsplit("}", 1)[-1]
+        if tag in ("text", "tspan"):
+            characters.update(element.text or "")
+            if tag == "tspan":
+                characters.update(element.tail or "")
+    return frozenset(c for c in characters if not c.isspace())
 
 
 def _fontconfig_literal(family: str) -> str:
@@ -105,11 +158,8 @@ def _fontconfig_literal(family: str) -> str:
     return re.sub(r"([\\:-])", r"\\\1", family)
 
 
-def render_page(musicxml: str, name: str, font: TextFont) -> Image.Image:
-    """Render the MusicXML text (one page) to an 8-bit grayscale image on white.
-
-    ``name`` identifies the score in error messages.
-    """
+def render_svg(musicxml: str, name: str) -> str:
+    """Lay out the MusicXML text (one page) as SVG; ``name`` is used in error messages."""
     toolkit = verovio.toolkit()
     toolkit.setOptions(VEROVIO_OPTIONS)
     if not toolkit.loadData(musicxml):
@@ -123,6 +173,11 @@ def render_page(musicxml: str, name: str, font: TextFont) -> Image.Image:
             f"Verovio {toolkit.getVersion()} no longer writes {_VEROVIO_FONT_ATTRIBUTE}; "
             "the text font cannot be set. Update omr_lab.synthetic.render."
         )
+    return svg
+
+
+def rasterize(svg: str, font: TextFont) -> Image.Image:
+    """Draw the SVG in the text font as an 8-bit grayscale image on white."""
     svg = svg.replace(_VEROVIO_FONT_ATTRIBUTE, f'font-family="{font.family}"', 1)
     png = cairosvg.svg2png(
         bytestring=svg.encode("utf-8"), output_width=OUTPUT_WIDTH_PX, background_color="white"

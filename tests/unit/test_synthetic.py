@@ -503,6 +503,24 @@ def test_missing_text_font_is_a_dependency_error(renderer, tmp_path: Path) -> No
         generate_corpus(load_corpus_spec(spec_path), tmp_path / "out")
 
 
+def test_text_font_without_the_lyric_characters_is_a_dependency_error(
+    renderer, tmp_path: Path
+) -> None:
+    from omr_lab.synthetic import SyntheticDependencyError, generate_corpus
+
+    # The renderer fixture picks a Latin serif font, which has no CJK characters.
+    spec_path = _write_spec(tmp_path, _spec_document(text_fonts=[renderer.family]))
+    source = tmp_path / "twinkle.musicxml"
+    source.write_text(
+        source.read_text(encoding="utf-8").replace("<text>Twin</text>", "<text>雨</text>", 1),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SyntheticDependencyError, match=r"lacks 雨 \(U\+96E8\)"):
+        generate_corpus(load_corpus_spec(spec_path), tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
 # --- CLI ---------------------------------------------------------------------------
 
 
@@ -548,7 +566,7 @@ def test_cli_interrupt_before_writing_does_not_call_the_directory_partial(
     def interrupted(*args, **kwargs):
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(render, "render_page", interrupted)
+    monkeypatch.setattr(render, "render_svg", interrupted)
     spec_path = _write_spec(tmp_path / "spec", _spec_document(text_fonts=[renderer.family]))
     out = tmp_path / "out"
     if pre_existing:

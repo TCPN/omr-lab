@@ -76,23 +76,24 @@ def generate_corpus(
         ) from exc
 
     corpus_seed = spec.seed if seed is None else seed
-    try:
-        fonts = {source.id: render.choose_text_font(source.text_fonts) for source in spec.sources}
-    except render.TextFontUnavailableError as exc:
-        raise SyntheticDependencyError(str(exc)) from exc
     # Every source is read and rendered before anything is written.
     ground_truth_bytes: dict[str, bytes] = {}
+    fonts = {}
     clean_images = {}
     for source in spec.sources:
         ground_truth_bytes[source.id] = _read_source(source)
+        text = _decode_utf8_source(source, ground_truth_bytes[source.id])
         try:
-            clean_images[source.id] = render.render_page(
-                _decode_utf8_source(source, ground_truth_bytes[source.id]),
-                source.musicxml.name,
-                fonts[source.id],
-            )
+            svg = render.render_svg(text, source.musicxml.name)
         except render.RenderError as exc:
             raise SourceError(f"Source {source.id!r}: {exc}") from exc
+        try:
+            fonts[source.id] = render.choose_text_font(
+                source.text_fonts, render.text_characters(svg)
+            )
+        except render.TextFontUnavailableError as exc:
+            raise SyntheticDependencyError(f"Source {source.id!r}: {exc}") from exc
+        clean_images[source.id] = render.rasterize(svg, fonts[source.id])
 
     output_dir = Path(output_dir)
     _prepare_output_dir(output_dir)
