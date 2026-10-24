@@ -38,7 +38,8 @@ def resolve(degradation: DegradationSpec, rng: np.random.Generator) -> ResolvedP
         # bottom-left x, y) as a fraction of the width or height.
         resolved["corners"] = [float(v) for v in rng.uniform(0, resolved["strength"], 8)]
     elif degradation.kind == "noise":
-        resolved["noise_seed"] = int(rng.integers(0, 2**63 - 1))
+        # 53 bits, so the recorded value survives JSON readers that use doubles.
+        resolved["noise_seed"] = int(rng.integers(0, 2**53))
     return resolved
 
 

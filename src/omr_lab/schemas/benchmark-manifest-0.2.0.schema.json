@@ -222,7 +222,8 @@
         "seed": {
           "description": "Seed of this sample's random generator, derived from the corpus seed, source id and variant id.",
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "degradations": {
           "description": "Degradations applied to the clean rendering, in order; empty for the clean image.",

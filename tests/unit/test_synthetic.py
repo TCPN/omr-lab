@@ -160,9 +160,9 @@ def test_sample_seed_is_stable_and_independent_of_other_samples() -> None:
     assert sample_seed(7, "twinkle", "worn") == sample_seed(7, "twinkle", "worn")
     assert sample_seed(7, "twinkle", "worn") != sample_seed(8, "twinkle", "worn")
     assert sample_seed(7, "twinkle", "worn") != sample_seed(7, "twinkle", "clean")
-    assert 0 <= sample_seed(7, "twinkle", "worn") < 2**63
+    assert 0 <= sample_seed(7, "twinkle", "worn") < 2**53
     # A fixed value: changing the derivation would silently change every corpus.
-    assert sample_seed(20261023, "twinkle", "clean") == 8063376804198141333
+    assert sample_seed(20261023, "twinkle", "clean") == 7874391410349747
 
 
 # --- Degradations (Pillow and NumPy) -----------------------------------------------
@@ -229,6 +229,7 @@ def test_resolved_parameters_repeat_for_a_seed_and_stay_in_range(degradations) -
     corners = by_kind["perspective"]["corners"]
     assert len(corners) == 8 and all(0 <= c <= 0.05 for c in corners)
     assert isinstance(by_kind["noise"]["noise_seed"], int)
+    assert 0 <= by_kind["noise"]["noise_seed"] < 2**53
     # Recorded values must survive JSON exactly.
     assert json.loads(json.dumps(first)) == first
 
@@ -528,7 +529,8 @@ def test_synthesis_needs_its_seed_and_resolved_numbers() -> None:
 
     no_seed = {key: value for key, value in _SYNTHESIS.items() if key != "seed"}
     ranged = {**_SYNTHESIS, "degradations": [{"kind": "rotate", "params": {"degrees": {}}}]}
-    for synthesis in (no_seed, ranged):
+    too_big = {**_SYNTHESIS, "seed": 2**53}
+    for synthesis in (no_seed, ranged, too_big):
         document = {"schema_version": "0.2.0", "samples": [_manifest_sample(synthesis=synthesis)]}
         with pytest.raises(BenchmarkDocumentValidationError):
             validate_benchmark_manifest(document)

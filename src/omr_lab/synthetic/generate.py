@@ -43,9 +43,12 @@ class CorpusResult:
 
 
 def sample_seed(corpus_seed: int, source_id: str, variant_id: str) -> int:
-    """The seed of one sample: independent of the other sources and variants."""
+    """The seed of one sample: independent of the other sources and variants.
+
+    53 bits, so the value survives JSON readers that parse numbers as doubles.
+    """
     digest = hashlib.sha256(f"{corpus_seed}:{source_id}:{variant_id}".encode()).digest()
-    return int.from_bytes(digest[:8], "big") >> 1
+    return int.from_bytes(digest[:8], "big") >> 11
 
 
 def generate_corpus(
