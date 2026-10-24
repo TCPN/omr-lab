@@ -405,6 +405,39 @@ def test_source_that_is_not_musicxml_is_rejected_before_writing(renderer, tmp_pa
     assert not (tmp_path / "out").exists()
 
 
+def test_compressed_source_is_rejected_before_writing(renderer, tmp_path: Path) -> None:
+    import zipfile
+
+    from omr_lab.synthetic import SourceError, generate_corpus
+
+    spec_path = _write_spec(tmp_path / "spec", _spec_document(text_fonts=[renderer.family]))
+    with zipfile.ZipFile(tmp_path / "spec" / "twinkle.musicxml", "w") as archive:
+        archive.writestr(
+            "META-INF/container.xml",
+            '<container><rootfiles><rootfile full-path="score.musicxml"/></rootfiles></container>',
+        )
+        archive.write(TWINKLE, "score.musicxml")
+
+    with pytest.raises(SourceError, match="compressed"):
+        generate_corpus(load_corpus_spec(spec_path), tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
+def test_source_longer_than_one_page_is_rejected_before_writing(
+    renderer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from omr_lab.synthetic import SourceError, generate_corpus, render
+
+    # A short page instead of a long score: twinkle then needs two pages.
+    monkeypatch.setitem(render.VEROVIO_OPTIONS, "adjustPageHeight", False)
+    monkeypatch.setitem(render.VEROVIO_OPTIONS, "pageHeight", 700)
+    spec_path = _write_spec(tmp_path / "spec", _spec_document(text_fonts=[renderer.family]))
+
+    with pytest.raises(SourceError, match="renders to [0-9]+ pages"):
+        generate_corpus(load_corpus_spec(spec_path), tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
 def test_source_that_is_not_utf8_is_rejected_before_writing(renderer, tmp_path: Path) -> None:
     from omr_lab.synthetic import SourceError, generate_corpus
 

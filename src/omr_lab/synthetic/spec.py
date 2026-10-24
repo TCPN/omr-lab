@@ -51,7 +51,7 @@ DEGRADATION_PARAMETERS: dict[str, dict[str, ParameterRule]] = {
 
 
 def make_sample_id(source_id: str, variant_id: str) -> str:
-    """The manifest id, image name and seed key of one source rendered as one variant."""
+    """The manifest id and image name of one source rendered as one variant."""
     return f"{source_id}-{variant_id}"
 
 
@@ -160,7 +160,7 @@ def load_corpus_spec(path: Path | str) -> CorpusSpec:
         path=path,
         name=document["name"],
         description=document.get("description"),
-        # JSON Schema counts 7.0 as an integer; the seed key must read "7", not "7.0".
+        # JSON Schema counts 7.0 as an integer; sample_seed must hash "7", not "7.0".
         seed=int(document["seed"]),
         sources=sources,
         variants=tuple(variants),
