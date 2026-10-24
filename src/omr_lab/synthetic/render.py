@@ -103,16 +103,19 @@ def choose_text_font(
             f"fonts {', '.join(candidates)} are installed. Install them, for example with "
             "`sudo apt install fontconfig`."
         )
-    lacking: dict[str, list[str]] = {}
+    lacking: list[str] = []
     for family in candidates:
         if not _is_installed(fc_match, family):
             continue
         if _covers(fc_list, family, characters):
             return TextFont(family=family)
-        lacking[family] = [c for c in sorted(characters) if not _covers(fc_list, family, {c})]
+        lacking.append(family)
     if lacking:
+        # One fc-list call per character, so only once no candidate is left.
         details = "; ".join(
-            f"{family} lacks {_describe(missing)}" for family, missing in lacking.items()
+            f"{family} lacks "
+            + _describe([c for c in sorted(characters) if not _covers(fc_list, family, {c})])
+            for family in lacking
         )
         raise TextFontUnavailableError(
             f"No installed text font has every character of the score's text ({details}). "
