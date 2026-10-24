@@ -40,7 +40,7 @@ A UTF-8 JSON file validated against `src/omr_lab/schemas/synthetic-corpus-0.1.0.
 | `sources` | yes | Scores to render: `id`, `musicxml`, `source`, `license`, optional `work` and `text_fonts`. |
 | `variants` | yes | Image conditions: `id`, `condition` (the manifest's condition text) and `degradations`, applied in order. A variant with no degradations is the clean rendering. |
 
-Every source is rendered once and combined with every variant. Sample ids are `<source id>-<variant id>`, so ids are 1 to 30 lowercase letters, digits or `-`, and must be unique within sources and within variants.
+Every source is rendered once and combined with every variant. Sample ids are `<source id>-<variant id>`, so ids are 1 to 30 lowercase letters, digits or `-`, are not Windows device names (`con`, `aux`, `com1` and so on, since a source id is also a file name), and must be unique within sources and within variants.
 
 A source must be uncompressed, UTF-8 encoded MusicXML (a byte-order mark is allowed) that the [MusicXML loader](musicxml.md) accepts and that fits on one page. The file is copied unchanged into the corpus as the ground truth of all its samples, so clean and degraded images of one source share one ground truth.
 

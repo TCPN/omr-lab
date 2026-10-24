@@ -115,6 +115,7 @@ _DELETE = object()
     [
         (["seed"], -1, "seed"),
         (["sources", 0, "id"], "Bad_Id", "sources[0].id"),
+        (["sources", 0, "id"], "aux", "sources[0].id"),
         (["variants", 1, "degradations", 0, "kind"], "warp", "kind"),
         (["variants", 1, "degradations", 0, "degrees"], "3", "degrees"),
         (["variants", 1, "degradations", 0, "angle"], 3, "unknown parameter 'angle'"),
