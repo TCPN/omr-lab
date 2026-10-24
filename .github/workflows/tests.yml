@@ -21,3 +21,6 @@ jobs:
         run: uv run ruff check .
       - name: Tests
         run: uv run pytest
+        env:
+          # Fail, not skip, the rendering tests if the synthetic extra or fonts break.
+          OMR_LAB_REQUIRE_SYNTHETIC: "1"

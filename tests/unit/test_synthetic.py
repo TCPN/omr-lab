@@ -2,6 +2,7 @@ import copy
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -303,19 +304,26 @@ def test_lighting_darkens_towards_the_angle(degradations, page) -> None:
 # --- Generation (Verovio and cairosvg) ---------------------------------------------
 
 
+def _renderer_unavailable(reason: str) -> None:
+    # CI sets OMR_LAB_REQUIRE_SYNTHETIC so that a broken renderer fails, not skips.
+    if os.environ.get("OMR_LAB_REQUIRE_SYNTHETIC"):
+        pytest.fail(f"OMR_LAB_REQUIRE_SYNTHETIC is set, but {reason}")
+    pytest.skip(reason)
+
+
 @pytest.fixture(scope="module")
 def renderer():
-    pytest.importorskip("verovio")
     try:
         import cairosvg  # noqa: F401
+        import verovio  # noqa: F401
     except (ImportError, OSError) as exc:
-        pytest.skip(f"cairosvg unavailable: {exc}")
+        _renderer_unavailable(f"the synthetic extra cannot be imported: {exc}")
     from omr_lab.synthetic import render
 
     try:
         font = render.choose_text_font(("Liberation Serif", "Times New Roman", "DejaVu Serif"))
     except render.FontUnavailableError as exc:
-        pytest.skip(str(exc))
+        _renderer_unavailable(str(exc))
     return font
 
 
