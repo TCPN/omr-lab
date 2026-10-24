@@ -136,7 +136,8 @@ def _lighting(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     angle = np.deg2rad(float(params["angle"]))
     # Each pixel's projection onto the light direction, scaled to a darkness fraction
     # from 0 (brightest) to 1 (darkest).
-    ys, xs = np.mgrid[0:height, 0:width]
+    # A column and a row, broadcast to the page only by the projection itself.
+    ys, xs = np.arange(height)[:, None], np.arange(width)[None, :]
     projection = xs * np.cos(angle) + ys * np.sin(angle)
     span = projection.max() - projection.min()
     darkness_fraction = (

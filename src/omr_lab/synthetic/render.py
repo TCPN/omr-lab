@@ -53,8 +53,8 @@ VEROVIO_OPTIONS = {
 }
 OUTPUT_WIDTH_PX = 2480
 DPI = 300
-_VEROVIO_FONT_FAMILY = "Times, serif"
-_VEROVIO_FONT_ATTRIBUTE = f'font-family="{_VEROVIO_FONT_FAMILY}"'
+_VEROVIO_TEXT_FONT_FAMILY = "Times, serif"
+_VEROVIO_FONT_ATTRIBUTE = f'font-family="{_VEROVIO_TEXT_FONT_FAMILY}"'
 _FONTCONFIG_TIMEOUT_SECONDS = 30.0
 MUSIC_FONT = "Leipzig"
 """Verovio's default music font, also used for music symbols inside text."""
@@ -173,7 +173,7 @@ def text_characters(svg: str) -> frozenset[str]:
     characters: set[str] = set()
 
     def collect(element: ET.Element) -> None:
-        if element.get("font-family", _VEROVIO_FONT_FAMILY) != _VEROVIO_FONT_FAMILY:
+        if element.get("font-family", _VEROVIO_TEXT_FONT_FAMILY) != _VEROVIO_TEXT_FONT_FAMILY:
             return
         tag = element.tag.rsplit("}", 1)[-1]
         if tag in ("text", "tspan"):
@@ -246,7 +246,7 @@ def render_svg(musicxml: str, name: str) -> str:
             f"Verovio {toolkit.getVersion()} no longer writes {_VEROVIO_FONT_ATTRIBUTE}; "
             "the text font cannot be set. Update omr_lab.synthetic.render."
         )
-    others = set(_FONT_FAMILY_ATTRIBUTE.findall(svg)) - {_VEROVIO_FONT_FAMILY, MUSIC_FONT}
+    others = set(_FONT_FAMILY_ATTRIBUTE.findall(svg)) - {_VEROVIO_TEXT_FONT_FAMILY, MUSIC_FONT}
     if others:
         raise RenderError(
             f"{name} uses fonts {', '.join(sorted(others))}, which cairosvg cannot draw; "
