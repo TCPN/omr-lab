@@ -260,7 +260,8 @@ def rasterize(svg: str, font: TextFont) -> Image.Image:
 
     Call register_music_font first, or music symbols inside text come out as boxes.
     """
-    svg = svg.replace(_VEROVIO_FONT_ATTRIBUTE, f'font-family="{font.family}"', 1)
+    # Every occurrence: text_characters checks all text under any of them.
+    svg = svg.replace(_VEROVIO_FONT_ATTRIBUTE, f'font-family="{font.family}"')
     png = cairosvg.svg2png(
         bytestring=svg.encode("utf-8"), output_width=OUTPUT_WIDTH_PX, background_color="white"
     )
