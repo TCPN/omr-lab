@@ -554,6 +554,71 @@ def test_music_symbols_in_text_are_drawn_in_the_music_font(renderer) -> None:
     assert (draw(render.MUSIC_FONT) != draw("No Such Font Omr Lab")).any()
 
 
+def test_rasterize_sets_the_text_font_on_every_default_attribute(
+    renderer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from omr_lab.synthetic import render
+
+    drawn = []
+    svg2png = render.cairosvg.svg2png
+
+    def fake_svg2png(*, bytestring, **kwargs):
+        drawn.append(bytestring.decode("utf-8"))
+        return svg2png(bytestring=b'<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>')
+
+    monkeypatch.setattr(render.cairosvg, "svg2png", fake_svg2png)
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" font-family="Times, serif">'
+        '<g font-family="Times, serif"><text>a</text></g></svg>'
+    )
+
+    render.rasterize(svg, render.TextFont("Foo Serif"))
+
+    assert "Times, serif" not in drawn[0]
+    assert drawn[0].count('font-family="Foo Serif"') == 2
+
+
+class _StubToolkit:
+    def __init__(self, svg: str) -> None:
+        self.svg = svg
+
+    def setOptions(self, options) -> None:  # noqa: N802 - Verovio's API
+        pass
+
+    def loadData(self, data: str) -> bool:  # noqa: N802
+        return True
+
+    def getPageCount(self) -> int:  # noqa: N802
+        return 1
+
+    def getVersion(self) -> str:  # noqa: N802
+        return "stub"
+
+    def renderToSVG(self, page: int) -> str:  # noqa: N802
+        return self.svg
+
+
+@pytest.mark.parametrize(
+    ("svg", "message"),
+    [
+        (
+            '<svg font-family="Times, serif"><tspan font-family="Arial">a</tspan></svg>',
+            "uses fonts Arial",
+        ),
+        ('<svg font-family="Helvetica"><text>a</text></svg>', "no longer writes"),
+    ],
+)
+def test_render_svg_rejects_fonts_it_cannot_set_or_draw(
+    renderer, monkeypatch: pytest.MonkeyPatch, svg: str, message: str
+) -> None:
+    from omr_lab.synthetic import render
+
+    monkeypatch.setattr(render.verovio, "toolkit", lambda: _StubToolkit(svg))
+
+    with pytest.raises(render.RenderError, match=message):
+        render.render_svg("<score-partwise/>", "stub.musicxml")
+
+
 # --- CLI ---------------------------------------------------------------------------
 
 
