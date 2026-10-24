@@ -16,8 +16,7 @@ from omr_lab.schemas.benchmark import (
     BENCHMARK_MANIFEST_SCHEMA_VERSION,
     validate_benchmark_manifest,
 )
-from omr_lab.synthetic.spec import CorpusSpec, SourceSpec, VariantSpec
-from omr_lab.synthetic.spec import sample_id as spec_sample_id
+from omr_lab.synthetic.spec import CorpusSpec, SourceSpec, VariantSpec, make_sample_id
 
 MANIFEST_FILENAME = "manifest.json"
 IMAGES_DIRNAME = "images"
@@ -105,7 +104,7 @@ def generate_corpus(
         clean = clean_images[source.id]
         renderer = render.renderer_description(fonts[source.id])
         for variant in spec.variants:
-            sample_id = spec_sample_id(source.id, variant.id)
+            sample_id = make_sample_id(source.id, variant.id)
             seed_value = sample_seed(corpus_seed, source.id, variant.id)
             rng = np.random.default_rng(seed_value)
             image = clean

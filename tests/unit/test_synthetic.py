@@ -147,6 +147,14 @@ def test_sample_ids_must_not_clash(tmp_path: Path) -> None:
         load_corpus_spec(_write_spec(tmp_path, document))
 
 
+def test_integral_float_seed_is_read_as_an_integer(tmp_path: Path) -> None:
+    whole = load_corpus_spec(_write_spec(tmp_path / "a", _spec_document(seed=7)))
+    floating = load_corpus_spec(_write_spec(tmp_path / "b", _spec_document(seed=7.0)))
+
+    assert floating.seed == whole.seed == 7
+    assert type(floating.seed) is int
+
+
 def test_unreadable_and_non_json_specifications_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(CorpusSpecError, match="cannot be read"):
         load_corpus_spec(tmp_path / "missing.json")
@@ -425,6 +433,22 @@ def test_utf8_source_with_bom_is_rendered(renderer, tmp_path: Path) -> None:
     # The ground truth is the source file unchanged, BOM included.
     sample = result.manifest["samples"][0]
     assert (tmp_path / "out" / sample["ground_truth"]).read_bytes() == source.read_bytes()
+
+
+def test_font_names_reach_fc_match_as_literals(renderer, monkeypatch: pytest.MonkeyPatch) -> None:
+    from omr_lab.engines.base import CommandResult
+    from omr_lab.synthetic import render
+
+    calls = []
+
+    def fake_run_command(args, *, timeout_seconds):
+        calls.append(list(args))
+        return CommandResult(args=tuple(args), returncode=0, stdout="Foo-Bold:Italic")
+
+    monkeypatch.setattr(render, "run_command", fake_run_command)
+
+    assert render.choose_text_font(("Foo-Bold:Italic",)).family == "Foo-Bold:Italic"
+    assert calls[0][-1] == "Foo\\-Bold\\:Italic"
 
 
 def test_fonts_are_never_used_unchecked(renderer, monkeypatch: pytest.MonkeyPatch) -> None:

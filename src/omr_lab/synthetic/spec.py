@@ -50,7 +50,7 @@ DEGRADATION_PARAMETERS: dict[str, dict[str, ParameterRule]] = {
 }
 
 
-def sample_id(source_id: str, variant_id: str) -> str:
+def make_sample_id(source_id: str, variant_id: str) -> str:
     """The manifest id, image name and seed key of one source rendered as one variant."""
     return f"{source_id}-{variant_id}"
 
@@ -131,11 +131,11 @@ def load_corpus_spec(path: Path | str) -> CorpusSpec:
             )
         )
     sample_ids = Counter(
-        sample_id(source["id"], variant["id"])
+        make_sample_id(source["id"], variant["id"])
         for source in document["sources"]
         for variant in document["variants"]
     )
-    clashes = sorted(sample_id for sample_id, count in sample_ids.items() if count > 1)
+    clashes = sorted(id_ for id_, count in sample_ids.items() if count > 1)
     if clashes and not problems:
         problems.append(
             "sample ids <source id>-<variant id> must be unique; repeated: " + ", ".join(clashes)
@@ -160,7 +160,8 @@ def load_corpus_spec(path: Path | str) -> CorpusSpec:
         path=path,
         name=document["name"],
         description=document.get("description"),
-        seed=document["seed"],
+        # JSON Schema counts 7.0 as an integer; the seed key must read "7", not "7.0".
+        seed=int(document["seed"]),
         sources=sources,
         variants=tuple(variants),
     )

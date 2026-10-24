@@ -10,6 +10,7 @@ leave Chinese lyrics blank.
 from __future__ import annotations
 
 import io
+import re
 import shutil
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -79,7 +80,8 @@ def choose_text_font(candidates: tuple[str, ...]) -> TextFont:
         )
     for family in candidates:
         result = run_command(
-            [fc_match, "--format=%{family}", family], timeout_seconds=_FC_MATCH_TIMEOUT_SECONDS
+            [fc_match, "--format=%{family}", _fontconfig_literal(family)],
+            timeout_seconds=_FC_MATCH_TIMEOUT_SECONDS,
         )
         if not result.succeeded:
             raise TextFontUnavailableError(
@@ -95,6 +97,12 @@ def choose_text_font(candidates: tuple[str, ...]) -> TextFont:
         "(for example `sudo apt install fonts-liberation`, or fonts-noto-cjk for Chinese "
         "lyrics) or list an installed font in the specification's text_fonts."
     )
+
+
+def _fontconfig_literal(family: str) -> str:
+    """Escape a family name for fc-match, which reads its argument as a pattern:
+    ``-`` starts a size, ``:`` a property, and ``\\`` escapes."""
+    return re.sub(r"([\\:-])", r"\\\1", family)
 
 
 def render_page(musicxml: str, name: str, font: TextFont) -> Image.Image:
