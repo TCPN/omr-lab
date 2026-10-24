@@ -50,6 +50,11 @@ DEGRADATION_PARAMETERS: dict[str, dict[str, ParameterRule]] = {
 }
 
 
+def sample_id(source_id: str, variant_id: str) -> str:
+    """The manifest id, image name and seed key of one source rendered as one variant."""
+    return f"{source_id}-{variant_id}"
+
+
 class CorpusSpecError(ValueError):
     """The specification cannot be read, is not valid JSON, or breaks its rules."""
 
@@ -126,7 +131,7 @@ def load_corpus_spec(path: Path | str) -> CorpusSpec:
             )
         )
     sample_ids = Counter(
-        f"{source['id']}-{variant['id']}"
+        sample_id(source["id"], variant["id"])
         for source in document["sources"]
         for variant in document["variants"]
     )

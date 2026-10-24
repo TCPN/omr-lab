@@ -17,6 +17,7 @@ from omr_lab.schemas.benchmark import (
     validate_benchmark_manifest,
 )
 from omr_lab.synthetic.spec import CorpusSpec, SourceSpec, VariantSpec
+from omr_lab.synthetic.spec import sample_id as spec_sample_id
 
 MANIFEST_FILENAME = "manifest.json"
 IMAGES_DIRNAME = "images"
@@ -87,7 +88,7 @@ def generate_corpus(
         ground_truth_bytes[source.id] = _read_source(source)
         try:
             clean_images[source.id] = render.render_page(
-                _source_text(source, ground_truth_bytes[source.id]),
+                _decode_utf8_source(source, ground_truth_bytes[source.id]),
                 source.musicxml.name,
                 fonts[source.id],
             )
@@ -104,7 +105,7 @@ def generate_corpus(
         clean = clean_images[source.id]
         renderer = render.renderer_description(fonts[source.id])
         for variant in spec.variants:
-            sample_id = f"{source.id}-{variant.id}"
+            sample_id = spec_sample_id(source.id, variant.id)
             seed_value = sample_seed(corpus_seed, source.id, variant.id)
             rng = np.random.default_rng(seed_value)
             image = clean
@@ -146,7 +147,7 @@ def generate_corpus(
     return CorpusResult(manifest=manifest, manifest_path=manifest_path)
 
 
-def _source_text(source: SourceSpec, data: bytes) -> str:
+def _decode_utf8_source(source: SourceSpec, data: bytes) -> str:
     """Decode a source for Verovio, which takes text: only UTF-8 (a BOM is dropped).
 
     The MusicXML loader also accepts encodings such as UTF-16 or ISO-8859-1 that the
