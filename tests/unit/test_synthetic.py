@@ -354,6 +354,7 @@ def test_generated_manifest_records_sources_parameters_and_checksums(corpus: Pat
         assert sample["renderer"].startswith("Verovio ")
     assert clean["synthesis"]["degradations"] == []
     assert worn["synthesis"]["seed"] == sample_seed(7, "twinkle", "worn")
+    assert worn["synthesis"]["corpus_seed"] == 7
     assert [d["kind"] for d in worn["synthesis"]["degradations"]] == [
         item["kind"] for item in EVERY_KIND
     ]
@@ -662,6 +663,7 @@ def _manifest_sample(**extra: object) -> dict:
 
 _SYNTHESIS = {
     "corpus": "unit",
+    "corpus_seed": 7,
     "source_id": "a",
     "variant_id": "clean",
     "seed": 1,
@@ -683,9 +685,10 @@ def test_synthesis_needs_its_seed_and_resolved_numbers() -> None:
     from omr_lab.schemas.benchmark import BenchmarkDocumentValidationError
 
     no_seed = {key: value for key, value in _SYNTHESIS.items() if key != "seed"}
+    no_corpus_seed = {key: value for key, value in _SYNTHESIS.items() if key != "corpus_seed"}
     ranged = {**_SYNTHESIS, "degradations": [{"kind": "rotate", "params": {"degrees": {}}}]}
     too_big = {**_SYNTHESIS, "seed": 2**53}
-    for synthesis in (no_seed, ranged, too_big):
+    for synthesis in (no_seed, no_corpus_seed, ranged, too_big):
         document = {"schema_version": "0.2.0", "samples": [_manifest_sample(synthesis=synthesis)]}
         with pytest.raises(BenchmarkDocumentValidationError):
             validate_benchmark_manifest(document)

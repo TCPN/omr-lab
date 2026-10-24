@@ -81,12 +81,12 @@ def generate_corpus(
     except render.FontUnavailableError as exc:
         raise SyntheticDependencyError(str(exc)) from exc
     # Every source is read and rendered before anything is written.
-    ground_truth_bytes: dict[str, bytes] = {}
+    ground_truth_bytes_by_source: dict[str, bytes] = {}
     fonts = {}
     clean_images = {}
     for source in spec.sources:
-        ground_truth_bytes[source.id] = _read_source(source)
-        text = _decode_utf8_source(source, ground_truth_bytes[source.id])
+        ground_truth_bytes_by_source[source.id] = _read_source(source)
+        text = _decode_utf8_source(source, ground_truth_bytes_by_source[source.id])
         try:
             svg = render.render_svg(text, source.musicxml.name)
         except render.RenderError as exc:
@@ -104,14 +104,14 @@ def generate_corpus(
     samples = []
     for source in spec.sources:
         ground_truth_name = f"{GROUND_TRUTH_DIRNAME}/{source.id}.musicxml"
-        ground_truth_file_bytes = ground_truth_bytes[source.id]
-        (output_dir / ground_truth_name).write_bytes(ground_truth_file_bytes)
+        ground_truth_bytes = ground_truth_bytes_by_source[source.id]
+        (output_dir / ground_truth_name).write_bytes(ground_truth_bytes)
         clean = clean_images[source.id]
         renderer = render.renderer_description(fonts[source.id])
         for variant in spec.variants:
             sample_id = make_sample_id(source.id, variant.id)
-            seed_value = sample_seed(corpus_seed, source.id, variant.id)
-            rng = np.random.default_rng(seed_value)
+            derived_seed = sample_seed(corpus_seed, source.id, variant.id)
+            rng = np.random.default_rng(derived_seed)
             image = clean
             applied_degradations = []
             for degradation in variant.degradations:
@@ -129,9 +129,10 @@ def generate_corpus(
                     image_name=image_name,
                     image_sha256=_sha256(output_dir / image_name),
                     ground_truth_name=ground_truth_name,
-                    ground_truth_sha256=hashlib.sha256(ground_truth_file_bytes).hexdigest(),
+                    ground_truth_sha256=hashlib.sha256(ground_truth_bytes).hexdigest(),
                     renderer=renderer,
-                    seed=seed_value,
+                    corpus_seed=corpus_seed,
+                    derived_seed=derived_seed,
                     degradations=applied_degradations,
                 )
             )
@@ -192,7 +193,8 @@ def _sample(
     ground_truth_name: str,
     ground_truth_sha256: str,
     renderer: str,
-    seed: int,
+    corpus_seed: int,
+    derived_seed: int,
     degradations: list[dict[str, Any]],
 ) -> dict[str, Any]:
     sample: dict[str, Any] = {
@@ -212,9 +214,10 @@ def _sample(
             "renderer": renderer,
             "synthesis": {
                 "corpus": spec.name,
+                "corpus_seed": corpus_seed,
                 "source_id": source.id,
                 "variant_id": variant.id,
-                "seed": seed,
+                "seed": derived_seed,
                 "degradations": degradations,
             },
         }

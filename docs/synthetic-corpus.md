@@ -90,6 +90,7 @@ Each sample has the usual manifest fields (`source`, `license` and `work` from t
 | Field | Meaning |
 | --- | --- |
 | `corpus` | Specification name. |
+| `corpus_seed` | The corpus seed used (the specification's, or `--seed`); with the specification it regenerates the corpus. |
 | `source_id`, `variant_id` | Which source and variant made the sample. |
 | `seed` | The sample's seed. |
 | `degradations` | `[{"kind": ..., "params": {...}}]` in the order applied, with resolved values only; empty for a clean image. |

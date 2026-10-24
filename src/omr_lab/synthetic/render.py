@@ -114,7 +114,7 @@ def choose_text_font(
         # One fc-list call per character, so only once no candidate is left.
         details = "; ".join(
             f"{family} lacks "
-            + _describe(
+            + _describe_characters(
                 [c for c in sorted(characters) if not _family_has_glyphs(fc_list, family, {c})]
             )
             for family in lacking
@@ -157,7 +157,7 @@ def _fontconfig(program: str, *args: str) -> str:
     return result.stdout
 
 
-def _describe(characters: list[str], limit: int = 10) -> str:
+def _describe_characters(characters: list[str], limit: int = 10) -> str:
     shown = ", ".join(f"{c} (U+{ord(c):04X})" for c in characters[:limit])
     more = len(characters) - limit
     return shown + (f" and {more} more" if more > 0 else "")

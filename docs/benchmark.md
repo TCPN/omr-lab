@@ -28,7 +28,7 @@ Each sample:
 | `ground_truth`, `ground_truth_sha256` | no | MusicXML ground truth and its SHA-256; a `ground_truth` path needs a non-null checksum. |
 | `source`, `license`, `condition` | yes | Provenance, license (SPDX identifier where possible) and input condition (clean rendering, phone photo, skew, ...). |
 | `work`, `renderer`, `notes` | no | Title, tools that rendered a synthetic image, free text. |
-| `synthesis` | no (0.2.0 only) | How a synthetic image was generated: corpus name, source and variant ids, seed and the resolved degradation parameters ([synthetic-corpus.md](synthetic-corpus.md#output)). |
+| `synthesis` | no (0.2.0 only) | How a synthetic image was generated: corpus name and seed, source and variant ids, sample seed and the resolved degradation parameters ([synthetic-corpus.md](synthetic-corpus.md#output)). |
 | `excluded` | no | `{"reason": "..."}` keeps the sample in the manifest but does not run it; reports list it with the reason. |
 
 Private or unlicensed scores stay outside Git (for example in `data/private/`, which is ignored); only their manifests may be committed if they contain no score content, and only when the data use is decided (issue #29).

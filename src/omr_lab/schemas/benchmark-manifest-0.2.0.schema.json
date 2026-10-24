@@ -198,6 +198,7 @@
       "additionalProperties": false,
       "required": [
         "corpus",
+        "corpus_seed",
         "source_id",
         "variant_id",
         "seed",
@@ -208,6 +209,12 @@
           "description": "Name of the corpus specification.",
           "type": "string",
           "minLength": 1
+        },
+        "corpus_seed": {
+          "description": "Corpus seed the sample seed was derived from (the specification's seed, or --seed); with the specification it regenerates the corpus.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "source_id": {
           "description": "Id of the source score in the specification; samples with the same source share one ground truth.",
