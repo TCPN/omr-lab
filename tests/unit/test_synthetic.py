@@ -427,12 +427,18 @@ def test_utf8_source_with_bom_is_rendered(renderer, tmp_path: Path) -> None:
     assert (tmp_path / "out" / sample["ground_truth"]).read_bytes() == source.read_bytes()
 
 
+def test_fonts_are_never_used_unchecked(renderer, monkeypatch: pytest.MonkeyPatch) -> None:
+    from omr_lab.synthetic import render
+
+    monkeypatch.setattr(render.shutil, "which", lambda name: None)
+
+    with pytest.raises(render.TextFontUnavailableError, match="fontconfig"):
+        render.choose_text_font((renderer.family,))
+
+
 def test_missing_text_font_is_a_dependency_error(renderer, tmp_path: Path) -> None:
     from omr_lab.synthetic import SyntheticDependencyError, generate_corpus
-    from omr_lab.synthetic.render import choose_text_font
 
-    if not choose_text_font((renderer.family,)).verified:
-        pytest.skip("fc-match is not available to check fonts")
     spec_path = _write_spec(tmp_path, _spec_document(text_fonts=["No Such Font Omr Lab"]))
 
     with pytest.raises(SyntheticDependencyError, match="No Such Font Omr Lab"):
@@ -456,10 +462,6 @@ def test_cli_rejects_a_bad_seed(tmp_path: Path) -> None:
 
 
 def test_cli_reports_a_missing_font(renderer, tmp_path: Path, capsys) -> None:
-    from omr_lab.synthetic.render import choose_text_font
-
-    if not choose_text_font((renderer.family,)).verified:
-        pytest.skip("fc-match is not available to check fonts")
     spec_path = _write_spec(tmp_path, _spec_document(text_fonts=["No Such Font Omr Lab"]))
 
     code = main(["synthesize", str(spec_path), "-o", str(tmp_path / "out")])

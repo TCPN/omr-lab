@@ -52,25 +52,31 @@ class TextFontUnavailableError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class TextFont:
     family: str
-    verified: bool
-    """False when fontconfig's fc-match is not available to confirm the font is installed."""
+    """A family fontconfig has installed under exactly this name."""
 
 
 def renderer_description(font: TextFont) -> str:
     """The tools and font that made an image, for the manifest's ``renderer`` field."""
-    unverified = " (not checked: fc-match unavailable)" if not font.verified else ""
     return (
         f"Verovio {verovio.toolkit().getVersion()}, cairosvg {version('cairosvg')}, "
         f"Pillow {PIL.__version__}, NumPy {numpy.__version__}; "
-        f"text font {font.family}{unverified}"
+        f"text font {font.family}"
     )
 
 
 def choose_text_font(candidates: tuple[str, ...]) -> TextFont:
-    """Return the first candidate fontconfig has installed under that exact family name."""
+    """Return the first candidate fontconfig has installed under that exact family name.
+
+    An unchecked font is never used: cairosvg would silently draw text in a missing
+    font as blanks, while the ground truth still has every lyric.
+    """
     fc_match = shutil.which("fc-match")
     if fc_match is None:
-        return TextFont(family=candidates[0], verified=False)
+        raise TextFontUnavailableError(
+            "fc-match (from fontconfig) is needed to check that the text fonts "
+            f"{', '.join(candidates)} are installed. Install it, for example with "
+            "`sudo apt install fontconfig`."
+        )
     for family in candidates:
         result = run_command(
             [fc_match, "--format=%{family}", family], timeout_seconds=_FC_MATCH_TIMEOUT_SECONDS
@@ -83,7 +89,7 @@ def choose_text_font(candidates: tuple[str, ...]) -> TextFont:
         # falls back to another font when the family is missing.
         names = {name.strip().casefold() for name in result.stdout.split(",")}
         if family.casefold() in names:
-            return TextFont(family=family, verified=True)
+            return TextFont(family=family)
     raise TextFontUnavailableError(
         f"None of the text fonts {', '.join(candidates)} is installed. Install one of them "
         "(for example `sudo apt install fonts-liberation`, or fonts-noto-cjk for Chinese "

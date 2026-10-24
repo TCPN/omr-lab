@@ -134,12 +134,15 @@ def _lighting(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     pixels = np.asarray(image, dtype=np.float64)
     height, width = pixels.shape
     angle = np.deg2rad(float(params["angle"]))
-    # Position along the light direction, scaled to 0 (brightest) .. 1 (darkest).
+    # Each pixel's projection onto the light direction, scaled to a darkness fraction
+    # from 0 (brightest) to 1 (darkest).
     ys, xs = np.mgrid[0:height, 0:width]
-    along = xs * np.cos(angle) + ys * np.sin(angle)
-    span = along.max() - along.min()
-    position = (along - along.min()) / span if span > 0 else np.zeros_like(along)
-    return _to_image(pixels * (1 - float(params["strength"]) * position))
+    projection = xs * np.cos(angle) + ys * np.sin(angle)
+    span = projection.max() - projection.min()
+    darkness_fraction = (
+        (projection - projection.min()) / span if span > 0 else np.zeros_like(projection)
+    )
+    return _to_image(pixels * (1 - float(params["strength"]) * darkness_fraction))
 
 
 def _jpeg(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:

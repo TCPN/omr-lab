@@ -109,11 +109,11 @@ def generate_corpus(
             seed_value = sample_seed(corpus_seed, source.id, variant.id)
             rng = np.random.default_rng(seed_value)
             image = clean
-            applied = []
+            applied_degradations = []
             for degradation in variant.degradations:
                 params = degradations.resolve(degradation, rng)
                 image = degradations.apply(image, degradation.kind, params)
-                applied.append({"kind": degradation.kind, "params": params})
+                applied_degradations.append({"kind": degradation.kind, "params": params})
             image_name = f"{IMAGES_DIRNAME}/{sample_id}.png"
             image.save(output_dir / image_name, format="PNG", dpi=(render.DPI, render.DPI))
             samples.append(
@@ -128,7 +128,7 @@ def generate_corpus(
                     truth_sha256=hashlib.sha256(truth_bytes).hexdigest(),
                     renderer=renderer,
                     seed=seed_value,
-                    degradations=applied,
+                    degradations=applied_degradations,
                 )
             )
 

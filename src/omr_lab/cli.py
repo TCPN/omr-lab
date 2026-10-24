@@ -454,14 +454,16 @@ def _synthesize(spec_path: Path, output_dir: Path, seed: int | None) -> int:
         return EXIT_OUTPUT_DIR_UNUSABLE
     except KeyboardInterrupt:
         print(
-            f"omr-lab: interrupted; no manifest was written. Partial files are in {output_dir}",
+            f"omr-lab: interrupted; no manifest was written. Remove {output_dir}, which "
+            "holds partial files, before retrying.",
             file=sys.stderr,
         )
         return EXIT_INTERRUPTED
     except OSError as exc:
         print(
             f"omr-lab: error: the corpus could not be written in {output_dir} "
-            f"({exc.strerror or exc}); no manifest was written.",
+            f"({exc.strerror or exc}); no manifest was written. Remove {output_dir} before "
+            "retrying.",
             file=sys.stderr,
         )
         return EXIT_OUTPUT_DIR_UNUSABLE

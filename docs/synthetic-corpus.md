@@ -68,7 +68,7 @@ Areas uncovered by a geometric change are white. Images are 8-bit grayscale PNG,
 
 ## Text fonts
 
-Verovio sets the title, chord symbols and lyrics in one font family, and cairosvg draws all text with that one font, without falling back to another font for missing characters. Chinese lyrics therefore need a CJK font, set with `text_fonts` on the source. The generator picks the first listed font that fontconfig (`fc-match`) has installed under exactly that name, and exits with code 4 when none is. Without `fc-match` (for example on Windows outside WSL), the first font is used unchecked and the manifest says so.
+Verovio sets the title, chord symbols and lyrics in one font family, and cairosvg draws all text with that one font, without falling back to another font for missing characters. Chinese lyrics therefore need a CJK font, set with `text_fonts` on the source. The generator picks the first listed font that fontconfig (`fc-match`) has installed under exactly that name, and exits with code 4 when none is, or when `fc-match` itself is missing (`sudo apt install fontconfig`): a font that cannot be checked is never used, because a missing font would render the lyrics blank while the ground truth keeps them.
 
 The text font changes the image, so corpora generated on machines with different fonts differ. The committed specification prefers Noto CJK fonts for Chinese (`sudo apt install fonts-noto-cjk`) and falls back to WenQuanYi Zen Hei.
 
@@ -99,7 +99,7 @@ Each sample has the usual manifest fields (`source`, `license` and `work` from t
 | 0 | The corpus and manifest were written. |
 | 2 | Invalid command line (for example a negative `--seed`). |
 | 3 | The specification cannot be read or is invalid, or a source is not valid MusicXML, is compressed, is not UTF-8, or renders to more than one page. |
-| 4 | A rendering package, the cairo library, or every listed text font is missing. |
+| 4 | A rendering package, the cairo library, `fc-match`, or every listed text font is missing. |
 | 6 | The output directory cannot be used, or writing failed; no manifest was written. |
 | 130 | Interrupted; no manifest was written. |
 
