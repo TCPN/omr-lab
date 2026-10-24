@@ -52,7 +52,7 @@ Each degradation has a `kind` and the parameters below, all required. A paramete
 | --- | --- | --- |
 | `rotate` | `degrees` (−45 to 45) | Counter-clockwise rotation; the canvas grows so the page stays whole. |
 | `perspective` | `strength` (0 to 0.25) | Each page corner moves inward by a random fraction up to `strength` of the width and height, like a photo taken at an angle. |
-| `curvature` | `amplitude` (−0.1 to 0.1) | Columns shift vertically along a half sine, up to `amplitude` × height in the middle, like a page that does not lie flat. |
+| `curvature` | `amplitude` (−0.1 to 0.1) | Columns shift vertically along a half sine, up to `amplitude` × height in the middle, like a page that does not lie flat; the canvas grows by that much so nothing is cut off. |
 | `blur` | `radius` (0 to 20) | Gaussian blur, radius in pixels. |
 | `noise` | `sigma` (0 to 128) | Gaussian noise, standard deviation in grey levels. |
 | `lighting` | `strength` (0 to 0.9), `angle` (0 to 360) | Linear darkening across the page, up to `strength` darker towards `angle` degrees (0 = right, 90 = down). |

@@ -11,6 +11,7 @@ by a geometric change are filled with white.
 from __future__ import annotations
 
 import io
+import math
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -89,9 +90,14 @@ def _perspective_coefficients(
 def _curvature(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     pixels = np.asarray(image, dtype=np.float64)
     height, width = pixels.shape
+    amplitude = float(params["amplitude"])
     # Column x moves down by amplitude * height * sin(pi * x / width): 0 at the edges.
-    shift = float(params["amplitude"]) * height * np.sin(np.pi * np.arange(width) / width)
-    source_y = np.arange(height)[:, None] - shift[None, :]
+    shift = amplitude * height * np.sin(np.pi * np.arange(width) / width)
+    # The canvas grows on the side the music moves towards, as rotate's does, so no
+    # part of the page is cut off.
+    pad = math.ceil(abs(amplitude) * height)
+    top = pad if amplitude < 0 else 0
+    source_y = np.arange(height + pad)[:, None] - top - shift[None, :]
     lower = np.floor(source_y).astype(np.int64)
     fraction = source_y - lower
     columns = np.arange(width)[None, :]

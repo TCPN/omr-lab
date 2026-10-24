@@ -249,6 +249,23 @@ def test_rotation_keeps_the_whole_page_and_fills_with_white(degradations, page) 
     assert rotated.getpixel((0, 0)) == 255
 
 
+@pytest.mark.parametrize("amplitude", [0.1, -0.1])
+def test_curvature_keeps_music_near_the_edges(degradations, amplitude) -> None:
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    image = Image.new("L", (400, 300), 255)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([(190, 0), (210, 3)], fill=0)
+    draw.rectangle([(190, 296), (210, 299)], fill=0)
+
+    bent = degradations.apply(image, "curvature", {"amplitude": amplitude})
+
+    assert bent.size == (400, 330)
+    # Both marks sit in the middle column, where the shift is largest; none is lost.
+    assert int((np.asarray(bent.crop((190, 0, 211, 330))) < 128).sum()) == 2 * 21 * 4
+
+
 def test_lighting_darkens_towards_the_angle(degradations, page) -> None:
     lit = degradations.apply(page, "lighting", {"strength": 0.5, "angle": 0.0})
 
