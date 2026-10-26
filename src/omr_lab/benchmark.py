@@ -14,6 +14,7 @@ import math
 import platform
 import stat
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -306,47 +307,51 @@ def _measure_correctness(
 
     A failed run, or one without a score, is compared as a missing prediction, so its
     ground truth counts as missed rather than leaving the sample out of the totals.
-    An unexpected error is recorded on the sample, so the runs already done still get
-    their report.
+    An unexpected error is logged and recorded on the sample, so the runs already done
+    still get their report.
     """
-    try:
-        _compare_with_ground_truth(entry, ground_truth, document, output_dir)
-    except Exception as exc:  # Recorded on the sample and logged, not swallowed.
-        logger.exception("Measuring correctness failed unexpectedly")
-        redact = _path_redactor(ground_truth, output_dir)
-        entry["correctness"] = None
-        entry["correctness_problem"] = {
-            "code": "comparison_failed",
-            "message": redact(f"Unexpected {type(exc).__name__}: {exc}"),
-        }
-
-
-def _compare_with_ground_truth(
-    entry: dict[str, Any], ground_truth: Path, document: dict[str, Any], output_dir: Path
-) -> None:
+    # The ground truth's directory becomes <input_dir> in messages.
+    redact = _path_redactor(ground_truth, output_dir)
     try:
         loaded = load_musicxml(ground_truth)
         conversion = score_from_musicxml(loaded)
     except MusicXmlError as exc:
-        # The ground truth's directory becomes <input_dir> in the message.
-        redact = _path_redactor(ground_truth, output_dir)
-        entry["correctness_problem"] = {
-            "code": "ground_truth_invalid",
-            "message": redact(str(exc)),
-        }
+        entry["correctness_problem"] = {"code": "ground_truth_invalid", "message": redact(str(exc))}
+        return
+    except Exception as exc:  # Recorded on the sample and logged, not swallowed.
+        logger.exception("Converting the ground truth failed unexpectedly")
+        entry["correctness_problem"] = _comparison_failed(exc, redact)
         return
     # The converter drops or nulls what it cannot read instead of failing, so the
     # report must say when the ground truth itself lost something.
     entry["ground_truth_warning_codes"] = dict(
         sorted(Counter(str(w.code) for w in (*loaded.warnings, *conversion.warnings)).items())
     )
+    truth = conversion.score
     try:
-        entry["correctness"] = compare_scores(conversion.score, document.get("score"))
+        entry["correctness"] = compare_scores(truth, document.get("score"))
     except ComparisonTooLargeError as exc:
         # Still counted, with nothing matched, so that a run inventing far too much
         # lowers the totals instead of leaving them.
-        entry["correctness"] = compare_scores(conversion.score, document.get("score"), align=False)
+        entry["correctness"] = compare_scores(truth, document.get("score"), align=False)
         entry["correctness_problem"] = {"code": "comparison_too_large", "message": str(exc)}
+    except Exception as exc:  # Recorded on the sample and logged, not swallowed.
+        logger.exception("Measuring correctness failed unexpectedly")
+        entry["correctness_problem"] = _comparison_failed(exc, redact)
+        # Scored as a missing prediction, so that output which breaks the metrics
+        # lowers the totals like a failed run instead of leaving them.
+        try:
+            entry["correctness"] = compare_scores(truth, None)
+        except Exception:
+            logger.exception("Measuring the ground truth alone failed too")
+            entry["correctness"] = None
+
+
+def _comparison_failed(exc: Exception, redact: Callable[[str], str]) -> dict[str, str]:
+    return {
+        "code": "comparison_failed",
+        "message": redact(f"Unexpected {type(exc).__name__}: {exc}"),
+    }
 
 
 def _checksum_problem(

@@ -12,7 +12,7 @@ The metrics are about the music that a lead sheet needs: key and time signatures
 - `correctness_problem` says when a sample with a ground truth could not be measured normally:
   - `ground_truth_invalid`: the ground truth is not loadable MusicXML. `correctness` is `null`, and the sample is left out of the totals.
   - `comparison_too_large`: an alignment would need more than 4,000,000 cells, which is roughly 2,000 × 2,000 notes. Lead sheets are far below that, so this means the engine invented far too much. `correctness` is then computed without alignment: every ground-truth item counts as missed and every predicted item as extra. The sample still lowers the totals.
-  - `comparison_failed`: an unexpected error while measuring, for example a converter bug on an odd file. It is logged, `correctness` is `null`, and the rest of the benchmark and its report are not affected.
+  - `comparison_failed`: an unexpected error while measuring, for example a converter bug on an odd file. It is logged, and the rest of the benchmark and its report are not affected. `correctness` is computed as a missing prediction, so the sample still lowers the totals; it is `null` only when the ground truth itself could not be converted or measured.
 - A ground truth that converts with warnings is still measured, and `ground_truth_warning_codes` lists the warnings. A value the converter left unknown (a `null` duration, for example) never matches. A value it dropped can match its absence (see Limitations). Check these warnings before blaming the engine.
 
 ## What is compared

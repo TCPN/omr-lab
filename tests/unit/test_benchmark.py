@@ -579,8 +579,12 @@ def test_a_comparison_too_large_to_align_still_counts(
 def test_an_unexpected_comparison_error_keeps_the_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def broken(*args, **kwargs):
-        raise KeyError("parts")
+    real = benchmark.compare_scores
+
+    def broken(truth, predicted, **kwargs):
+        if predicted is not None:
+            raise KeyError("parts")
+        return real(truth, predicted, **kwargs)
 
     monkeypatch.setattr(benchmark, "compare_scores", broken)
 
@@ -593,7 +597,9 @@ def test_an_unexpected_comparison_error_keeps_the_report(
     validate_benchmark_report(result.report)
     good = result.report["samples"][0]
 
-    assert good["correctness"] is None
+    # Scored as a missing prediction, so it still lowers the totals.
+    assert good["correctness"]["prediction"] == "missing"
+    assert result.report["summary"]["correctness"]["samples"] == 2
     assert good["correctness_problem"] == {
         "code": "comparison_failed",
         "message": "Unexpected KeyError: 'parts'",
