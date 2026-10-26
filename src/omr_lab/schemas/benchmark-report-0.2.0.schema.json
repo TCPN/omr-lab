@@ -709,7 +709,8 @@
           "$ref": "#/$defs/count"
         },
         "predictions_missing": {
-          "$ref": "#/$defs/count"
+          "$ref": "#/$defs/count",
+          "description": "Samples scored as a missing prediction: failed runs, runs without a score, and comparison_failed samples."
         },
         "key_signatures_correct": {
           "$ref": "#/$defs/count"

@@ -56,7 +56,7 @@ Rates are rounded to 4 decimals: down for rates where higher is better and up fo
 
 ### Totals
 
-`summary.correctness` adds up the counts of all measured samples and computes the rates from the sums (micro-averaging), so a long song weighs more than a short one. Lyric totals add the extra predicted verses' errors, so invented lyrics raise the error rates; `lyrics.verses` and `lyrics.extra_predicted_verses` count the verses of each kind. Measure accuracy divides by the sum of `compared`, so extra measures in one sample do not cancel missing measures in another. `key_signatures_correct` and `time_signatures_correct` count samples. `predictions_missing` counts failed runs and runs without a score.
+`summary.correctness` adds up the counts of all measured samples and computes the rates from the sums (micro-averaging), so a long song weighs more than a short one. Lyric totals add the extra predicted verses' errors, so invented lyrics raise the error rates; `lyrics.verses` and `lyrics.extra_predicted_verses` count the verses of each kind. Measure accuracy divides by the sum of `compared`, so extra measures in one sample do not cancel missing measures in another. `key_signatures_correct` and `time_signatures_correct` count samples. `predictions_missing` counts the samples scored as a missing prediction: failed runs, runs without a score, and `comparison_failed` samples (see `correctness_problem` for which).
 
 ## Worked example
 
