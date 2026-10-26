@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -409,9 +410,21 @@ def test_cli_benchmark_succeeds_on_the_e2e_manifest(tmp_path: Path, capsys) -> N
     # The mock recognizes nothing: an empty prediction against the twinkle ground truth.
     assert report["samples"][0]["correctness"]["notes"]["pitch"]["recall"] == 0.0
     assert (
-        "Correctness over 1 sample(s) with ground truth: notes precision n/a, recall 0.000; "
+        "Correctness over 1 measured sample(s): notes precision n/a, recall 0.000; "
         "lyrics character error rate 1.000" in capsys.readouterr().out
     )
+
+
+def test_cli_benchmark_shows_invented_lyrics(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instrumental = re.sub(r"<lyric\b.*?</lyric>", "", TWINKLE.read_text("utf-8"), flags=re.S)
+    manifest = _correctness_manifest(tmp_path, instrumental.encode())
+    monkeypatch.setitem(cli.ENGINES, "mock", _EchoEngine)
+
+    main(["benchmark", str(manifest), "-o", str(tmp_path / "out"), "--engine", "mock"])
+
+    assert re.search(r"lyrics character error rate n/a \(\+\d+ chars\)", capsys.readouterr().out)
 
 
 class _EchoEngine(MockEngine):

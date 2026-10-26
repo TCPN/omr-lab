@@ -488,12 +488,13 @@ def _correctness_row(name: str, correctness: dict[str, Any]) -> str:
     both = notes["pitch_and_duration"]
     measures = correctness["measures"]
     return (
-        f"| {_markdown_cell(name)} | {_rate(both['precision'])} / {_rate(both['recall'])} "
-        f"| {_rate(notes['pitch']['f1'])} | {_rate(notes['duration']['f1'])} "
+        f"| {_markdown_cell(name)} "
+        f"| {format_rate(both['precision'])} / {format_rate(both['recall'])} "
+        f"| {format_rate(notes['pitch']['f1'])} | {format_rate(notes['duration']['f1'])} "
         f"| {measures['exact']}/{measures['compared']} "
         f"| {_signature_cell(correctness, 'key_signatures')} "
         f"| {_signature_cell(correctness, 'time_signatures')} "
-        f"| {_rate(correctness['chord_symbols']['f1'])} "
+        f"| {format_rate(correctness['chord_symbols']['f1'])} "
         f"| {_lyric_cell(correctness)} |"
     )
 
@@ -508,15 +509,22 @@ def _lyric_cell(correctness: dict[str, Any]) -> str:
     lyrics = correctness["lyrics"]
     if "character_error_rate" not in lyrics:  # one sample
         lyrics = lyric_totals([lyrics])
-    rate = lyrics["character_error_rate"]
-    if rate is None and lyrics["predicted_characters"]:
-        # No ground-truth lyrics to divide by, but the engine invented some.
-        return f"– (+{lyrics['predicted_characters']} chars)"
-    return _rate(rate)
+    return format_lyric_error_rate(lyrics)
 
 
-def _rate(value: float | None) -> str:
-    return "–" if value is None else f"{value:.3f}"
+def format_rate(value: float | None, missing: str = "–") -> str:
+    """A rate with 3 decimals, or ``missing`` when it is null."""
+    return missing if value is None else f"{value:.3f}"
+
+
+def format_lyric_error_rate(totals: dict[str, Any], missing: str = "–") -> str:
+    """The character error rate of lyric totals. When the ground truth has no lyrics but
+    the engine invented some, the rate is null; the invented characters are shown then,
+    so that this case does not look like a score without lyrics on either side."""
+    rate = totals["character_error_rate"]
+    if rate is None and totals["predicted_characters"]:
+        return f"{missing} (+{totals['predicted_characters']} chars)"
+    return format_rate(rate, missing)
 
 
 def _markdown_cell(text: str) -> str:
@@ -531,6 +539,8 @@ __all__ = [
     "Manifest",
     "ManifestError",
     "collect_environment",
+    "format_lyric_error_rate",
+    "format_rate",
     "load_manifest",
     "render_markdown",
     "run_benchmark",

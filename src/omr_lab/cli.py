@@ -18,7 +18,13 @@ from pathlib import Path
 from typing import TextIO
 
 from omr_lab import __version__
-from omr_lab.benchmark import ManifestError, load_manifest, run_benchmark
+from omr_lab.benchmark import (
+    ManifestError,
+    format_lyric_error_rate,
+    format_rate,
+    load_manifest,
+    run_benchmark,
+)
 from omr_lab.engines import AudiverisEngine, Engine, EngineOptions, EngineOptionValue
 from omr_lab.engines.mock import MockEngine
 from omr_lab.pipeline import (
@@ -349,10 +355,6 @@ def _run(
     return _EXIT_BY_ERROR_CODE.get(error["code"], EXIT_RUN_FAILED)
 
 
-def _rate(value: float | None) -> str:
-    return "n/a" if value is None else f"{value:.3f}"
-
-
 def _benchmark(
     manifest_path: Path,
     output_dir: Path,
@@ -431,9 +433,10 @@ def _benchmark(
     if totals is not None:
         notes = totals["notes"]["pitch_and_duration"]
         print(
-            f"Correctness over {totals['samples']} sample(s) with ground truth: notes "
-            f"precision {_rate(notes['precision'])}, recall {_rate(notes['recall'])}; "
-            f"lyrics character error rate {_rate(totals['lyrics']['character_error_rate'])}"
+            f"Correctness over {totals['samples']} measured sample(s): notes precision "
+            f"{format_rate(notes['precision'], 'n/a')}, "
+            f"recall {format_rate(notes['recall'], 'n/a')}; lyrics character error rate "
+            f"{format_lyric_error_rate(totals['lyrics'], 'n/a')}"
         )
     return EXIT_OK if result.all_succeeded else EXIT_RUN_FAILED
 
