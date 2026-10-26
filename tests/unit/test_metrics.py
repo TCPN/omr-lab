@@ -336,6 +336,13 @@ def test_a_missing_prediction_misses_everything() -> None:
     assert [v["character_error_rate"] for v in result["lyrics"]["verses"]] == [1.0, 1.0]
 
 
+def test_a_missing_prediction_is_wrong_even_without_a_time_signature() -> None:
+    result = compare_scores(_score([_note("C")]), None)
+
+    assert result["time_signatures"] == {"ground_truth": [], "predicted": [], "correct": False}
+    assert result["key_signatures"]["correct"] is False
+
+
 def test_only_the_first_part_is_compared() -> None:
     truth = _score([_note("C")], parts=2)
     predicted = _score([_note("C")])

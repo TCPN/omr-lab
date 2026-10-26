@@ -7,7 +7,7 @@ The metrics are about the music that a lead sheet needs: key and time signatures
 ## Which samples are measured
 
 - A sample is measured when it has a `ground_truth` and its run **succeeded or failed**.
-- A failed run, or a run whose MusicXML could not be converted to a score, is compared as a **missing prediction** (`prediction: "missing"`). Everything in the ground truth then counts as missed, so a failed run lowers recall instead of disappearing from the totals.
+- A failed run, or a run whose MusicXML could not be converted to a score, is compared as a **missing prediction** (`prediction: "missing"`). Everything in the ground truth then counts as missed, and its key and time signatures are never `correct`, so a failed run lowers the totals instead of disappearing from them.
 - Samples that were excluded or not run, and samples without a ground truth, have `correctness: null`.
 - When a ground truth cannot be measured, `correctness` is `null` and `correctness_problem` gives the reason:
   - `ground_truth_invalid`: the ground truth is not loadable MusicXML.

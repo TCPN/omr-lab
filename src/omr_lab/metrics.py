@@ -64,8 +64,8 @@ def compare_scores(
             "ground_truth": len(ground_truth["parts"]),
             "predicted": len(predicted["parts"]) if predicted is not None else 0,
         },
-        "key_signatures": _signatures(truth, guess, "key", _key_value),
-        "time_signatures": _signatures(truth, guess, "time", _time_value),
+        "key_signatures": _signatures(truth, guess, predicted is not None, "key", _key_value),
+        "time_signatures": _signatures(truth, guess, predicted is not None, "time", _time_value),
         "measures": _measures(truth_measures, guess_measures),
         "notes": _notes(truth_items, guess_items),
         "chord_symbols": _chord_symbols(truth, guess),
@@ -162,15 +162,18 @@ def _time_value(event: dict[str, Any]) -> str | None:
 def _signatures(
     truth: list[dict[str, Any]],
     guess: list[dict[str, Any]],
+    has_prediction: bool,
     kind: str,
     value: Callable[[dict[str, Any]], Any],
 ) -> dict[str, Any]:
+    """A missing prediction is never correct, even against a ground truth without any
+    signature of this kind (free meter gives [] on both sides)."""
     truth_values = _changes(_initial(truth, kind) + [value(e) for e in _events(truth, kind)])
     guess_values = _changes(_initial(guess, kind) + [value(e) for e in _events(guess, kind)])
     return {
         "ground_truth": truth_values,
         "predicted": guess_values,
-        "correct": truth_values == guess_values,
+        "correct": has_prediction and truth_values == guess_values,
     }
 
 
