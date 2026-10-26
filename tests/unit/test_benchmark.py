@@ -410,8 +410,8 @@ def test_cli_benchmark_succeeds_on_the_e2e_manifest(tmp_path: Path, capsys) -> N
     # The mock recognizes nothing: an empty prediction against the twinkle ground truth.
     assert report["samples"][0]["correctness"]["notes"]["pitch"]["recall"] == 0.0
     assert (
-        "Correctness over 1 measured sample(s): notes precision n/a, recall 0.000; "
-        "lyrics character error rate 1.000" in capsys.readouterr().out
+        "Correctness over 1 measured sample(s): notes precision n/a, recall 0.0000; "
+        "lyrics character error rate 1.0000" in capsys.readouterr().out
     )
 
 
@@ -495,8 +495,8 @@ def test_report_measures_correctness_against_the_ground_truth(tmp_path: Path) ->
     assert totals["notes"]["pitch_and_duration"]["recall"] == 0.5
     markdown = render_markdown(report)
     assert "## Correctness" in markdown
-    assert "| good | 1.000 / 1.000 | 1.000 | 1.000 | 12/12 | yes | yes |" in markdown
-    assert "| **Total** | 1.000 / 0.500 |" in markdown
+    assert "| good | 1.0000 / 1.0000 | 1.0000 | 1.0000 | 12/12 | yes | yes |" in markdown
+    assert "| **Total** | 1.0000 / 0.5000 |" in markdown
 
     # Lyrics invented where the ground truth has none still show up.
     predicted = score_from_musicxml(load_musicxml(TWINKLE)).score
@@ -650,6 +650,12 @@ def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: P
     assert "This report predates correctness measurement." in render_markdown(old)
     with pytest.raises(BenchmarkDocumentValidationError, match="correctness"):
         validate_benchmark_report({**old, "schema_version": "0.2.0"})
+
+
+def test_rates_are_shown_as_rounded() -> None:
+    # 2999/3000 and 1/30000 as metrics rounds them: shown as is, never as 1 or 0.
+    assert benchmark.format_rate(0.9996) == "0.9996"
+    assert benchmark.format_rate(0.0001) == "0.0001"
 
 
 def test_success_rate_rounds_down() -> None:

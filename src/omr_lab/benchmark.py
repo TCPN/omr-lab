@@ -550,8 +550,9 @@ def _lyric_cell(correctness: dict[str, Any], is_total: bool) -> str:
 
 
 def format_rate(value: float | None, missing: str = "–") -> str:
-    """A rate with 3 decimals, or ``missing`` when it is null."""
-    return missing if value is None else f"{value:.3f}"
+    """A rate with all 4 of its decimals (it is already rounded against the engine), or
+    ``missing`` when it is null."""
+    return missing if value is None else f"{value:.4f}"
 
 
 def format_lyric_error_rate(totals: dict[str, Any], missing: str = "–") -> str:
