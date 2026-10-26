@@ -468,7 +468,7 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
     ]
     for entry in report["samples"]:
         if entry["correctness"] is not None:
-            lines.append(_correctness_row(entry["id"], entry["correctness"]))
+            lines.append(_correctness_row(entry["id"], entry["correctness"], is_total=False))
     for entry in problems:
         problem = entry["correctness_problem"]
         state = "not measured" if entry["correctness"] is None else "not aligned, all counted wrong"
@@ -478,7 +478,7 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
             "| | | | | | | |"
         )
     if totals is not None:
-        lines.append(_correctness_row("**Total**", totals))
+        lines.append(_correctness_row("**Total**", totals, is_total=True))
     for entry in report["samples"]:
         if entry.get("ground_truth_warning_codes"):
             codes = ", ".join(
@@ -488,7 +488,9 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _correctness_row(name: str, correctness: dict[str, Any]) -> str:
+def _correctness_row(name: str, correctness: dict[str, Any], *, is_total: bool) -> str:
+    """One table row: a sample's correctness object, or summary.correctness, which
+    holds counts instead of per-sample results for signatures and lyrics."""
     notes = correctness["notes"]
     both = notes["pitch_and_duration"]
     measures = correctness["measures"]
@@ -497,24 +499,22 @@ def _correctness_row(name: str, correctness: dict[str, Any]) -> str:
         f"| {format_rate(both['precision'])} / {format_rate(both['recall'])} "
         f"| {format_rate(notes['pitch']['f1'])} | {format_rate(notes['duration']['f1'])} "
         f"| {measures['exact']}/{measures['compared']} "
-        f"| {_signature_cell(correctness, 'key_signatures')} "
-        f"| {_signature_cell(correctness, 'time_signatures')} "
+        f"| {_signature_cell(correctness, 'key_signatures', is_total)} "
+        f"| {_signature_cell(correctness, 'time_signatures', is_total)} "
         f"| {format_rate(correctness['chord_symbols']['f1'])} "
-        f"| {_lyric_cell(correctness)} |"
+        f"| {_lyric_cell(correctness, is_total)} |"
     )
 
 
-def _signature_cell(correctness: dict[str, Any], key: str) -> str:
-    if "samples" in correctness:  # summary totals
+def _signature_cell(correctness: dict[str, Any], key: str, is_total: bool) -> str:
+    if is_total:
         return f"{correctness[key + '_correct']}/{correctness['samples']}"
     return "yes" if correctness[key]["correct"] else "no"
 
 
-def _lyric_cell(correctness: dict[str, Any]) -> str:
+def _lyric_cell(correctness: dict[str, Any], is_total: bool) -> str:
     lyrics = correctness["lyrics"]
-    if "character_error_rate" not in lyrics:  # one sample
-        lyrics = lyric_totals([lyrics])
-    return format_lyric_error_rate(lyrics)
+    return format_lyric_error_rate(lyrics if is_total else lyric_totals([lyrics]))
 
 
 def format_rate(value: float | None, missing: str = "–") -> str:

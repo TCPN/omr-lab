@@ -56,8 +56,8 @@ def compare_scores(
     and every predicted item as extra. That is the fallback for a comparison too large
     to align, so that such a sample still lowers the totals.
     """
-    truth = _part(ground_truth)
-    guess = _part(predicted) if predicted is not None else []
+    truth = _first_part_measures(ground_truth)
+    guess = _first_part_measures(predicted) if predicted is not None else []
     truth_measures = [_measure_items(m) for m in truth]
     guess_measures = [_measure_items(m) for m in guess]
     truth_items = [item for items in truth_measures for item in items]
@@ -85,13 +85,13 @@ def summarize(correctness: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
     """
     if not correctness:
         return None
-    measures = _sum(c["measures"] for c in correctness)
+    measures = _sum_counts(c["measures"] for c in correctness)
     notes = {
-        key: _sum(c["notes"][key] for c in correctness)
+        key: _sum_counts(c["notes"][key] for c in correctness)
         for key in ("pitch", "duration", "pitch_and_duration")
     }
-    rests = _sum(c["notes"]["rests"] for c in correctness)
-    chords = _sum(c["chord_symbols"] for c in correctness)
+    rests = _sum_counts(c["notes"]["rests"] for c in correctness)
+    chords = _sum_counts(c["chord_symbols"] for c in correctness)
     return {
         "samples": len(correctness),
         "predictions_missing": sum(c["prediction"] == "missing" for c in correctness),
@@ -112,7 +112,7 @@ def summarize(correctness: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
 # --- Reading the score model --------------------------------------------------------
 
 
-def _part(score: dict[str, Any]) -> list[dict[str, Any]]:
+def _first_part_measures(score: dict[str, Any]) -> list[dict[str, Any]]:
     """Measures of the first part, or none."""
     parts = score["parts"]
     return parts[0]["measures"] if parts else []
@@ -171,8 +171,12 @@ def _signatures(
 ) -> dict[str, Any]:
     """A missing prediction is never correct, even against a ground truth without any
     signature of this kind (free meter gives [] on both sides)."""
-    truth_values = _changes(_initial(truth, kind) + [value(e) for e in _events(truth, kind)])
-    guess_values = _changes(_initial(guess, kind) + [value(e) for e in _events(guess, kind)])
+    truth_values = _changes(
+        _implied_initial_signature(truth, kind) + [value(e) for e in _events(truth, kind)]
+    )
+    guess_values = _changes(
+        _implied_initial_signature(guess, kind) + [value(e) for e in _events(guess, kind)]
+    )
     return {
         "ground_truth": truth_values,
         "predicted": guess_values,
@@ -180,7 +184,7 @@ def _signatures(
     }
 
 
-def _initial(measures: list[dict[str, Any]], kind: str) -> list[Any]:
+def _implied_initial_signature(measures: list[dict[str, Any]], kind: str) -> list[Any]:
     """A score whose first measure prints no key signature is in 0 fifths: that is what
     no key signature means, and engines leave the empty <key> out (C major written with
     <fifths>0</fifths> and without any <key> must compare equal). A missing time
@@ -380,7 +384,7 @@ def _prf(counts: dict[str, int]) -> dict[str, Any]:
     return {**counts, "precision": precision, "recall": recall, "f1": f1}
 
 
-def _sum(items: Any) -> dict[str, int]:
+def _sum_counts(items: Any) -> dict[str, int]:
     totals = {"ground_truth": 0, "predicted": 0}
     for item in items:
         for key, value in item.items():
