@@ -303,6 +303,15 @@ def test_chord_symbols_compare_meaning_not_display() -> None:
     assert (chords["matched"], chords["precision"], chords["recall"]) == (1, 0.5, 0.5)
 
 
+def test_chord_degrees_match_in_any_order() -> None:
+    flat_nine = {"value": 9, "alter": -1, "type": "alter"}
+    sharp_eleven = {"value": 11, "alter": 1, "type": "alter"}
+    truth = _score([{**_harmony("C", "dominant"), "degrees": [flat_nine, sharp_eleven]}])
+    swapped = _score([{**_harmony("C", "dominant"), "degrees": [sharp_eleven, flat_nine]}])
+
+    assert compare_scores(truth, swapped)["chord_symbols"]["matched"] == 1
+
+
 def test_lyrics_per_verse() -> None:
     predicted = _truth()
     events = _measures(predicted)[0]["events"]

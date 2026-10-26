@@ -288,7 +288,9 @@ def _chord(event: dict[str, Any]) -> tuple[Any, ...]:
         root["alter"],
         event["chord_kind"],
         (bass["step"], bass["alter"]) if bass is not None else None,
-        tuple((d["value"], d["alter"], d["type"]) for d in event["degrees"]),
+        # The order of the <degree> elements does not change the chord; repr sorts any
+        # mix of values, including nulls.
+        tuple(sorted(((d["value"], d["alter"], d["type"]) for d in event["degrees"]), key=repr)),
     )
 
 
