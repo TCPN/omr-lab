@@ -336,8 +336,8 @@ def _verse(number: str | None, truth: list[str], guess: list[str], align: bool) 
 
 
 def _verses(measures: list[dict[str, Any]]) -> dict[str | None, list[str]]:
-    """Syllable texts per lyric ``number``, in note order. Extender-only lyrics (no
-    text) are left out; texts are NFC-normalized and stripped."""
+    """Syllable texts per lyric ``number`` (none means "1"), in note order. Extender-only
+    lyrics (no text) are left out; texts are NFC-normalized and stripped."""
     verses: dict[str | None, list[str]] = {}
     for event in _events(measures, "note"):
         for lyric in event["lyrics"]:
@@ -346,7 +346,10 @@ def _verses(measures: list[dict[str, Any]]) -> dict[str | None, list[str]]:
                 continue
             text = unicodedata.normalize("NFC", text).strip()
             if text:
-                verses.setdefault(lyric["number"], []).append(text)
+                # An unnumbered lyric is the first verse, as notation programs read it;
+                # otherwise <lyric> and <lyric number="1"> would never be compared.
+                number = lyric["number"] if lyric["number"] is not None else "1"
+                verses.setdefault(number, []).append(text)
     return verses
 
 

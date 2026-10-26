@@ -316,6 +316,17 @@ def test_a_chord_with_an_unreadable_member_never_matches() -> None:
         assert result["measures"]["exact"] == 0
 
 
+def test_an_unnumbered_lyric_is_verse_1() -> None:
+    unnumbered = _score([_note("C", lyrics=((None, "小"),)), _note("D", lyrics=((None, "雨"),))])
+    numbered = _score([_note("C", lyrics=(("1", "小"),)), _note("D", lyrics=(("1", "雨"),))])
+
+    for truth, predicted in ((unnumbered, numbered), (numbered, unnumbered)):
+        lyrics = compare_scores(truth, predicted)["lyrics"]
+        assert [v["number"] for v in lyrics["verses"]] == ["1"]
+        assert lyrics["verses"][0]["character_errors"] == 0
+        assert lyrics["extra_predicted_verses"] == []
+
+
 def test_chord_degrees_match_in_any_order() -> None:
     flat_nine = {"value": 9, "alter": -1, "type": "alter"}
     sharp_eleven = {"value": 11, "alter": 1, "type": "alter"}
