@@ -20,7 +20,7 @@ from typing import Any
 
 from omr_lab import __version__
 from omr_lab.engines import Engine, EngineOptions
-from omr_lab.metrics import ComparisonTooLargeError, compare_scores, summarize
+from omr_lab.metrics import ComparisonTooLargeError, compare_scores, lyric_totals, summarize
 from omr_lab.musicxml import MusicXmlError, load_musicxml
 from omr_lab.pipeline import (
     RUN_DOCUMENT_FILENAME,
@@ -446,30 +446,16 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
         "## Correctness",
         "",
         "Notes are pitch and duration together; P / R is precision / recall after "
-        "alignment. Lyrics CER is the character error rate over all verses.",
+        "alignment. Lyrics CER is the character error rate over all verses, extra "
+        "predicted verses included. The total leaves out samples that were not measured.",
         "",
         "| Sample | Notes P / R | Pitch F1 | Duration F1 | Measures | Key | Time "
         "| Chords F1 | Lyrics CER |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    rows = [(entry["id"], entry["correctness"]) for entry in report["samples"]]
-    if totals is not None:
-        rows.append(("**Total**", totals))
-    for name, correctness in rows:
-        if correctness is None:
-            continue
-        notes = correctness["notes"]
-        both = notes["pitch_and_duration"]
-        measures = correctness["measures"]
-        lines.append(
-            f"| {_markdown_cell(name)} | {_rate(both['precision'])} / {_rate(both['recall'])} "
-            f"| {_rate(notes['pitch']['f1'])} | {_rate(notes['duration']['f1'])} "
-            f"| {measures['exact']}/{measures['compared']} "
-            f"| {_signature_cell(correctness, 'key_signatures')} "
-            f"| {_signature_cell(correctness, 'time_signatures')} "
-            f"| {_rate(correctness['chord_symbols']['f1'])} "
-            f"| {_rate(_lyric_cer(correctness))} |"
-        )
+    for entry in report["samples"]:
+        if entry["correctness"] is not None:
+            lines.append(_correctness_row(entry["id"], entry["correctness"]))
     for entry in problems:
         problem = entry["correctness_problem"]
         lines.append(
@@ -477,7 +463,24 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
             f"{_markdown_cell(problem['code'] + ': ' + problem['message'])} "
             "| | | | | | | |"
         )
+    if totals is not None:
+        lines.append(_correctness_row("**Total**", totals))
     return lines
+
+
+def _correctness_row(name: str, correctness: dict[str, Any]) -> str:
+    notes = correctness["notes"]
+    both = notes["pitch_and_duration"]
+    measures = correctness["measures"]
+    return (
+        f"| {_markdown_cell(name)} | {_rate(both['precision'])} / {_rate(both['recall'])} "
+        f"| {_rate(notes['pitch']['f1'])} | {_rate(notes['duration']['f1'])} "
+        f"| {measures['exact']}/{measures['compared']} "
+        f"| {_signature_cell(correctness, 'key_signatures')} "
+        f"| {_signature_cell(correctness, 'time_signatures')} "
+        f"| {_rate(correctness['chord_symbols']['f1'])} "
+        f"| {_rate(_lyric_cer(correctness))} |"
+    )
 
 
 def _signature_cell(correctness: dict[str, Any], key: str) -> str:
@@ -490,9 +493,7 @@ def _lyric_cer(correctness: dict[str, Any]) -> float | None:
     lyrics = correctness["lyrics"]
     if "character_error_rate" in lyrics:  # summary totals
         return lyrics["character_error_rate"]
-    errors = sum(verse["character_errors"] for verse in lyrics["verses"])
-    characters = sum(verse["ground_truth_characters"] for verse in lyrics["verses"])
-    return round(errors / characters, 4) if characters else None
+    return lyric_totals([lyrics])["character_error_rate"]
 
 
 def _rate(value: float | None) -> str:

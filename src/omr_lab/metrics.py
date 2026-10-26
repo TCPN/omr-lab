@@ -88,7 +88,6 @@ def summarize(correctness: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
     }
     rests = _sum(c["notes"]["rests"] for c in correctness)
     chords = _sum(c["chord_symbols"] for c in correctness)
-    verses = [verse for c in correctness for verse in c["lyrics"]["verses"]]
     return {
         "samples": len(correctness),
         "predictions_missing": sum(c["prediction"] == "missing" for c in correctness),
@@ -102,7 +101,7 @@ def summarize(correctness: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
             "rests": _prf(rests),
         },
         "chord_symbols": _prf(chords),
-        "lyrics": _lyric_totals(verses),
+        "lyrics": lyric_totals([c["lyrics"] for c in correctness]),
     }
 
 
@@ -284,28 +283,35 @@ def _chord(event: dict[str, Any]) -> tuple[Any, ...]:
 def _lyrics(truth: list[dict[str, Any]], guess: list[dict[str, Any]]) -> dict[str, Any]:
     truth_verses = _verses(truth)
     guess_verses = _verses(guess)
-    verses = []
-    for number, syllables in truth_verses.items():
-        predicted = guess_verses.get(number, [])
-        truth_text = "".join(syllables)
-        guess_text = "".join(predicted)
-        verses.append(
-            {
-                "number": number,
-                "ground_truth_syllables": len(syllables),
-                "predicted_syllables": len(predicted),
-                "syllable_errors": _edit_distance(syllables, predicted),
-                "ground_truth_characters": len(truth_text),
-                "predicted_characters": len(guess_text),
-                "character_errors": _edit_distance(list(truth_text), list(guess_text)),
-            }
-        )
-    for verse in verses:
-        _add_lyric_rates(verse)
     return {
-        "verses": verses,
-        "extra_predicted_verses": [n for n in guess_verses if n not in truth_verses],
+        "verses": [
+            _verse(number, syllables, guess_verses.get(number, []))
+            for number, syllables in truth_verses.items()
+        ],
+        # Compared with an empty ground truth, so that every invented character is an
+        # error in the totals.
+        "extra_predicted_verses": [
+            _verse(number, [], syllables)
+            for number, syllables in guess_verses.items()
+            if number not in truth_verses
+        ],
     }
+
+
+def _verse(number: str | None, truth: list[str], guess: list[str]) -> dict[str, Any]:
+    truth_text = "".join(truth)
+    guess_text = "".join(guess)
+    verse = {
+        "number": number,
+        "ground_truth_syllables": len(truth),
+        "predicted_syllables": len(guess),
+        "syllable_errors": _edit_distance(truth, guess),
+        "ground_truth_characters": len(truth_text),
+        "predicted_characters": len(guess_text),
+        "character_errors": _edit_distance(list(truth_text), list(guess_text)),
+    }
+    _add_lyric_rates(verse)
+    return verse
 
 
 def _verses(measures: list[dict[str, Any]]) -> dict[str | None, list[str]]:
@@ -330,7 +336,11 @@ def _add_lyric_rates(verse: dict[str, Any]) -> None:
     )
 
 
-def _lyric_totals(verses: list[dict[str, Any]]) -> dict[str, Any]:
+def lyric_totals(lyrics: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Counts and error rates over the ``lyrics`` objects of one or more samples,
+    extra predicted verses included."""
+    verses = [verse for item in lyrics for verse in item["verses"]]
+    extra = [verse for item in lyrics for verse in item["extra_predicted_verses"]]
     keys = (
         "ground_truth_syllables",
         "predicted_syllables",
@@ -339,7 +349,11 @@ def _lyric_totals(verses: list[dict[str, Any]]) -> dict[str, Any]:
         "predicted_characters",
         "character_errors",
     )
-    totals: dict[str, Any] = {"verses": len(verses), **{k: sum(v[k] for v in verses) for k in keys}}
+    totals: dict[str, Any] = {
+        "verses": len(verses),
+        "extra_predicted_verses": len(extra),
+        **{k: sum(v[k] for v in verses + extra) for k in keys},
+    }
     _add_lyric_rates(totals)
     return totals
 

@@ -323,7 +323,27 @@ def test_lyrics_per_verse() -> None:
     assert verse2["number"] == "2"
     assert verse2["predicted_syllables"] == 0
     assert verse2["syllable_error_rate"] == 1.0
-    assert lyrics["extra_predicted_verses"] == ["3"]
+    (extra,) = lyrics["extra_predicted_verses"]
+    assert extra["number"] == "3"
+    assert extra["ground_truth_characters"] == 0
+    assert extra["character_errors"] == extra["predicted_characters"] > 0
+    assert extra["character_error_rate"] is None
+
+
+def test_extra_predicted_verses_count_as_errors_in_the_totals() -> None:
+    truth = _score([_note("C", lyrics=(("1", "小"),)), _note("D", lyrics=(("1", "雨"),))])
+    invented = _score(
+        [
+            _note("C", lyrics=(("1", "小"), ("2", "啦"))),
+            _note("D", lyrics=(("1", "雨"), ("2", "啦"))),
+        ]
+    )
+
+    lyrics = summarize([compare_scores(truth, invented)])["lyrics"]
+
+    assert (lyrics["verses"], lyrics["extra_predicted_verses"]) == (1, 1)
+    assert (lyrics["ground_truth_characters"], lyrics["character_errors"]) == (2, 2)
+    assert lyrics["character_error_rate"] == 1.0
 
 
 def test_lyric_errors_count_characters_inside_syllables() -> None:

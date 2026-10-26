@@ -48,13 +48,13 @@ When several alignments have the same cost, a substitution is preferred, then a 
 | `notes.rests` | The same for rests whose duration matches. |
 | `chord_symbols` | Harmony events in order; a match needs the same root, `chord_kind`, bass and degrees. `chord_kind_text` (how the kind is printed, for example `"m7"` or `"-7"`) is not compared. Precision, recall and F1 as for notes. |
 | `lyrics.verses[]` | One entry per ground-truth lyric `number` (verse), compared with the predicted lyrics of the same number. Syllables are the lyric texts of the notes in order, NFC-normalized and stripped; extender-only lyrics (no text) are skipped. `syllable_errors` is the edit distance between the syllable lists, and `character_errors` is the edit distance between the characters of the joined syllables. The error rates divide by the ground-truth length, so they are 1.0 for a verse that was not recognized at all. They can exceed 1 when the prediction has many extra syllables. |
-| `lyrics.extra_predicted_verses` | Predicted lyric numbers that the ground truth does not have. A verse recognized under the wrong number counts as missed and also appears here. |
+| `lyrics.extra_predicted_verses[]` | One entry per predicted lyric number that the ground truth does not have, with the same fields as `verses[]`, compared with an empty ground truth: every syllable and character it has is an error, and its own rates are `null`. A verse recognized under the wrong number counts as missed and also appears here. |
 
 Rates are rounded to 4 decimals. A rate is `null` when its denominator is 0; for example, precision is `null` when nothing was predicted.
 
 ### Totals
 
-`summary.correctness` adds up the counts of all measured samples and computes the rates from the sums (micro-averaging), so a long song weighs more than a short one. Measure accuracy divides by the sum of `compared`, so extra measures in one sample do not cancel missing measures in another. `key_signatures_correct` and `time_signatures_correct` count samples. `predictions_missing` counts failed runs and runs without a score.
+`summary.correctness` adds up the counts of all measured samples and computes the rates from the sums (micro-averaging), so a long song weighs more than a short one. Lyric totals add the extra predicted verses' errors, so invented lyrics raise the error rates; `lyrics.verses` and `lyrics.extra_predicted_verses` count the verses of each kind. Measure accuracy divides by the sum of `compared`, so extra measures in one sample do not cancel missing measures in another. `key_signatures_correct` and `time_signatures_correct` count samples. `predictions_missing` counts failed runs and runs without a score.
 
 ## Worked example
 
@@ -105,6 +105,6 @@ The score model already holds exactly the fields to compare, and the metrics nee
 - Notes are compared in reading order, not by onset time. A note in the right place but in the wrong measure still matches if the order is the same, and the measure metric shows the misplacement.
 - Repeats, endings and navigation are not expanded. Barlines are not compared.
 - Ties, tuplet brackets, beams, clefs, tempo and dynamics are not compared. Durations already reflect tuplets.
-- Lyrics are matched by verse number. An engine that numbers verses differently (issue #28) scores 1.0 error on the verse and lists the number in `extra_predicted_verses`.
+- Lyrics are matched by verse number. An engine that numbers verses differently (issue #28) scores 1.0 error on the verse, and its text is counted again as an extra predicted verse, so the error rate is about 2.0.
 - Chord symbols are compared as encoded. Two encodings of the same chord (for example `dominant` versus `major` with an added minor seventh) do not match.
 - A metric is only as good as the ground truth. Synthetic images (issue #23) have exact ground truth; real photos need a hand-checked MusicXML.

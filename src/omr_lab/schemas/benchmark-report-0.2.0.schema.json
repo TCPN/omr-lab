@@ -548,7 +548,7 @@
       }
     },
     "verse": {
-      "description": "One ground-truth verse (lyric number) against the predicted verse with the same number.",
+      "description": "One verse (lyric number): the ground-truth verse against the predicted verse with the same number, or, under extra_predicted_verses, a predicted verse against an empty ground truth.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -663,13 +663,10 @@
               }
             },
             "extra_predicted_verses": {
-              "description": "Predicted lyric numbers that the ground truth does not have.",
+              "description": "Predicted verses whose number the ground truth does not have, each compared with an empty ground truth (all its syllables and characters are errors).",
               "type": "array",
               "items": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "$ref": "#/$defs/verse"
               }
             }
           }
@@ -718,6 +715,7 @@
           "additionalProperties": false,
           "required": [
             "verses",
+            "extra_predicted_verses",
             "ground_truth_syllables",
             "predicted_syllables",
             "syllable_errors",
@@ -729,6 +727,9 @@
           ],
           "properties": {
             "verses": {
+              "$ref": "#/$defs/count"
+            },
+            "extra_predicted_verses": {
               "$ref": "#/$defs/count"
             },
             "ground_truth_syllables": {
@@ -755,7 +756,8 @@
             "character_error_rate": {
               "$ref": "#/$defs/error_rate"
             }
-          }
+          },
+          "description": "Sums over the ground-truth verses and the extra predicted verses of all samples; the error rates divide by the ground-truth length."
         }
       }
     }
