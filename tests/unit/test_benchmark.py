@@ -435,9 +435,9 @@ class _EchoEngine(MockEngine):
         return result
 
 
-def _correctness_manifest(tmp_path: Path) -> Path:
+def _correctness_manifest(tmp_path: Path, truth_bytes: bytes | None = None) -> Path:
     base = tmp_path / "set"
-    truth = _write(base / "truth.musicxml", TWINKLE.read_bytes())
+    truth = _write(base / "truth.musicxml", truth_bytes or TWINKLE.read_bytes())
     samples = [
         _sample(
             name,
@@ -499,6 +499,28 @@ def test_report_measures_correctness_against_the_ground_truth(tmp_path: Path) ->
     assert f"| – (+{invented} chars) |" in render_markdown(report)
 
 
+def test_ground_truth_conversion_warnings_are_reported(tmp_path: Path) -> None:
+    text = TWINKLE.read_text(encoding="utf-8")
+    start = text.index("<note")
+    duration = text.index("<duration>", start)
+    end = text.index("</duration>", duration) + len("</duration>")
+    broken = (text[:duration] + text[end:]).encode()  # first note without a duration
+
+    report = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path, broken)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    ).report
+    validate_benchmark_report(report)
+    good, _, plain = report["samples"]
+
+    assert good["ground_truth_warning_codes"]
+    assert good["correctness"]["notes"]["duration"]["matched"] == 41
+    assert plain["ground_truth_warning_codes"] is None
+    assert "Ground truth of good had warnings: " in render_markdown(report)
+
+
 def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: Path) -> None:
     report = _run(manifest_path, tmp_path / "out").report
     old = copy.deepcopy(report)
@@ -506,6 +528,7 @@ def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: P
     del old["summary"]["correctness"]
     for entry in old["samples"]:
         del entry["correctness_problem"]
+        del entry["ground_truth_warning_codes"]
 
     validate_benchmark_report(old)
     assert "This report predates correctness measurement." in render_markdown(old)

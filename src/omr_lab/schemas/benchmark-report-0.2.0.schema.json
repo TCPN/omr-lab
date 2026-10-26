@@ -222,7 +222,8 @@
         "problem",
         "run",
         "correctness",
-        "correctness_problem"
+        "correctness_problem",
+        "ground_truth_warning_codes"
       ],
       "properties": {
         "id": {
@@ -393,6 +394,20 @@
                   "type": "string",
                   "minLength": 1
                 }
+              }
+            }
+          ]
+        },
+        "ground_truth_warning_codes": {
+          "description": "Number of warnings per warning code from converting the ground truth to a score, when it was converted; null otherwise. Warnings mean the converter dropped or nulled part of the ground truth, so low scores may not be the engine's fault.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/count"
               }
             }
           ]

@@ -245,6 +245,7 @@ def _run_sample(
         "run": None,
         "correctness": None,
         "correctness_problem": None,
+        "ground_truth_warning_codes": None,
     }
     if "excluded" in sample:
         entry["status"] = "excluded"
@@ -304,7 +305,7 @@ def _measure_correctness(
     ground truth counts as missed rather than leaving the sample out of the totals.
     """
     try:
-        truth = score_from_musicxml(load_musicxml(ground_truth)).score
+        conversion = score_from_musicxml(load_musicxml(ground_truth))
     except MusicXmlError as exc:
         # The ground truth's directory becomes <input_dir> in the message.
         redact = _path_redactor(ground_truth, output_dir)
@@ -313,8 +314,13 @@ def _measure_correctness(
             "message": redact(str(exc)),
         }
         return
+    # The converter drops or nulls what it cannot read instead of failing, so the
+    # report must say when the ground truth itself lost something.
+    entry["ground_truth_warning_codes"] = dict(
+        sorted(Counter(str(w.code) for w in conversion.warnings).items())
+    )
     try:
-        entry["correctness"] = compare_scores(truth, document.get("score"))
+        entry["correctness"] = compare_scores(conversion.score, document.get("score"))
     except ComparisonTooLargeError as exc:
         entry["correctness_problem"] = {"code": "comparison_too_large", "message": str(exc)}
 
@@ -468,6 +474,12 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
         )
     if totals is not None:
         lines.append(_correctness_row("**Total**", totals))
+    for entry in report["samples"]:
+        if entry.get("ground_truth_warning_codes"):
+            codes = ", ".join(
+                f"{code} × {n}" for code, n in entry["ground_truth_warning_codes"].items()
+            )
+            lines += ["", f"Ground truth of {_markdown_cell(entry['id'])} had warnings: {codes}."]
     return lines
 
 

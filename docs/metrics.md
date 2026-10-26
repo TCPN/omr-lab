@@ -12,6 +12,7 @@ The metrics are about the music that a lead sheet needs: key and time signatures
 - When a ground truth cannot be measured, `correctness` is `null` and `correctness_problem` gives the reason:
   - `ground_truth_invalid`: the ground truth is not loadable MusicXML.
   - `comparison_too_large`: an alignment would need more than 4,000,000 cells, which is roughly 2,000 × 2,000 notes. Lead sheets are far below that.
+- A ground truth that converts with warnings is still measured, and `ground_truth_warning_codes` lists the warnings. What the converter dropped or left unknown (a `null` duration, for example) never matches, so check these before blaming the engine.
 
 ## What is compared
 
