@@ -383,7 +383,8 @@ def _summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def render_markdown(report: dict[str, Any]) -> str:
-    """A short human-readable view of a report; report.json stays the full record."""
+    """A short human-readable view of a report of any supported schema version;
+    report.json stays the full record."""
     manifest = report["manifest"]
     environment = report["environment"]
     engine = report["engine"]
@@ -437,6 +438,8 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def _markdown_correctness(report: dict[str, Any]) -> list[str]:
+    if "correctness" not in report["summary"]:  # schema 0.1.0
+        return ["", "## Correctness", "", "This report predates correctness measurement."]
     totals = report["summary"]["correctness"]
     problems = [entry for entry in report["samples"] if entry["correctness_problem"] is not None]
     if totals is None and not problems:

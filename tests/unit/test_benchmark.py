@@ -492,6 +492,7 @@ def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: P
         del entry["correctness_problem"]
 
     validate_benchmark_report(old)
+    assert "This report predates correctness measurement." in render_markdown(old)
     with pytest.raises(BenchmarkDocumentValidationError, match="correctness"):
         validate_benchmark_report({**old, "schema_version": "0.2.0"})
 
