@@ -1,0 +1,268 @@
+"""Generate a synthetic corpus: render each source once, degrade it per variant, and
+write the images, the ground truth and a benchmark manifest (docs/synthetic-corpus.md).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from omr_lab.musicxml import MusicXmlError, load_musicxml
+from omr_lab.pipeline import OutputDirectoryError, _write_atomically
+from omr_lab.schemas.benchmark import (
+    BENCHMARK_MANIFEST_SCHEMA_VERSION,
+    validate_benchmark_manifest,
+)
+from omr_lab.synthetic.spec import CorpusSpec, SourceSpec, VariantSpec, make_sample_id
+
+MANIFEST_FILENAME = "manifest.json"
+IMAGES_DIRNAME = "images"
+GROUND_TRUTH_DIRNAME = "ground-truth"
+
+_INSTALL_HINT = (
+    "Install the rendering packages with `uv sync --extra synthetic` "
+    "(or `pip install 'omr-lab[synthetic]'`)."
+)
+
+
+class SyntheticDependencyError(RuntimeError):
+    """A package or font that rendering needs is missing."""
+
+
+class SourceError(ValueError):
+    """A source score cannot be read or rendered."""
+
+
+@dataclass(frozen=True, slots=True)
+class CorpusResult:
+    manifest: dict[str, Any]
+    manifest_path: Path
+
+
+def sample_seed(corpus_seed: int, source_id: str, variant_id: str) -> int:
+    """The seed of one sample: independent of the other sources and variants.
+
+    53 bits, so the value survives JSON readers that parse numbers as doubles.
+    """
+    digest = hashlib.sha256(f"{corpus_seed}:{source_id}:{variant_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") >> 11
+
+
+def generate_corpus(
+    spec: CorpusSpec, output_dir: Path | str, *, seed: int | None = None
+) -> CorpusResult:
+    """Write the corpus into ``output_dir``, which must be missing or empty.
+
+    ``seed`` replaces the specification's corpus seed. Raises SyntheticDependencyError
+    when rendering packages or fonts are missing (before anything is written),
+    SourceError for an unusable source, and OutputDirectoryError.
+    """
+    try:
+        import numpy as np
+
+        from omr_lab.synthetic import degradations, render
+    except ImportError as exc:
+        raise SyntheticDependencyError(
+            f"Synthetic corpus rendering needs {exc.name or 'a missing package'}. {_INSTALL_HINT}"
+        ) from exc
+    except OSError as exc:
+        # cairosvg loads the cairo C library on import.
+        raise SyntheticDependencyError(
+            f"cairosvg could not load the cairo library ({exc}). Install cairo "
+            "(for example `sudo apt install libcairo2`)."
+        ) from exc
+
+    corpus_seed = spec.seed if seed is None else seed
+    try:
+        render.register_music_font()
+    except render.FontUnavailableError as exc:
+        raise SyntheticDependencyError(str(exc)) from exc
+    # Every source is read and rendered before anything is written.
+    ground_truth_bytes_by_source: dict[str, bytes] = {}
+    fonts = {}
+    clean_images = {}
+    for source in spec.sources:
+        ground_truth_bytes_by_source[source.id] = _read_source(source)
+        text = _decode_utf8_source(source, ground_truth_bytes_by_source[source.id])
+        try:
+            svg = render.render_svg(text, source.musicxml.name)
+        except render.RenderError as exc:
+            raise SourceError(f"Source {source.id!r}: {exc}") from exc
+        try:
+            fonts[source.id] = render.choose_text_font(
+                source.text_fonts, render.text_characters(svg)
+            )
+        except render.FontUnavailableError as exc:
+            raise SyntheticDependencyError(f"Source {source.id!r}: {exc}") from exc
+        clean_images[source.id] = render.rasterize(svg, fonts[source.id])
+
+    output_dir = Path(output_dir)
+    _prepare_output_dir(output_dir)
+    samples = []
+    for source in spec.sources:
+        ground_truth_name = f"{GROUND_TRUTH_DIRNAME}/{source.id}.musicxml"
+        ground_truth_bytes = ground_truth_bytes_by_source[source.id]
+        (output_dir / ground_truth_name).write_bytes(ground_truth_bytes)
+        clean = clean_images[source.id]
+        renderer = render.renderer_description(fonts[source.id])
+        for variant in spec.variants:
+            sample_id = make_sample_id(source.id, variant.id)
+            derived_seed = sample_seed(corpus_seed, source.id, variant.id)
+            rng = np.random.default_rng(derived_seed)
+            image = clean
+            applied_degradations = []
+            for degradation in variant.degradations:
+                params = degradations.resolve(degradation, rng)
+                image = degradations.apply(image, degradation.kind, params)
+                applied_degradations.append({"kind": degradation.kind, "params": params})
+            image_name = f"{IMAGES_DIRNAME}/{sample_id}.png"
+            image.save(output_dir / image_name, format="PNG", dpi=(render.DPI, render.DPI))
+            samples.append(
+                _sample(
+                    spec,
+                    source,
+                    variant,
+                    sample_id=sample_id,
+                    image_name=image_name,
+                    image_sha256=_sha256(output_dir / image_name),
+                    ground_truth_name=ground_truth_name,
+                    ground_truth_sha256=hashlib.sha256(ground_truth_bytes).hexdigest(),
+                    renderer=renderer,
+                    corpus_seed=corpus_seed,
+                    derived_seed=derived_seed,
+                    degradations=applied_degradations,
+                )
+            )
+
+    description = f"Generated by omr-lab synthesize from {spec.path.name} with seed {corpus_seed}."
+    if spec.description:
+        description = f"{spec.description} {description}"
+    manifest = {
+        "schema_version": BENCHMARK_MANIFEST_SCHEMA_VERSION,
+        "name": spec.name,
+        "description": description,
+        "samples": samples,
+    }
+    validate_benchmark_manifest(manifest)
+    manifest_path = output_dir / MANIFEST_FILENAME
+    _write_atomically(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    return CorpusResult(manifest=manifest, manifest_path=manifest_path)
+
+
+def _decode_utf8_source(source: SourceSpec, data: bytes) -> str:
+    """Decode a source for Verovio, which takes text: only UTF-8 (a BOM is dropped).
+
+    The MusicXML loader also accepts encodings such as UTF-16 or ISO-8859-1 that the
+    XML declaration names; those are rejected here rather than decoded wrongly.
+    """
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise SourceError(
+            f"Source {source.id!r} ({source.musicxml_as_written}) is not UTF-8 ({exc.reason} at "
+            f"byte {exc.start}); save it as UTF-8."
+        ) from exc
+
+
+def _read_source(source: SourceSpec) -> bytes:
+    """Check that the source is valid, uncompressed MusicXML and return its bytes."""
+    where = f"Source {source.id!r} ({source.musicxml_as_written})"
+    try:
+        document = load_musicxml(source.musicxml)
+    except MusicXmlError as exc:
+        raise SourceError(f"{where}: {exc}") from exc
+    if document.container != "musicxml":
+        raise SourceError(f"{where} is compressed MusicXML; use an uncompressed file.")
+    try:
+        return source.musicxml.read_bytes()
+    except OSError as exc:
+        raise SourceError(f"{where} cannot be read: {exc.strerror or exc}.") from exc
+
+
+def _sample(
+    spec: CorpusSpec,
+    source: SourceSpec,
+    variant: VariantSpec,
+    *,
+    sample_id: str,
+    image_name: str,
+    image_sha256: str,
+    ground_truth_name: str,
+    ground_truth_sha256: str,
+    renderer: str,
+    corpus_seed: int,
+    derived_seed: int,
+    degradations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    sample: dict[str, Any] = {
+        "id": sample_id,
+        "image": image_name,
+        "image_sha256": image_sha256,
+        "ground_truth": ground_truth_name,
+        "ground_truth_sha256": ground_truth_sha256,
+    }
+    if source.work is not None:
+        sample["work"] = source.work
+    sample.update(
+        {
+            "source": source.provenance,
+            "license": source.license,
+            "condition": variant.condition,
+            "renderer": renderer,
+            "synthesis": {
+                "corpus": spec.name,
+                "corpus_seed": corpus_seed,
+                "source_id": source.id,
+                "variant_id": variant.id,
+                "seed": derived_seed,
+                "degradations": degradations,
+            },
+        }
+    )
+    return sample
+
+
+def _prepare_output_dir(output_dir: Path) -> None:
+    try:
+        if output_dir.exists():
+            if not output_dir.is_dir():
+                raise OutputDirectoryError(f"Output path {str(output_dir)!r} is not a directory.")
+            if any(output_dir.iterdir()):
+                raise OutputDirectoryError(
+                    f"Output directory {str(output_dir)!r} is not empty. Use a new or empty "
+                    "directory per corpus so earlier images are not overwritten or mixed."
+                )
+        else:
+            output_dir.mkdir(parents=True)
+        # Created exclusively, so of two generators started into one directory only one runs.
+        (output_dir / IMAGES_DIRNAME).mkdir()
+        (output_dir / GROUND_TRUTH_DIRNAME).mkdir()
+    except FileExistsError:
+        raise OutputDirectoryError(
+            f"Output directory {str(output_dir)!r} is already used by another generator."
+        ) from None
+    except OSError as exc:
+        raise OutputDirectoryError(
+            f"Output path {str(output_dir)!r} cannot be used: {exc.strerror or exc}."
+        ) from exc
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+__all__ = [
+    "IMAGES_DIRNAME",
+    "CorpusResult",
+    "SourceError",
+    "SyntheticDependencyError",
+    "generate_corpus",
+    "sample_seed",
+]

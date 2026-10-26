@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omr-lab:schema:benchmark-manifest:0.2.0",
+  "title": "OMR Lab benchmark manifest",
+  "description": "The samples of one benchmark set: where each input and its ground truth are, their checksums, source, license, condition and exclusions; see docs/benchmark.md. Sample ids must also be unique, which the loader checks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "samples"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Version of this contract. Changes to the contract require a new schema file and version. Readers also accept 0.1.0, which has no 'synthesis'.",
+      "const": "0.2.0"
+    },
+    "name": {
+      "description": "Optional short name of the benchmark set, copied into reports.",
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "description": "Optional free text about the set.",
+      "type": "string"
+    },
+    "samples": {
+      "description": "The samples, in the order they are run and reported.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/sample"
+      }
+    }
+  },
+  "$defs": {
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "image",
+        "image_sha256",
+        "source",
+        "license",
+        "condition"
+      ],
+      "dependentRequired": {
+        "ground_truth": [
+          "ground_truth_sha256"
+        ]
+      },
+      "if": {
+        "required": [
+          "ground_truth"
+        ],
+        "properties": {
+          "ground_truth": {
+            "type": "string"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ground_truth_sha256": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "properties": {
+        "id": {
+          "description": "Stable sample identifier, unique in the manifest; also the name of the sample's run directory, so it must be a portable directory name.",
+          "type": "string",
+          "allOf": [
+            {
+              "description": "must be 1 to 64 lowercase letters, digits, '_', '.' or '-', starting with a letter or digit and not ending with '.'",
+              "pattern": "^[a-z0-9]([a-z0-9_.-]{0,62}[a-z0-9_-])?$"
+            },
+            {
+              "description": "must not be a name Windows reserves for devices, such as 'con' or 'nul'",
+              "not": {
+                "pattern": "^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\\..*)?$"
+              }
+            }
+          ]
+        },
+        "image": {
+          "description": "Input image or PDF, relative to the manifest's directory.",
+          "$ref": "#/$defs/manifestPath"
+        },
+        "image_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "ground_truth": {
+          "description": "MusicXML ground truth relative to the manifest's directory, or null when the sample has none.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/manifestPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ground_truth_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "work": {
+          "description": "Optional title of the piece.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Where the input and ground truth come from.",
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "description": "License of the sample files, preferably an SPDX identifier.",
+          "type": "string",
+          "minLength": 1
+        },
+        "condition": {
+          "description": "Input condition, such as 'clean digital rendering' or 'phone photo, skewed'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "renderer": {
+          "description": "Optional tools used to produce a synthetic image.",
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "excluded": {
+          "description": "Present when the sample is kept in the manifest but not run; reports list it with the reason.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reason"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "synthesis": {
+          "description": "Present on a sample made by `omr-lab synthesize`: how the image was generated, with every random choice resolved, so the image can be rebuilt from the ground truth and these values (docs/synthetic-corpus.md).",
+          "$ref": "#/$defs/synthesis"
+        }
+      }
+    },
+    "sha256": {
+      "description": "Lowercase hex SHA-256 digest of the file.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "manifestPath": {
+      "description": "A POSIX-style path relative to the manifest's directory; '..' segments are allowed.",
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "description": "must not contain control characters such as newlines or tabs",
+          "not": {
+            "pattern": "[\\u0000-\\u001F\\u007F]"
+          }
+        },
+        {
+          "description": "must be relative, not start with '/'",
+          "not": {
+            "pattern": "^/"
+          }
+        },
+        {
+          "description": "must use '/' as the separator, not '\\'",
+          "not": {
+            "pattern": "\\\\"
+          }
+        },
+        {
+          "description": "must not start with a drive letter such as 'C:'",
+          "not": {
+            "pattern": "^[A-Za-z]:"
+          }
+        }
+      ]
+    },
+    "synthesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "corpus",
+        "corpus_seed",
+        "source_id",
+        "variant_id",
+        "seed",
+        "degradations"
+      ],
+      "properties": {
+        "corpus": {
+          "description": "Name of the corpus specification.",
+          "type": "string",
+          "minLength": 1
+        },
+        "corpus_seed": {
+          "description": "Corpus seed the sample seed was derived from (the specification's seed, or --seed); with the specification it regenerates the corpus.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "source_id": {
+          "description": "Id of the source score in the specification; samples with the same source share one ground truth.",
+          "type": "string",
+          "minLength": 1
+        },
+        "variant_id": {
+          "description": "Id of the variant (degradation recipe) in the specification.",
+          "type": "string",
+          "minLength": 1
+        },
+        "seed": {
+          "description": "Seed of this sample's random generator, derived from the corpus seed, source id and variant id.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "degradations": {
+          "description": "Degradations applied to the clean rendering, in order; empty for the clean image.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "params"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1
+              },
+              "params": {
+                "description": "Resolved parameter values (no ranges).",
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
