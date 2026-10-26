@@ -192,7 +192,7 @@ def test_a_missed_note_does_not_shift_the_rest() -> None:
     assert (both["ground_truth"], both["predicted"], both["matched"]) == (5, 4, 4)
     assert both["precision"] == 1.0
     assert both["recall"] == 0.8
-    assert both["f1"] == round(2 * 4 / 9, 4)
+    assert both["f1"] == 0.8888  # 8/9, rounded down
     assert result["measures"]["exact"] == 1
 
 
@@ -447,6 +447,11 @@ def test_too_large_comparisons_are_refused(monkeypatch: pytest.MonkeyPatch) -> N
     assert verse["character_errors"] == verse["ground_truth_characters"] * 2
 
 
+def test_rates_never_round_to_perfect() -> None:
+    assert metrics._ratio(2999, 3000) == 0.9996
+    assert metrics._error_ratio(1, 30000) == 0.0001
+
+
 def test_summary_sums_counts_before_computing_rates() -> None:
     perfect = compare_scores(_truth(), _truth())
     short = _score([_note("C"), _note("D")])
@@ -458,7 +463,7 @@ def test_summary_sums_counts_before_computing_rates() -> None:
     assert totals["predictions_missing"] == 1
     both = totals["notes"]["pitch_and_duration"]
     assert (both["ground_truth"], both["predicted"], both["matched"]) == (9, 7, 6)
-    assert both["recall"] == round(6 / 9, 4)
+    assert both["recall"] == 0.6666  # 6/9, rounded down
     # The missing prediction has no key, not even the implicit 0 fifths of a score.
     assert totals["key_signatures_correct"] == 2
     assert totals["lyrics"]["verses"] == 2
@@ -502,7 +507,7 @@ def test_worked_example_in_docs() -> None:
     result = compare_scores(truth, predicted)
     notes = result["notes"]
 
-    assert (notes["pitch"]["matched"], notes["pitch"]["precision"]) == (2, 0.6667)
+    assert (notes["pitch"]["matched"], notes["pitch"]["precision"]) == (2, 0.6666)
     assert (notes["pitch"]["recall"], notes["pitch"]["f1"]) == (0.5, 0.5714)
     assert (notes["duration"]["matched"], notes["duration"]["f1"]) == (3, 0.8571)
     assert notes["pitch_and_duration"]["matched"] == 2

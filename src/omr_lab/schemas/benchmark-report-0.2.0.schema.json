@@ -415,7 +415,7 @@
       }
     },
     "rate": {
-      "description": "A fraction rounded to 4 decimals, or null when its denominator is 0.",
+      "description": "A fraction rounded down to 4 decimals, or null when its denominator is 0.",
       "type": [
         "number",
         "null"
@@ -424,7 +424,7 @@
       "maximum": 1
     },
     "error_rate": {
-      "description": "Errors divided by the ground-truth length, rounded to 4 decimals; can exceed 1 when the prediction has many extra items. Null when the ground truth is empty.",
+      "description": "Errors divided by the ground-truth length, rounded up to 4 decimals; can exceed 1 when the prediction has many extra items. Null when the ground truth is empty.",
       "type": [
         "number",
         "null"

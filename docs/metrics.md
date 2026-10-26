@@ -51,7 +51,7 @@ When several alignments have the same cost, a substitution is preferred, then a 
 | `lyrics.verses[]` | One entry per ground-truth lyric `number` (verse), compared with the predicted lyrics of the same number. Syllables are the lyric texts of the notes in order, NFC-normalized and stripped; extender-only lyrics (no text) are skipped. `syllable_errors` is the edit distance between the syllable lists, and `character_errors` is the edit distance between the characters of the joined syllables. The error rates divide by the ground-truth length, so they are 1.0 for a verse that was not recognized at all. They can exceed 1 when the prediction has many extra syllables. |
 | `lyrics.extra_predicted_verses[]` | One entry per predicted lyric number that the ground truth does not have, with the same fields as `verses[]`, compared with an empty ground truth: every syllable and character it has is an error, and its own rates are `null`. A verse recognized under the wrong number counts as missed and also appears here. |
 
-Rates are rounded to 4 decimals. A rate is `null` when its denominator is 0; for example, precision is `null` when nothing was predicted. When a sample's ground truth has no lyrics but the prediction has some, the lyric error rate is `null`, and report.md shows the invented characters instead (`– (+N chars)`).
+Rates are rounded to 4 decimals: down for rates where higher is better and up for error rates, so that 2,999 of 3,000 notes never shows as 1.0 and one error never shows as 0. A rate is `null` when its denominator is 0; for example, precision is `null` when nothing was predicted. When a sample's ground truth has no lyrics but the prediction has some, the lyric error rate is `null`, and report.md shows the invented characters instead (`– (+N chars)`).
 
 ### Totals
 
@@ -77,7 +77,7 @@ K: 1 fifth   M: 4/4   (no chord)   C4 (1/4) 小 · E4 (1/4) 水 · F4 (1/4) 答
    - E4 matches E4 (cost 0).
    - F♯4 is aligned with F4. The duration matches but the pitch does not, so the cost is 0.5.
 2. **Notes.** The ground truth has 4 notes and the prediction 3.
-   - Pitch: C and E match, so 2 matched. Precision is 2/3 = 0.6667, recall 2/4 = 0.5, and F1 = 2 × 2 / (4 + 3) = 0.5714.
+   - Pitch: C and E match, so 2 matched. Precision is 2/3 = 0.6666 (rounded down), recall 2/4 = 0.5, and F1 = 2 × 2 / (4 + 3) = 0.5714.
    - Duration: all 3 aligned notes match, so 3 matched. Precision is 1.0, recall 0.75, and F1 = 6/7 = 0.8571.
    - Pitch and duration together: 2 matched, the same as pitch.
 3. **Measures.** The single measure differs, so `exact` is 0 and accuracy is 0/1 = 0.

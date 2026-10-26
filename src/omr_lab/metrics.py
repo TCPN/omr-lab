@@ -7,6 +7,7 @@ from aligning the two scores; nothing is guessed.
 
 from __future__ import annotations
 
+import math
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -350,8 +351,10 @@ def _verses(measures: list[dict[str, Any]]) -> dict[str | None, list[str]]:
 
 
 def _add_lyric_rates(verse: dict[str, Any]) -> None:
-    verse["syllable_error_rate"] = _ratio(verse["syllable_errors"], verse["ground_truth_syllables"])
-    verse["character_error_rate"] = _ratio(
+    verse["syllable_error_rate"] = _error_ratio(
+        verse["syllable_errors"], verse["ground_truth_syllables"]
+    )
+    verse["character_error_rate"] = _error_ratio(
         verse["character_errors"], verse["ground_truth_characters"]
     )
 
@@ -400,7 +403,18 @@ def _sum_counts(items: Any) -> dict[str, int]:
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
-    return round(numerator / denominator, 4) if denominator else None
+    """A rate where higher is better, rounded down to 4 decimals, so that 2999 of 3000
+    never shows as 1.0; None when the denominator is 0."""
+    if not denominator:
+        return None
+    return math.floor(Fraction(numerator, denominator) * 10_000) / 10_000
+
+
+def _error_ratio(numerator: int, denominator: int) -> float | None:
+    """An error rate, rounded up to 4 decimals, so that a few errors never show as 0."""
+    if not denominator:
+        return None
+    return math.ceil(Fraction(numerator, denominator) * 10_000) / 10_000
 
 
 # --- Alignment ----------------------------------------------------------------------
