@@ -328,13 +328,15 @@ def _measure_correctness(
         sorted(Counter(str(w.code) for w in (*loaded.warnings, *conversion.warnings)).items())
     )
     truth = conversion.score
+    predicted = document.get("score")
     try:
-        entry["correctness"] = compare_scores(truth, document.get("score"))
-    except ComparisonTooLargeError as exc:
-        # Still counted, with nothing matched, so that a run inventing far too much
-        # lowers the totals instead of leaving them.
-        entry["correctness"] = compare_scores(truth, document.get("score"), align=False)
-        entry["correctness_problem"] = {"code": "comparison_too_large", "message": str(exc)}
+        try:
+            entry["correctness"] = compare_scores(truth, predicted)
+        except ComparisonTooLargeError as exc:
+            # Still counted, with nothing matched, so that a run inventing far too much
+            # lowers the totals instead of leaving them.
+            entry["correctness_problem"] = {"code": "comparison_too_large", "message": str(exc)}
+            entry["correctness"] = compare_scores(truth, predicted, align=False)
     except Exception as exc:  # Recorded on the sample and logged, not swallowed.
         logger.exception("Measuring correctness failed unexpectedly")
         entry["correctness_problem"] = _comparison_failed(exc, redact)
@@ -496,7 +498,12 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
             lines.append(_correctness_row(entry["id"], entry["correctness"], is_total=False))
     for entry in problems:
         problem = entry["correctness_problem"]
-        state = "not measured" if entry["correctness"] is None else "not aligned, all counted wrong"
+        if entry["correctness"] is None:
+            state = "not measured"
+        elif entry["correctness"]["prediction"] == "missing":
+            state = "scored as a missing prediction"
+        else:
+            state = "not aligned, all counted wrong"
         lines.append(
             f"| {_markdown_cell(entry['id'])} | {state}: "
             f"{_markdown_cell(problem['code'] + ': ' + problem['message'])} "

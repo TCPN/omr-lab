@@ -605,6 +605,36 @@ def test_an_unexpected_comparison_error_keeps_the_report(
         "message": "Unexpected KeyError: 'parts'",
     }
     assert (tmp_path / "out" / REPORT_JSON_FILENAME).is_file()
+    assert "| good | scored as a missing prediction: comparison_failed" in render_markdown(
+        result.report
+    )
+
+
+def test_a_failing_unaligned_fallback_keeps_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = benchmark.compare_scores
+
+    def broken(truth, predicted, align=True):
+        if predicted is None:
+            return real(truth, predicted)
+        if align:
+            raise metrics.ComparisonTooLargeError("too large")
+        raise KeyError("parts")
+
+    monkeypatch.setattr(benchmark, "compare_scores", broken)
+
+    result = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    )
+    validate_benchmark_report(result.report)
+    good = result.report["samples"][0]
+
+    assert good["correctness_problem"]["code"] == "comparison_failed"
+    assert good["correctness"]["prediction"] == "missing"
 
 
 def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: Path) -> None:
