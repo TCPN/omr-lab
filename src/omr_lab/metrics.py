@@ -43,7 +43,7 @@ class _Item:
 
 
 def compare_scores(
-    ground_truth: dict[str, Any], predicted: dict[str, Any] | None
+    ground_truth: dict[str, Any], predicted: dict[str, Any] | None, *, align: bool = True
 ) -> dict[str, Any]:
     """Compare the first part of ``predicted`` with the first part of ``ground_truth``.
 
@@ -51,6 +51,10 @@ def compare_scores(
     could not be converted): everything in the ground truth then counts as missed.
     Returns the JSON-ready ``correctness`` object of a benchmark report. Raises
     ComparisonTooLargeError when an alignment would exceed MAX_ALIGNMENT_CELLS.
+
+    With ``align=False`` nothing is aligned: every ground-truth item counts as missed
+    and every predicted item as extra. That is the fallback for a comparison too large
+    to align, so that such a sample still lowers the totals.
     """
     truth = _part(ground_truth)
     guess = _part(predicted) if predicted is not None else []
@@ -66,10 +70,10 @@ def compare_scores(
         },
         "key_signatures": _signatures(truth, guess, predicted is not None, "key", _key_value),
         "time_signatures": _signatures(truth, guess, predicted is not None, "time", _time_value),
-        "measures": _measures(truth_measures, guess_measures),
-        "notes": _notes(truth_items, guess_items),
-        "chord_symbols": _chord_symbols(truth, guess),
-        "lyrics": _lyrics(truth, guess),
+        "measures": _measures(truth_measures, guess_measures, align),
+        "notes": _notes(truth_items, guess_items, align),
+        "chord_symbols": _chord_symbols(truth, guess, align),
+        "lyrics": _lyrics(truth, guess, align),
     }
 
 
@@ -197,8 +201,10 @@ def _changes(values: Any) -> list[Any]:
     return result
 
 
-def _measures(truth: list[tuple[_Item, ...]], guess: list[tuple[_Item, ...]]) -> dict[str, Any]:
-    pairs = _align(truth, guess, lambda a, b: 0.0 if _same_measure(a, b) else 1.0)
+def _measures(
+    truth: list[tuple[_Item, ...]], guess: list[tuple[_Item, ...]], align: bool
+) -> dict[str, Any]:
+    pairs = _align(truth, guess, lambda a, b: 0.0 if _same_measure(a, b) else 1.0, align)
     exact = sum(1 for a, b in pairs if a is not None and b is not None and _same_measure(a, b))
     # The denominator is a count of its own, so that totals add each sample's
     # max(ground_truth, predicted) and one sample's extra measures cannot cancel
@@ -223,8 +229,8 @@ def _item_cost(a: _Item, b: _Item) -> float:
     return 1.0 - 0.5 * same_pitch - 0.5 * same_duration
 
 
-def _notes(truth: list[_Item], guess: list[_Item]) -> dict[str, Any]:
-    pairs = _align(truth, guess, _item_cost)
+def _notes(truth: list[_Item], guess: list[_Item], align: bool) -> dict[str, Any]:
+    pairs = _align(truth, guess, _item_cost, align)
     truth_notes = sum(item.kind == "note" for item in truth)
     guess_notes = sum(item.kind == "note" for item in guess)
     matched = {"pitch": 0, "duration": 0, "pitch_and_duration": 0}
@@ -256,10 +262,12 @@ def _notes(truth: list[_Item], guess: list[_Item]) -> dict[str, Any]:
     }
 
 
-def _chord_symbols(truth: list[dict[str, Any]], guess: list[dict[str, Any]]) -> dict[str, Any]:
+def _chord_symbols(
+    truth: list[dict[str, Any]], guess: list[dict[str, Any]], align: bool
+) -> dict[str, Any]:
     truth_chords = [_chord(e) for e in _events(truth, "harmony")]
     guess_chords = [_chord(e) for e in _events(guess, "harmony")]
-    pairs = _align(truth_chords, guess_chords, lambda a, b: 0.0 if a == b else 1.0)
+    pairs = _align(truth_chords, guess_chords, lambda a, b: 0.0 if a == b else 1.0, align)
     matched = sum(1 for a, b in pairs if a is not None and b is not None and a == b)
     return _prf(
         {"ground_truth": len(truth_chords), "predicted": len(guess_chords), "matched": matched}
@@ -280,35 +288,37 @@ def _chord(event: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def _lyrics(truth: list[dict[str, Any]], guess: list[dict[str, Any]]) -> dict[str, Any]:
+def _lyrics(
+    truth: list[dict[str, Any]], guess: list[dict[str, Any]], align: bool
+) -> dict[str, Any]:
     truth_verses = _verses(truth)
     guess_verses = _verses(guess)
     return {
         "verses": [
-            _verse(number, syllables, guess_verses.get(number, []))
+            _verse(number, syllables, guess_verses.get(number, []), align)
             for number, syllables in truth_verses.items()
         ],
         # Compared with an empty ground truth, so that every invented character is an
         # error in the totals.
         "extra_predicted_verses": [
-            _verse(number, [], syllables)
+            _verse(number, [], syllables, align)
             for number, syllables in guess_verses.items()
             if number not in truth_verses
         ],
     }
 
 
-def _verse(number: str | None, truth: list[str], guess: list[str]) -> dict[str, Any]:
+def _verse(number: str | None, truth: list[str], guess: list[str], align: bool) -> dict[str, Any]:
     truth_text = "".join(truth)
     guess_text = "".join(guess)
     verse = {
         "number": number,
         "ground_truth_syllables": len(truth),
         "predicted_syllables": len(guess),
-        "syllable_errors": _edit_distance(truth, guess),
+        "syllable_errors": _edit_distance(truth, guess, align),
         "ground_truth_characters": len(truth_text),
         "predicted_characters": len(guess_text),
-        "character_errors": _edit_distance(list(truth_text), list(guess_text)),
+        "character_errors": _edit_distance(list(truth_text), list(guess_text), align),
     }
     _add_lyric_rates(verse)
     return verse
@@ -386,20 +396,22 @@ def _ratio(numerator: int, denominator: int) -> float | None:
 # --- Alignment ----------------------------------------------------------------------
 
 
-def _edit_distance(truth: Sequence[T], guess: Sequence[T]) -> int:
-    pairs = _align(truth, guess, lambda a, b: 0.0 if a == b else 1.0)
+def _edit_distance(truth: Sequence[T], guess: Sequence[T], align: bool) -> int:
+    pairs = _align(truth, guess, lambda a, b: 0.0 if a == b else 1.0, align)
     return sum(1 for a, b in pairs if a is None or b is None or a != b)
 
 
 def _align(
-    truth: Sequence[T], guess: Sequence[T], cost: Callable[[T, T], float]
+    truth: Sequence[T], guess: Sequence[T], cost: Callable[[T, T], float], align: bool
 ) -> list[tuple[T | None, T | None]]:
     """Minimum-cost alignment (insertions and deletions cost 1, substitutions ``cost``).
 
     Returns the aligned pairs in order; None marks a missed or an extra item. Ties
     prefer a substitution, then a missed ground-truth item, so the result is
-    deterministic.
+    deterministic. With ``align=False`` every item is missed or extra.
     """
+    if not align:
+        return [(a, None) for a in truth] + [(None, b) for b in guess]
     n, m = len(truth), len(guess)
     if n * m > MAX_ALIGNMENT_CELLS:
         raise ComparisonTooLargeError(

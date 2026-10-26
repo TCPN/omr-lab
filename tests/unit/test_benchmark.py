@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from omr_lab import benchmark, cli
+from omr_lab import benchmark, cli, metrics
 from omr_lab.benchmark import (
     REPORT_JSON_FILENAME,
     REPORT_MARKDOWN_FILENAME,
@@ -532,6 +532,30 @@ def test_ground_truth_conversion_warnings_are_reported(tmp_path: Path) -> None:
     assert good["correctness"]["notes"]["duration"]["matched"] == 41
     assert plain["ground_truth_warning_codes"] is None
     assert "Ground truth of good had warnings: " in render_markdown(report)
+
+
+def test_a_comparison_too_large_to_align_still_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(metrics, "MAX_ALIGNMENT_CELLS", 10)
+
+    report = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    ).report
+    validate_benchmark_report(report)
+    good = report["samples"][0]
+
+    assert good["correctness_problem"]["code"] == "comparison_too_large"
+    assert good["correctness"]["notes"]["pitch_and_duration"]["matched"] == 0
+    totals = report["summary"]["correctness"]
+    assert totals["samples"] == 2
+    assert totals["notes"]["pitch_and_duration"]["recall"] == 0.0
+    assert "| good | not aligned, all counted wrong: comparison_too_large" in render_markdown(
+        report
+    )
 
 
 def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: Path) -> None:

@@ -416,6 +416,14 @@ def test_too_large_comparisons_are_refused(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(ComparisonTooLargeError, match="exceeds 10 cells"):
         compare_scores(_truth(), _truth())
 
+    unaligned = compare_scores(_truth(), _truth(), align=False)
+    both = unaligned["notes"]["pitch_and_duration"]
+    assert (both["ground_truth"], both["predicted"], both["matched"]) == (5, 5, 0)
+    assert unaligned["measures"]["exact"] == 0
+    assert unaligned["chord_symbols"]["matched"] == 0
+    verse = unaligned["lyrics"]["verses"][0]
+    assert verse["character_errors"] == verse["ground_truth_characters"] * 2
+
 
 def test_summary_sums_counts_before_computing_rates() -> None:
     perfect = compare_scores(_truth(), _truth())

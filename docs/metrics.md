@@ -9,9 +9,9 @@ The metrics are about the music that a lead sheet needs: key and time signatures
 - A sample is measured when it has a `ground_truth` and its run **succeeded or failed**.
 - A failed run, or a run whose MusicXML could not be converted to a score, is compared as a **missing prediction** (`prediction: "missing"`). Everything in the ground truth then counts as missed, and its key and time signatures are never `correct`, so a failed run lowers the totals instead of disappearing from them.
 - Samples that were excluded or not run, and samples without a ground truth, have `correctness: null`.
-- When a ground truth cannot be measured, `correctness` is `null` and `correctness_problem` gives the reason:
-  - `ground_truth_invalid`: the ground truth is not loadable MusicXML.
-  - `comparison_too_large`: an alignment would need more than 4,000,000 cells, which is roughly 2,000 × 2,000 notes. Lead sheets are far below that.
+- `correctness_problem` says when a sample with a ground truth could not be measured normally:
+  - `ground_truth_invalid`: the ground truth is not loadable MusicXML. `correctness` is `null`, and the sample is left out of the totals.
+  - `comparison_too_large`: an alignment would need more than 4,000,000 cells, which is roughly 2,000 × 2,000 notes. Lead sheets are far below that, so this means the engine invented far too much. `correctness` is then computed without alignment: every ground-truth item counts as missed and every predicted item as extra. The sample still lowers the totals.
 - A ground truth that converts with warnings is still measured, and `ground_truth_warning_codes` lists the warnings. What the converter dropped or left unknown (a `null` duration, for example) never matches, so check these before blaming the engine.
 
 ## What is compared
@@ -19,7 +19,7 @@ The metrics are about the music that a lead sheet needs: key and time signatures
 - **First part only.** Both scores are reduced to their first part, and `parts` records how many parts each score has. The target songs have one melody part; multi-part scores are a limitation.
 - **Notes and rests in reading order.** Measures are taken in order, and events within a measure in source order. All voices and staves of the part go into one sequence.
   - A chord is one note whose pitch is the set of its pitches.
-  - Grace notes are left out, because they take no time.
+  - Grace notes are left out, because they take no time. Their lyrics still count in the lyric metrics.
   - Hidden rests (`print-object="no"`) are left out, because they are not printed.
 - **Pitches as spelled.** A pitch is its step, alteration and octave. F♯4 and G♭4 are different, and so is F4 when the score says F♯4. This is deliberate: OMR reads what is printed, and song_helper stores the spelling.
 - **Durations** are the exact sounding lengths in whole notes (`"3/8"` for a dotted quarter). Engine-specific `<divisions>` do not matter.

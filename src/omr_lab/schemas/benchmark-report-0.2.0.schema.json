@@ -371,7 +371,7 @@
           ]
         },
         "correctness_problem": {
-          "description": "Why correctness is null for a sample that has a ground truth and ran; null otherwise.",
+          "description": "Why correctness could not be measured normally for a sample that has a ground truth and ran; null otherwise. ground_truth_invalid: correctness is null. comparison_too_large: correctness is computed without alignment, so every ground-truth item counts as missed and every predicted item as extra.",
           "oneOf": [
             {
               "type": "null"

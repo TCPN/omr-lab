@@ -322,6 +322,9 @@ def _measure_correctness(
     try:
         entry["correctness"] = compare_scores(conversion.score, document.get("score"))
     except ComparisonTooLargeError as exc:
+        # Still counted, with nothing matched, so that a run inventing far too much
+        # lowers the totals instead of leaving them.
+        entry["correctness"] = compare_scores(conversion.score, document.get("score"), align=False)
         entry["correctness_problem"] = {"code": "comparison_too_large", "message": str(exc)}
 
 
@@ -467,8 +470,9 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
             lines.append(_correctness_row(entry["id"], entry["correctness"]))
     for entry in problems:
         problem = entry["correctness_problem"]
+        state = "not measured" if entry["correctness"] is None else "not aligned, all counted wrong"
         lines.append(
-            f"| {_markdown_cell(entry['id'])} | not measured: "
+            f"| {_markdown_cell(entry['id'])} | {state}: "
             f"{_markdown_cell(problem['code'] + ': ' + problem['message'])} "
             "| | | | | | | |"
         )
