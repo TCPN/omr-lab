@@ -199,10 +199,15 @@ def _changes(values: Any) -> list[Any]:
 
 
 def _measures(truth: list[tuple[_Item, ...]], guess: list[tuple[_Item, ...]]) -> dict[str, Any]:
-    pairs = _align(truth, guess, lambda a, b: 0.0 if a == b else 1.0)
-    exact = sum(1 for a, b in pairs if a is not None and b is not None and a == b)
+    pairs = _align(truth, guess, lambda a, b: 0.0 if _same_measure(a, b) else 1.0)
+    exact = sum(1 for a, b in pairs if a is not None and b is not None and _same_measure(a, b))
     counts = {"ground_truth": len(truth), "predicted": len(guess), "exact": exact}
     return {**counts, "accuracy": _ratio(exact, _measure_base(counts))}
+
+
+def _same_measure(a: tuple[_Item, ...], b: tuple[_Item, ...]) -> bool:
+    """Equal by the same rule as notes: an unreadable pitch or duration never matches."""
+    return len(a) == len(b) and all(_item_cost(x, y) == 0 for x, y in zip(a, b, strict=True))
 
 
 def _measure_base(counts: dict[str, int]) -> int:

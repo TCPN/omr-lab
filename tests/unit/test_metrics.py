@@ -210,6 +210,15 @@ def test_a_dropped_measure() -> None:
     assert result["notes"]["rests"]["recall"] == 0.0
 
 
+def test_an_unknown_duration_never_matches() -> None:
+    score = _score([_note("C", duration=None)])
+
+    result = compare_scores(score, copy.deepcopy(score))
+
+    assert result["notes"]["duration"]["matched"] == 0
+    assert result["measures"]["exact"] == 0
+
+
 def test_wrong_durations() -> None:
     predicted = _truth()
     _measures(predicted)[1]["events"][1]["duration"] = "3/4"  # half read as dotted half
