@@ -17,6 +17,7 @@
 - schemas/: checked-in JSON Schemas and validation; no dependency on engines or the pipeline.
 - pipeline.py: orchestration only. Behavior, output layout, error codes, and the EngineResult-to-run-document mapping: docs/pipeline.md.
 - benchmark.py: benchmark manifests and reports; runs each sample through the pipeline. Details: docs/benchmark.md.
+- metrics.py: correctness of a recognized score against its ground truth, on the score model (alignment-based note, measure, chord and lyric metrics). Details: docs/metrics.md.
 - synthetic/: synthetic corpus generation (Verovio rendering, seeded degradations, manifest with parameters); optional `synthetic` extra. Details: docs/synthetic-corpus.md.
 
 ## Engine contract

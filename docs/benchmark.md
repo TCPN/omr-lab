@@ -38,7 +38,7 @@ Private or unlicensed scores stay outside Git (for example in `data/private/`, w
 ```
 <output_dir>/
   report.json      the report (schema below)
-  report.md        a short human-readable table of the same report
+  report.md        short human-readable tables of the same report (runs, then correctness)
   runs/<id>/       one ordinary pipeline run directory per sample that ran (run.json, raw/, ...)
 ```
 
@@ -46,7 +46,7 @@ Private or unlicensed scores stay outside Git (for example in `data/private/`, w
 
 ## Report
 
-`report.json` is validated against `src/omr_lab/schemas/benchmark-report-0.1.0.schema.json` before it is written.
+`report.json` is validated against `src/omr_lab/schemas/benchmark-report-0.2.0.schema.json` before it is written. Report 0.2.0 adds the correctness fields below to 0.1.0; `validate_benchmark_report` still accepts 0.1.0 reports, choosing the schema by `schema_version`.
 
 - `generated_at`: UTC start time.
 - `manifest`: file name (no directory), SHA-256 of the manifest bytes, `name`, `schema_version`.
@@ -56,8 +56,9 @@ Private or unlicensed scores stay outside Git (for example in `data/private/`, w
   - `status`: `succeeded` or `failed` (the run's status), `excluded` (from the manifest; `exclusion_reason` gives why) or `not_run` (`problem` gives why).
   - `problem`: for `not_run`, a `code` and `message`. Before a run, the image and the ground truth are read and their SHA-256 compared with the manifest: `image_unreadable` (missing, not a regular file, or not readable), `image_checksum_mismatch`, `ground_truth_unreadable`, `ground_truth_checksum_mismatch`. `run_not_started` is a run the pipeline refused to start (for example an image file name the run document cannot store); local paths in its message are replaced by `<output_dir>`, `<input_dir>` (the image's directory) and `~`, as in run documents.
   - `run`: for samples that ran, the run document path relative to the report, its status and `error_code`, `engine_version`, effective `options`, `duration_seconds`, and `warning_codes` (number of warnings per code). The run document has the details.
-  - `correctness`: always `null` in this version. Musical correctness is reviewed separately until the metrics of issue #24 exist; a succeeded run is not a correctly recognized score.
-- `summary`: counts of samples, `excluded`, `not_run`, `attempted` (= `succeeded` + `failed`), `success_rate` (succeeded / attempted, rounded down to 3 decimals, `null` when nothing ran), distinct `engine_versions`, failed runs per `error_codes`, and the summed `run_duration_seconds`.
+  - `correctness`: for a sample with a `ground_truth` whose run succeeded or failed, how well the run's score matches the ground truth: key and time signatures, measures, notes (pitch, duration, both) and rests with precision, recall and F1, chord symbols, and lyric error rates per verse. A failed run, or one without a score, is compared as a missing prediction. Definitions and a worked example are in [metrics.md](metrics.md). `null` for other samples.
+  - `correctness_problem`: why `correctness` is `null` for a sample that has a ground truth and ran: `ground_truth_invalid` (not loadable MusicXML; the ground truth's directory is written `<input_dir>` in the message) or `comparison_too_large`. `null` otherwise.
+- `summary`: counts of samples, `excluded`, `not_run`, `attempted` (= `succeeded` + `failed`), `success_rate` (succeeded / attempted, rounded down to 3 decimals, `null` when nothing ran), distinct `engine_versions`, failed runs per `error_codes`, the summed `run_duration_seconds`, and `correctness`: the counts of all measured samples added up, with rates computed from the sums (`null` when no sample was measured).
 
 Two runs of the same manifest and engine on the same machine give the same report except `generated_at` and the durations (a unit test checks this).
 

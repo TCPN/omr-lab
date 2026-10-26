@@ -33,6 +33,7 @@ from omr_lab.schemas.benchmark import (
 )
 
 E2E_MANIFEST = Path(__file__).resolve().parents[1] / "fixtures" / "e2e" / "manifest.json"
+TWINKLE = E2E_MANIFEST.parent / "twinkle.musicxml"
 
 # Fields that differ between two runs of the same benchmark on the same machine.
 NONDETERMINISTIC = ("generated_at",)
@@ -130,7 +131,10 @@ def test_report_records_every_sample_status(manifest_path: Path, tmp_path: Path)
     assert by_id["good"]["run"]["document"] == "runs/good/run.json"
     assert by_id["good"]["run"]["engine_version"] == MOCK_ENGINE_VERSION
     assert by_id["good"]["run"]["options"] == {"outcome": "succeeded"}
+    # The fixture's ground truth is not loadable MusicXML.
     assert by_id["good"]["correctness"] is None
+    assert by_id["good"]["correctness_problem"]["code"] == "ground_truth_invalid"
+    assert "<input_dir>" in by_id["good"]["correctness_problem"]["message"]
     assert by_id["bad"]["status"] == "failed"
     assert by_id["bad"]["run"]["error_code"] == "engine_failed"
     assert by_id["skipped"]["status"] == "excluded"
@@ -393,18 +397,109 @@ def test_cli_benchmark_exit_codes(
     )
 
 
-def test_cli_benchmark_succeeds_on_the_e2e_manifest(tmp_path: Path) -> None:
+def test_cli_benchmark_succeeds_on_the_e2e_manifest(tmp_path: Path, capsys) -> None:
     argv = ["benchmark", str(E2E_MANIFEST), "-o", str(tmp_path / "out"), "--engine", "mock"]
     assert main(argv) == EXIT_OK
     report = json.loads((tmp_path / "out" / REPORT_JSON_FILENAME).read_text(encoding="utf-8"))
     assert report["manifest"]["name"] == "e2e-sample"
     assert report["summary"]["succeeded"] == 1
+    # The mock recognizes nothing: an empty prediction against the twinkle ground truth.
+    assert report["samples"][0]["correctness"]["notes"]["pitch"]["recall"] == 0.0
+    assert (
+        "Correctness over 1 sample(s) with ground truth: notes precision n/a, recall 0.000; "
+        "lyrics character error rate 1.000" in capsys.readouterr().out
+    )
+
+
+class _EchoEngine(MockEngine):
+    """Returns the ground truth as its recognition, except for 'bad' inputs, which fail."""
+
+    def recognize(
+        self,
+        input_path: Path,
+        output_dir: Path,
+        *,
+        timeout_seconds: float,
+        options: EngineOptions | None = None,
+    ) -> EngineResult:
+        if input_path.name.startswith("bad"):
+            options = {**(options or {}), "outcome": "failed"}
+        result = super().recognize(
+            input_path, output_dir, timeout_seconds=timeout_seconds, options=options
+        )
+        if result.success:
+            result.artifacts["musicxml"].write_bytes(TWINKLE.read_bytes())
+        return result
+
+
+def _correctness_manifest(tmp_path: Path) -> Path:
+    base = tmp_path / "set"
+    truth = _write(base / "truth.musicxml", TWINKLE.read_bytes())
+    samples = [
+        _sample(
+            name,
+            f"{name}.png",
+            _write(base / f"{name}.png", name.encode()),
+            ground_truth="truth.musicxml",
+            ground_truth_sha256=truth,
+        )
+        for name in ("good", "bad")
+    ]
+    samples.append(_sample("no-truth", "plain.png", _write(base / "plain.png", b"plain")))
+    path = base / "manifest.json"
+    path.write_text(json.dumps({"schema_version": "0.2.0", "samples": samples}), encoding="utf-8")
+    return path
+
+
+def test_report_measures_correctness_against_the_ground_truth(tmp_path: Path) -> None:
+    result = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    )
+    report = result.report
+    validate_benchmark_report(report)
+    good, bad, plain = report["samples"]
+
+    assert good["correctness"]["prediction"] == "score"
+    assert good["correctness"]["notes"]["pitch_and_duration"]["f1"] == 1.0
+    assert good["correctness"]["notes"]["ground_truth"] == 42
+    assert good["correctness"]["measures"]["accuracy"] == 1.0
+    assert good["correctness"]["lyrics"]["verses"][0]["character_error_rate"] == 0.0
+    assert good["correctness_problem"] is None
+    # A failed run is compared as a missing prediction, so it lowers recall.
+    assert bad["status"] == "failed"
+    assert bad["correctness"]["prediction"] == "missing"
+    assert bad["correctness"]["notes"]["pitch"]["recall"] == 0.0
+    assert plain["correctness"] is None
+    assert plain["correctness_problem"] is None
+    totals = report["summary"]["correctness"]
+    assert (totals["samples"], totals["predictions_missing"]) == (2, 1)
+    assert totals["notes"]["pitch_and_duration"]["recall"] == 0.5
+    markdown = render_markdown(report)
+    assert "## Correctness" in markdown
+    assert "| good | 1.000 / 1.000 | 1.000 | 1.000 | 12/12 | yes | yes |" in markdown
+    assert "| **Total** | 1.000 / 0.500 |" in markdown
+
+
+def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: Path) -> None:
+    report = _run(manifest_path, tmp_path / "out").report
+    old = copy.deepcopy(report)
+    old["schema_version"] = "0.1.0"
+    del old["summary"]["correctness"]
+    for entry in old["samples"]:
+        del entry["correctness_problem"]
+
+    validate_benchmark_report(old)
+    with pytest.raises(BenchmarkDocumentValidationError, match="correctness"):
+        validate_benchmark_report({**old, "schema_version": "0.2.0"})
 
 
 def test_success_rate_rounds_down() -> None:
     run = {"engine_version": None, "error_code": None, "duration_seconds": 0.0}
-    entries = [{"status": "succeeded", "run": run}] * 2999 + [
-        {"status": "failed", "run": {**run, "error_code": "engine_failed"}}
+    entries = [{"status": "succeeded", "run": run, "correctness": None}] * 2999 + [
+        {"status": "failed", "run": {**run, "error_code": "engine_failed"}, "correctness": None}
     ]
     assert benchmark._summary(entries)["success_rate"] == 0.999
 

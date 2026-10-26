@@ -349,6 +349,10 @@ def _run(
     return _EXIT_BY_ERROR_CODE.get(error["code"], EXIT_RUN_FAILED)
 
 
+def _rate(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.3f}"
+
+
 def _benchmark(
     manifest_path: Path,
     output_dir: Path,
@@ -423,6 +427,14 @@ def _benchmark(
         f"not run {summary['not_run']}, succeeded {summary['succeeded']}, "
         f"failed {summary['failed']}"
     )
+    totals = summary["correctness"]
+    if totals is not None:
+        notes = totals["notes"]["pitch_and_duration"]
+        print(
+            f"Correctness over {totals['samples']} sample(s) with ground truth: notes "
+            f"precision {_rate(notes['precision'])}, recall {_rate(notes['recall'])}; "
+            f"lyrics character error rate {_rate(totals['lyrics']['character_error_rate'])}"
+        )
     return EXIT_OK if result.all_succeeded else EXIT_RUN_FAILED
 
 

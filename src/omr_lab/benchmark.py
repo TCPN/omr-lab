@@ -20,6 +20,8 @@ from typing import Any
 
 from omr_lab import __version__
 from omr_lab.engines import Engine, EngineOptions
+from omr_lab.metrics import ComparisonTooLargeError, compare_scores, summarize
+from omr_lab.musicxml import MusicXmlError, load_musicxml
 from omr_lab.pipeline import (
     RUN_DOCUMENT_FILENAME,
     OutputDirectoryError,
@@ -33,6 +35,7 @@ from omr_lab.schemas.benchmark import (
     validate_benchmark_manifest,
     validate_benchmark_report,
 )
+from omr_lab.score import score_from_musicxml
 
 REPORT_JSON_FILENAME = "report.json"
 """File name of the report in the benchmark output directory."""
@@ -241,6 +244,7 @@ def _run_sample(
         "problem": None,
         "run": None,
         "correctness": None,
+        "correctness_problem": None,
     }
     if "excluded" in sample:
         entry["status"] = "excluded"
@@ -284,7 +288,35 @@ def _run_sample(
         "duration_seconds": document["timing"]["duration_seconds"],
         "warning_codes": dict(sorted(Counter(w["code"] for w in document["warnings"]).items())),
     }
+    if sample.get("ground_truth") is not None:
+        _measure_correctness(
+            entry, manifest.base_dir / sample["ground_truth"], document, runs_dir.parent
+        )
     return entry
+
+
+def _measure_correctness(
+    entry: dict[str, Any], ground_truth: Path, document: dict[str, Any], output_dir: Path
+) -> None:
+    """Fill the entry's correctness, or its correctness_problem, for a sample that ran.
+
+    A failed run, or one without a score, is compared as a missing prediction, so its
+    ground truth counts as missed rather than leaving the sample out of the totals.
+    """
+    try:
+        truth = score_from_musicxml(load_musicxml(ground_truth)).score
+    except MusicXmlError as exc:
+        # The ground truth's directory becomes <input_dir> in the message.
+        redact = _path_redactor(ground_truth, output_dir)
+        entry["correctness_problem"] = {
+            "code": "ground_truth_invalid",
+            "message": redact(str(exc)),
+        }
+        return
+    try:
+        entry["correctness"] = compare_scores(truth, document.get("score"))
+    except ComparisonTooLargeError as exc:
+        entry["correctness_problem"] = {"code": "comparison_too_large", "message": str(exc)}
 
 
 def _checksum_problem(
@@ -344,6 +376,9 @@ def _summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
             sorted(Counter(run["error_code"] for run in runs if run["error_code"]).items())
         ),
         "run_duration_seconds": round(sum(run["duration_seconds"] for run in runs), 3),
+        "correctness": summarize(
+            [entry["correctness"] for entry in entries if entry["correctness"] is not None]
+        ),
     }
 
 
@@ -372,7 +407,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         + (f" (success rate {rate:.1%})" if rate is not None else ""),
         "",
         "Succeeded means the pipeline completed; it is not a claim that the music was "
-        "recognized correctly. Correctness is not measured in this report.",
+        "recognized correctly. Correctness against the ground truth is in the next "
+        "section, for samples that have one (definitions: docs/metrics.md).",
         "",
         "| Sample | Status | Condition | Duration (s) | Error or reason | Warnings |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -396,7 +432,71 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"| {_markdown_cell(entry['condition'])} | {duration} "
             f"| {_markdown_cell(detail)} | {_markdown_cell(warnings)} |"
         )
+    lines += _markdown_correctness(report)
     return "\n".join(lines) + "\n"
+
+
+def _markdown_correctness(report: dict[str, Any]) -> list[str]:
+    totals = report["summary"]["correctness"]
+    problems = [entry for entry in report["samples"] if entry["correctness_problem"] is not None]
+    if totals is None and not problems:
+        return ["", "## Correctness", "", "No sample with a ground truth ran."]
+    lines = [
+        "",
+        "## Correctness",
+        "",
+        "Notes are pitch and duration together; P / R is precision / recall after "
+        "alignment. Lyrics CER is the character error rate over all verses.",
+        "",
+        "| Sample | Notes P / R | Pitch F1 | Duration F1 | Measures | Key | Time "
+        "| Chords F1 | Lyrics CER |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    rows = [(entry["id"], entry["correctness"]) for entry in report["samples"]]
+    if totals is not None:
+        rows.append(("**Total**", totals))
+    for name, correctness in rows:
+        if correctness is None:
+            continue
+        notes = correctness["notes"]
+        both = notes["pitch_and_duration"]
+        measures = correctness["measures"]
+        lines.append(
+            f"| {_markdown_cell(name)} | {_rate(both['precision'])} / {_rate(both['recall'])} "
+            f"| {_rate(notes['pitch']['f1'])} | {_rate(notes['duration']['f1'])} "
+            f"| {measures['exact']}/{max(measures['ground_truth'], measures['predicted'])} "
+            f"| {_signature_cell(correctness, 'key_signatures')} "
+            f"| {_signature_cell(correctness, 'time_signatures')} "
+            f"| {_rate(correctness['chord_symbols']['f1'])} "
+            f"| {_rate(_lyric_cer(correctness))} |"
+        )
+    for entry in problems:
+        problem = entry["correctness_problem"]
+        lines.append(
+            f"| {_markdown_cell(entry['id'])} | not measured: "
+            f"{_markdown_cell(problem['code'] + ': ' + problem['message'])} "
+            "| | | | | | | |"
+        )
+    return lines
+
+
+def _signature_cell(correctness: dict[str, Any], key: str) -> str:
+    if "samples" in correctness:  # summary totals
+        return f"{correctness[key + '_correct']}/{correctness['samples']}"
+    return "yes" if correctness[key]["correct"] else "no"
+
+
+def _lyric_cer(correctness: dict[str, Any]) -> float | None:
+    lyrics = correctness["lyrics"]
+    if "character_error_rate" in lyrics:  # summary totals
+        return lyrics["character_error_rate"]
+    errors = sum(verse["character_errors"] for verse in lyrics["verses"])
+    characters = sum(verse["ground_truth_characters"] for verse in lyrics["verses"])
+    return round(errors / characters, 4) if characters else None
+
+
+def _rate(value: float | None) -> str:
+    return "–" if value is None else f"{value:.3f}"
 
 
 def _markdown_cell(text: str) -> str:
