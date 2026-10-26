@@ -303,6 +303,19 @@ def test_chord_symbols_compare_meaning_not_display() -> None:
     assert (chords["matched"], chords["precision"], chords["recall"]) == (1, 0.5, 0.5)
 
 
+def test_a_chord_with_an_unreadable_member_never_matches() -> None:
+    known = _score([_note("C", chord=(("E", 4),))])
+    unknown = _score([_note("C", chord=(("E", 4),))])
+    _measures(unknown)[0]["events"][0]["pitches"].append(
+        {"step": None, "alter": 0, "octave": None, "ties": []}
+    )
+
+    for truth, predicted in ((unknown, known), (known, unknown)):
+        result = compare_scores(truth, predicted)
+        assert result["notes"]["pitch"]["matched"] == 0
+        assert result["measures"]["exact"] == 0
+
+
 def test_chord_degrees_match_in_any_order() -> None:
     flat_nine = {"value": 9, "alter": -1, "type": "alter"}
     sharp_eleven = {"value": 11, "alter": 1, "type": "alter"}

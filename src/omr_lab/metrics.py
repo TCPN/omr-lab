@@ -137,12 +137,16 @@ def _measure_items(measure: dict[str, Any]) -> tuple[_Item, ...]:
 
 
 def _pitches(event: dict[str, Any]) -> frozenset[_Pitch] | None:
-    pitches = frozenset(
-        _Pitch(step=p["step"], alter=Fraction(str(p["alter"])), octave=p["octave"])
-        for p in event["pitches"]
-        if p["step"] is not None and p["alter"] is not None and p["octave"] is not None
+    """The note's pitches, or None when any of them is unreadable: a chord with an
+    unknown member never matches, whichever side the unknown member is on."""
+    pitches = event["pitches"]
+    if not pitches or any(
+        p["step"] is None or p["alter"] is None or p["octave"] is None for p in pitches
+    ):
+        return None
+    return frozenset(
+        _Pitch(step=p["step"], alter=Fraction(str(p["alter"])), octave=p["octave"]) for p in pitches
     )
-    return pitches or None
 
 
 def _fraction(value: str | None) -> Fraction | None:
