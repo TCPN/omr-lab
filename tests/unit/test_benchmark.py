@@ -24,6 +24,8 @@ from omr_lab.cli import (
 )
 from omr_lab.engines import EngineOptions, EngineResult
 from omr_lab.engines.mock import MOCK_ENGINE_VERSION, MockEngine
+from omr_lab.metrics import compare_scores, summarize
+from omr_lab.musicxml import load_musicxml
 from omr_lab.pipeline import OutputDirectoryError
 from omr_lab.schemas import validate_run_document
 from omr_lab.schemas.benchmark import (
@@ -31,6 +33,7 @@ from omr_lab.schemas.benchmark import (
     validate_benchmark_manifest,
     validate_benchmark_report,
 )
+from omr_lab.score import score_from_musicxml
 
 E2E_MANIFEST = Path(__file__).resolve().parents[1] / "fixtures" / "e2e" / "manifest.json"
 TWINKLE = E2E_MANIFEST.parent / "twinkle.musicxml"
@@ -481,6 +484,19 @@ def test_report_measures_correctness_against_the_ground_truth(tmp_path: Path) ->
     assert "## Correctness" in markdown
     assert "| good | 1.000 / 1.000 | 1.000 | 1.000 | 12/12 | yes | yes |" in markdown
     assert "| **Total** | 1.000 / 0.500 |" in markdown
+
+    # Lyrics invented where the ground truth has none still show up.
+    predicted = score_from_musicxml(load_musicxml(TWINKLE)).score
+    instrumental = copy.deepcopy(predicted)
+    for measure in instrumental["parts"][0]["measures"]:
+        for event in measure["events"]:
+            if event["kind"] == "note":
+                event["lyrics"] = []
+    good["correctness"] = compare_scores(instrumental, predicted)
+    report["summary"]["correctness"] = summarize([good["correctness"], bad["correctness"]])
+    invented = good["correctness"]["lyrics"]["extra_predicted_verses"][0]["predicted_characters"]
+    assert invented > 0
+    assert f"| – (+{invented} chars) |" in render_markdown(report)
 
 
 def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: Path) -> None:

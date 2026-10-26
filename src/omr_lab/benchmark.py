@@ -482,7 +482,7 @@ def _correctness_row(name: str, correctness: dict[str, Any]) -> str:
         f"| {_signature_cell(correctness, 'key_signatures')} "
         f"| {_signature_cell(correctness, 'time_signatures')} "
         f"| {_rate(correctness['chord_symbols']['f1'])} "
-        f"| {_rate(_lyric_cer(correctness))} |"
+        f"| {_lyric_cell(correctness)} |"
     )
 
 
@@ -492,11 +492,15 @@ def _signature_cell(correctness: dict[str, Any], key: str) -> str:
     return "yes" if correctness[key]["correct"] else "no"
 
 
-def _lyric_cer(correctness: dict[str, Any]) -> float | None:
+def _lyric_cell(correctness: dict[str, Any]) -> str:
     lyrics = correctness["lyrics"]
-    if "character_error_rate" in lyrics:  # summary totals
-        return lyrics["character_error_rate"]
-    return lyric_totals([lyrics])["character_error_rate"]
+    if "character_error_rate" not in lyrics:  # one sample
+        lyrics = lyric_totals([lyrics])
+    rate = lyrics["character_error_rate"]
+    if rate is None and lyrics["predicted_characters"]:
+        # No ground-truth lyrics to divide by, but the engine invented some.
+        return f"– (+{lyrics['predicted_characters']} chars)"
+    return _rate(rate)
 
 
 def _rate(value: float | None) -> str:

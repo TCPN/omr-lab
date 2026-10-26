@@ -50,7 +50,7 @@ When several alignments have the same cost, a substitution is preferred, then a 
 | `lyrics.verses[]` | One entry per ground-truth lyric `number` (verse), compared with the predicted lyrics of the same number. Syllables are the lyric texts of the notes in order, NFC-normalized and stripped; extender-only lyrics (no text) are skipped. `syllable_errors` is the edit distance between the syllable lists, and `character_errors` is the edit distance between the characters of the joined syllables. The error rates divide by the ground-truth length, so they are 1.0 for a verse that was not recognized at all. They can exceed 1 when the prediction has many extra syllables. |
 | `lyrics.extra_predicted_verses[]` | One entry per predicted lyric number that the ground truth does not have, with the same fields as `verses[]`, compared with an empty ground truth: every syllable and character it has is an error, and its own rates are `null`. A verse recognized under the wrong number counts as missed and also appears here. |
 
-Rates are rounded to 4 decimals. A rate is `null` when its denominator is 0; for example, precision is `null` when nothing was predicted.
+Rates are rounded to 4 decimals. A rate is `null` when its denominator is 0; for example, precision is `null` when nothing was predicted. When a sample's ground truth has no lyrics but the prediction has some, the lyric error rate is `null`, and report.md shows the invented characters instead (`– (+N chars)`).
 
 ### Totals
 
