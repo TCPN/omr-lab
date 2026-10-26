@@ -107,5 +107,6 @@ The score model already holds exactly the fields to compare, and the metrics nee
 - Repeats, endings and navigation are not expanded. Barlines are not compared.
 - Ties, tuplet brackets, beams, clefs, tempo and dynamics are not compared. Durations already reflect tuplets.
 - Lyrics are matched by verse number. An engine that numbers verses differently (issue #28) scores 1.0 error on the verse, and its text is counted again as an extra predicted verse, so the error rate is about 2.0.
+- A `<key>` the converter cannot read (non-traditional, or an invalid `<fifths>`) is left out of the score with a warning, so it looks like no key signature and is taken as 0 fifths. It then matches C major. The warning shows in `ground_truth_warning_codes` or the run's `warning_codes`. Telling the two apart needs a placeholder key in the score model, which is a schema change for a later issue.
 - Chord symbols are compared as encoded. Two encodings of the same chord (for example `dominant` versus `major` with an added minor seventh) do not match.
 - A metric is only as good as the ground truth. Synthetic images (issue #23) have exact ground truth; real photos need a hand-checked MusicXML.
