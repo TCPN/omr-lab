@@ -534,6 +534,24 @@ def test_ground_truth_conversion_warnings_are_reported(tmp_path: Path) -> None:
     assert "Ground truth of good had warnings: " in render_markdown(report)
 
 
+def test_ground_truth_loader_warnings_are_reported(tmp_path: Path) -> None:
+    text = TWINKLE.read_text(encoding="utf-8")
+    start = text.index("<part ")
+    end = text.index(">", start)
+    broken = (text[:start] + "<part" + text[end:]).encode()  # the part has no id
+
+    report = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path, broken)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    ).report
+    good = report["samples"][0]
+
+    assert "musicxml_part_without_id" in good["ground_truth_warning_codes"]
+    assert good["correctness"]["parts"]["ground_truth"] == 0
+
+
 def test_a_comparison_too_large_to_align_still_counts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

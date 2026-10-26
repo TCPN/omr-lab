@@ -399,7 +399,7 @@
           ]
         },
         "ground_truth_warning_codes": {
-          "description": "Number of warnings per warning code from converting the ground truth to a score, when it was converted; null otherwise. Warnings mean the converter dropped or nulled part of the ground truth, so low scores may not be the engine's fault.",
+          "description": "Number of warnings per warning code from loading the ground truth and converting it to a score, when it was converted; null otherwise. Warnings mean the converter dropped or nulled part of the ground truth, so low scores may not be the engine's fault.",
           "oneOf": [
             {
               "type": "null"

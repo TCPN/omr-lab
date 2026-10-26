@@ -305,7 +305,8 @@ def _measure_correctness(
     ground truth counts as missed rather than leaving the sample out of the totals.
     """
     try:
-        conversion = score_from_musicxml(load_musicxml(ground_truth))
+        loaded = load_musicxml(ground_truth)
+        conversion = score_from_musicxml(loaded)
     except MusicXmlError as exc:
         # The ground truth's directory becomes <input_dir> in the message.
         redact = _path_redactor(ground_truth, output_dir)
@@ -317,7 +318,7 @@ def _measure_correctness(
     # The converter drops or nulls what it cannot read instead of failing, so the
     # report must say when the ground truth itself lost something.
     entry["ground_truth_warning_codes"] = dict(
-        sorted(Counter(str(w.code) for w in conversion.warnings).items())
+        sorted(Counter(str(w.code) for w in (*loaded.warnings, *conversion.warnings)).items())
     )
     try:
         entry["correctness"] = compare_scores(conversion.score, document.get("score"))
