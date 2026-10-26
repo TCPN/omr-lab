@@ -94,7 +94,7 @@ def summarize(correctness: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
         "predictions_missing": sum(c["prediction"] == "missing" for c in correctness),
         "key_signatures_correct": sum(c["key_signatures"]["correct"] for c in correctness),
         "time_signatures_correct": sum(c["time_signatures"]["correct"] for c in correctness),
-        "measures": {**measures, "accuracy": _ratio(measures["exact"], _measure_base(measures))},
+        "measures": {**measures, "accuracy": _ratio(measures["exact"], measures["compared"])},
         "notes": {
             "ground_truth": sum(c["notes"]["ground_truth"] for c in correctness),
             "predicted": sum(c["notes"]["predicted"] for c in correctness),
@@ -201,17 +201,17 @@ def _changes(values: Any) -> list[Any]:
 def _measures(truth: list[tuple[_Item, ...]], guess: list[tuple[_Item, ...]]) -> dict[str, Any]:
     pairs = _align(truth, guess, lambda a, b: 0.0 if _same_measure(a, b) else 1.0)
     exact = sum(1 for a, b in pairs if a is not None and b is not None and _same_measure(a, b))
-    counts = {"ground_truth": len(truth), "predicted": len(guess), "exact": exact}
-    return {**counts, "accuracy": _ratio(exact, _measure_base(counts))}
+    # The denominator is a count of its own, so that totals add each sample's
+    # max(ground_truth, predicted) and one sample's extra measures cannot cancel
+    # another sample's missing ones.
+    compared = max(len(truth), len(guess))
+    counts = {"ground_truth": len(truth), "predicted": len(guess), "compared": compared}
+    return {**counts, "exact": exact, "accuracy": _ratio(exact, compared)}
 
 
 def _same_measure(a: tuple[_Item, ...], b: tuple[_Item, ...]) -> bool:
     """Equal by the same rule as notes: an unreadable pitch or duration never matches."""
     return len(a) == len(b) and all(_item_cost(x, y) == 0 for x, y in zip(a, b, strict=True))
-
-
-def _measure_base(counts: dict[str, int]) -> int:
-    return max(counts["ground_truth"], counts["predicted"])
 
 
 def _item_cost(a: _Item, b: _Item) -> float:

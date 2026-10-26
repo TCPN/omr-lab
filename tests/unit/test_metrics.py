@@ -142,7 +142,13 @@ def test_identical_scores_are_fully_correct() -> None:
     assert result["prediction"] == "score"
     assert result["key_signatures"] == {"ground_truth": [1], "predicted": [1], "correct": True}
     assert result["time_signatures"]["predicted"] == ["4/4"]
-    assert result["measures"] == {"ground_truth": 2, "predicted": 2, "exact": 2, "accuracy": 1.0}
+    assert result["measures"] == {
+        "ground_truth": 2,
+        "predicted": 2,
+        "compared": 2,
+        "exact": 2,
+        "accuracy": 1.0,
+    }
     notes = result["notes"]
     assert (notes["ground_truth"], notes["predicted"]) == (5, 5)
     for key in ("pitch", "duration", "pitch_and_duration"):
@@ -205,7 +211,13 @@ def test_a_dropped_measure() -> None:
 
     result = compare_scores(_truth(), predicted)
 
-    assert result["measures"] == {"ground_truth": 2, "predicted": 1, "exact": 1, "accuracy": 0.5}
+    assert result["measures"] == {
+        "ground_truth": 2,
+        "predicted": 1,
+        "compared": 2,
+        "exact": 1,
+        "accuracy": 0.5,
+    }
     assert result["notes"]["pitch_and_duration"]["recall"] == 0.8
     assert result["notes"]["rests"]["recall"] == 0.0
 
@@ -401,6 +413,17 @@ def test_summary_sums_counts_before_computing_rates() -> None:
     assert totals["key_signatures_correct"] == 2
     assert totals["lyrics"]["verses"] == 2
     assert summarize([]) is None
+
+
+def test_extra_measures_in_one_sample_do_not_cancel_missing_ones_in_another() -> None:
+    truth = _score([_note("C")], [_note("D")])
+    extra = compare_scores(truth, _score([_note("C")], [_note("D")], [_note("E")]))
+    short = compare_scores(truth, _score([_note("C")]))
+
+    measures = summarize([extra, short])["measures"]
+
+    assert (measures["exact"], measures["compared"]) == (3, 5)
+    assert measures["accuracy"] == 0.6
 
 
 def test_worked_example_in_docs() -> None:

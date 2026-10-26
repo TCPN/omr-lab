@@ -485,12 +485,13 @@
       }
     },
     "measures": {
-      "description": "Measures whose notes and rests (pitches and durations) are identical after aligning the measure sequences; accuracy = exact / max(ground_truth, predicted).",
+      "description": "Measures whose notes and rests (pitches and durations) are identical after aligning the measure sequences. compared = max(ground_truth, predicted) per sample, summed in totals; accuracy = exact / compared.",
       "type": "object",
       "additionalProperties": false,
       "required": [
         "ground_truth",
         "predicted",
+        "compared",
         "exact",
         "accuracy"
       ],
@@ -499,6 +500,9 @@
           "$ref": "#/$defs/count"
         },
         "predicted": {
+          "$ref": "#/$defs/count"
+        },
+        "compared": {
           "$ref": "#/$defs/count"
         },
         "exact": {

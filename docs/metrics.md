@@ -43,7 +43,7 @@ When several alignments have the same cost, a substitution is preferred, then a 
 | --- | --- |
 | `key_signatures` | The key signatures (`fifths`) of the part in order, with consecutive repeats removed. When the first measure has no key event, the score starts in 0 fifths, because no key signature means no sharps or flats. (Engines leave out an empty `<key>`; C major must still match.) `correct` is true when the two lists are equal. `mode` is not compared. |
 | `time_signatures` | The same for `beats/beat_type`, for example `"3/4"`. A missing time signature is not assumed to be anything. |
-| `measures` | The measure sequences are aligned. A measure is `exact` when its notes and rests (pitches and durations, in order) are identical. `accuracy = exact / max(ground_truth, predicted)`, so extra measures count as errors too. |
+| `measures` | The measure sequences are aligned. A measure is `exact` when its notes and rests (pitches and durations, in order) are identical. `compared = max(ground_truth, predicted)` and `accuracy = exact / compared`, so extra measures count as errors too. |
 | `notes.pitch`, `notes.duration`, `notes.pitch_and_duration` | Among aligned note pairs, the ones whose pitch, duration, or both match. `precision = matched / predicted notes`, `recall = matched / ground-truth notes`, `f1 = 2 × matched / (ground_truth + predicted)`. |
 | `notes.rests` | The same for rests whose duration matches. |
 | `chord_symbols` | Harmony events in order; a match needs the same root, `chord_kind`, bass and degrees. `chord_kind_text` (how the kind is printed, for example `"m7"` or `"-7"`) is not compared. Precision, recall and F1 as for notes. |
@@ -54,7 +54,7 @@ Rates are rounded to 4 decimals. A rate is `null` when its denominator is 0; for
 
 ### Totals
 
-`summary.correctness` adds up the counts of all measured samples and computes the rates from the sums (micro-averaging), so a long song weighs more than a short one. `key_signatures_correct` and `time_signatures_correct` count samples. `predictions_missing` counts failed runs and runs without a score.
+`summary.correctness` adds up the counts of all measured samples and computes the rates from the sums (micro-averaging), so a long song weighs more than a short one. Measure accuracy divides by the sum of `compared`, so extra measures in one sample do not cancel missing measures in another. `key_signatures_correct` and `time_signatures_correct` count samples. `predictions_missing` counts failed runs and runs without a score.
 
 ## Worked example
 

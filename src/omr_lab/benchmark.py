@@ -464,7 +464,7 @@ def _markdown_correctness(report: dict[str, Any]) -> list[str]:
         lines.append(
             f"| {_markdown_cell(name)} | {_rate(both['precision'])} / {_rate(both['recall'])} "
             f"| {_rate(notes['pitch']['f1'])} | {_rate(notes['duration']['f1'])} "
-            f"| {measures['exact']}/{max(measures['ground_truth'], measures['predicted'])} "
+            f"| {measures['exact']}/{measures['compared']} "
             f"| {_signature_cell(correctness, 'key_signatures')} "
             f"| {_signature_cell(correctness, 'time_signatures')} "
             f"| {_rate(correctness['chord_symbols']['f1'])} "
