@@ -440,5 +440,6 @@ __all__ = [
     "MAX_ALIGNMENT_CELLS",
     "ComparisonTooLargeError",
     "compare_scores",
+    "lyric_totals",
     "summarize",
 ]
