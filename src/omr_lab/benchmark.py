@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import platform
 import stat
@@ -45,6 +46,8 @@ REPORT_MARKDOWN_FILENAME = "report.md"
 
 RUNS_DIRNAME = "runs"
 """Directory holding one pipeline run directory per sample, named by sample id."""
+
+logger = logging.getLogger(__name__)
 
 
 class ManifestError(ValueError):
@@ -303,7 +306,24 @@ def _measure_correctness(
 
     A failed run, or one without a score, is compared as a missing prediction, so its
     ground truth counts as missed rather than leaving the sample out of the totals.
+    An unexpected error is recorded on the sample, so the runs already done still get
+    their report.
     """
+    try:
+        _compare_with_ground_truth(entry, ground_truth, document, output_dir)
+    except Exception as exc:  # Recorded on the sample and logged, not swallowed.
+        logger.exception("Measuring correctness failed unexpectedly")
+        redact = _path_redactor(ground_truth, output_dir)
+        entry["correctness"] = None
+        entry["correctness_problem"] = {
+            "code": "comparison_failed",
+            "message": redact(f"Unexpected {type(exc).__name__}: {exc}"),
+        }
+
+
+def _compare_with_ground_truth(
+    entry: dict[str, Any], ground_truth: Path, document: dict[str, Any], output_dir: Path
+) -> None:
     try:
         loaded = load_musicxml(ground_truth)
         conversion = score_from_musicxml(loaded)

@@ -12,6 +12,7 @@ The metrics are about the music that a lead sheet needs: key and time signatures
 - `correctness_problem` says when a sample with a ground truth could not be measured normally:
   - `ground_truth_invalid`: the ground truth is not loadable MusicXML. `correctness` is `null`, and the sample is left out of the totals.
   - `comparison_too_large`: an alignment would need more than 4,000,000 cells, which is roughly 2,000 × 2,000 notes. Lead sheets are far below that, so this means the engine invented far too much. `correctness` is then computed without alignment: every ground-truth item counts as missed and every predicted item as extra. The sample still lowers the totals.
+  - `comparison_failed`: an unexpected error while measuring, for example a converter bug on an odd file. It is logged, `correctness` is `null`, and the rest of the benchmark and its report are not affected.
 - A ground truth that converts with warnings is still measured, and `ground_truth_warning_codes` lists the warnings. What the converter dropped or left unknown (a `null` duration, for example) never matches, so check these before blaming the engine.
 
 ## What is compared
@@ -108,5 +109,6 @@ The score model already holds exactly the fields to compare, and the metrics nee
 - Ties, tuplet brackets, beams, clefs, tempo and dynamics are not compared. Durations already reflect tuplets.
 - Lyrics are matched by verse number. An engine that numbers verses differently (issue #28) scores 1.0 error on the verse, and its text is counted again as an extra predicted verse, so the error rate is about 2.0.
 - A `<key>` the converter cannot read (non-traditional, or an invalid `<fifths>`) is left out of the score with a warning, so it looks like no key signature and is taken as 0 fifths. It then matches C major. The warning shows in `ground_truth_warning_codes` or the run's `warning_codes`. Telling the two apart needs a placeholder key in the score model, which is a schema change for a later issue.
+- The same holds for chord symbols: an unreadable `<bass>` becomes no bass, an incomplete `<degree>` is left out, and a missing `<kind>` becomes a null kind. Each then compares equal to the chord without that part, with the warning in the warning codes.
 - Chord symbols are compared as encoded. Two encodings of the same chord (for example `dominant` versus `major` with an added minor seventh) do not match.
 - A metric is only as good as the ground truth. Synthetic images (issue #23) have exact ground truth; real photos need a hand-checked MusicXML.
