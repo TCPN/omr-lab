@@ -2,11 +2,12 @@ import copy
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
 
-from omr_lab import benchmark, cli
+from omr_lab import benchmark, cli, metrics
 from omr_lab.benchmark import (
     REPORT_JSON_FILENAME,
     REPORT_MARKDOWN_FILENAME,
@@ -24,6 +25,8 @@ from omr_lab.cli import (
 )
 from omr_lab.engines import EngineOptions, EngineResult
 from omr_lab.engines.mock import MOCK_ENGINE_VERSION, MockEngine
+from omr_lab.metrics import compare_scores, summarize
+from omr_lab.musicxml import load_musicxml
 from omr_lab.pipeline import OutputDirectoryError
 from omr_lab.schemas import validate_run_document
 from omr_lab.schemas.benchmark import (
@@ -31,8 +34,10 @@ from omr_lab.schemas.benchmark import (
     validate_benchmark_manifest,
     validate_benchmark_report,
 )
+from omr_lab.score import score_from_musicxml
 
 E2E_MANIFEST = Path(__file__).resolve().parents[1] / "fixtures" / "e2e" / "manifest.json"
+TWINKLE = E2E_MANIFEST.parent / "twinkle.musicxml"
 
 # Fields that differ between two runs of the same benchmark on the same machine.
 NONDETERMINISTIC = ("generated_at",)
@@ -130,7 +135,10 @@ def test_report_records_every_sample_status(manifest_path: Path, tmp_path: Path)
     assert by_id["good"]["run"]["document"] == "runs/good/run.json"
     assert by_id["good"]["run"]["engine_version"] == MOCK_ENGINE_VERSION
     assert by_id["good"]["run"]["options"] == {"outcome": "succeeded"}
+    # The fixture's ground truth is not loadable MusicXML.
     assert by_id["good"]["correctness"] is None
+    assert by_id["good"]["correctness_problem"]["code"] == "ground_truth_invalid"
+    assert "<input_dir>" in by_id["good"]["correctness_problem"]["message"]
     assert by_id["bad"]["status"] == "failed"
     assert by_id["bad"]["run"]["error_code"] == "engine_failed"
     assert by_id["skipped"]["status"] == "excluded"
@@ -393,18 +401,267 @@ def test_cli_benchmark_exit_codes(
     )
 
 
-def test_cli_benchmark_succeeds_on_the_e2e_manifest(tmp_path: Path) -> None:
+def test_cli_benchmark_succeeds_on_the_e2e_manifest(tmp_path: Path, capsys) -> None:
     argv = ["benchmark", str(E2E_MANIFEST), "-o", str(tmp_path / "out"), "--engine", "mock"]
     assert main(argv) == EXIT_OK
     report = json.loads((tmp_path / "out" / REPORT_JSON_FILENAME).read_text(encoding="utf-8"))
     assert report["manifest"]["name"] == "e2e-sample"
     assert report["summary"]["succeeded"] == 1
+    # The mock recognizes nothing: an empty prediction against the twinkle ground truth.
+    assert report["samples"][0]["correctness"]["notes"]["pitch"]["recall"] == 0.0
+    assert (
+        "Correctness over 1 measured sample(s): notes precision n/a, recall 0.0000; "
+        "lyrics character error rate 1.0000" in capsys.readouterr().out
+    )
+
+
+def test_cli_benchmark_shows_invented_lyrics(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    instrumental = re.sub(r"<lyric\b.*?</lyric>", "", TWINKLE.read_text("utf-8"), flags=re.S)
+    manifest = _correctness_manifest(tmp_path, instrumental.encode())
+    monkeypatch.setitem(cli.ENGINES, "mock", _EchoEngine)
+
+    main(["benchmark", str(manifest), "-o", str(tmp_path / "out"), "--engine", "mock"])
+
+    assert re.search(r"lyrics character error rate n/a \(\+\d+ chars\)", capsys.readouterr().out)
+
+
+class _EchoEngine(MockEngine):
+    """Returns the ground truth as its recognition, except for 'bad' inputs, which fail."""
+
+    def recognize(
+        self,
+        input_path: Path,
+        output_dir: Path,
+        *,
+        timeout_seconds: float,
+        options: EngineOptions | None = None,
+    ) -> EngineResult:
+        if input_path.name.startswith("bad"):
+            options = {**(options or {}), "outcome": "failed"}
+        result = super().recognize(
+            input_path, output_dir, timeout_seconds=timeout_seconds, options=options
+        )
+        if result.success:
+            result.artifacts["musicxml"].write_bytes(TWINKLE.read_bytes())
+        return result
+
+
+def _correctness_manifest(tmp_path: Path, truth_bytes: bytes | None = None) -> Path:
+    base = tmp_path / "set"
+    truth = _write(base / "truth.musicxml", truth_bytes or TWINKLE.read_bytes())
+    samples = [
+        _sample(
+            name,
+            f"{name}.png",
+            _write(base / f"{name}.png", name.encode()),
+            ground_truth="truth.musicxml",
+            ground_truth_sha256=truth,
+        )
+        for name in ("good", "bad")
+    ]
+    samples.append(_sample("no-truth", "plain.png", _write(base / "plain.png", b"plain")))
+    path = base / "manifest.json"
+    path.write_text(json.dumps({"schema_version": "0.2.0", "samples": samples}), encoding="utf-8")
+    return path
+
+
+def test_report_measures_correctness_against_the_ground_truth(tmp_path: Path) -> None:
+    result = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    )
+    report = result.report
+    validate_benchmark_report(report)
+    good, bad, plain = report["samples"]
+
+    assert good["correctness"]["prediction"] == "score"
+    assert good["correctness"]["notes"]["pitch_and_duration"]["f1"] == 1.0
+    assert good["correctness"]["notes"]["ground_truth"] == 42
+    assert good["correctness"]["measures"]["accuracy"] == 1.0
+    assert good["correctness"]["lyrics"]["verses"][0]["character_error_rate"] == 0.0
+    assert good["correctness_problem"] is None
+    # A failed run is compared as a missing prediction, so it lowers recall.
+    assert bad["status"] == "failed"
+    assert bad["correctness"]["prediction"] == "missing"
+    assert bad["correctness"]["notes"]["pitch"]["recall"] == 0.0
+    assert plain["correctness"] is None
+    assert plain["correctness_problem"] is None
+    totals = report["summary"]["correctness"]
+    assert (totals["samples"], totals["predictions_missing"]) == (2, 1)
+    assert totals["notes"]["pitch_and_duration"]["recall"] == 0.5
+    markdown = render_markdown(report)
+    assert "## Correctness" in markdown
+    assert "| good | 1.0000 / 1.0000 | 1.0000 | 1.0000 | 12/12 | yes | yes |" in markdown
+    assert "| **Total** | 1.0000 / 0.5000 |" in markdown
+
+    # Lyrics invented where the ground truth has none still show up.
+    predicted = score_from_musicxml(load_musicxml(TWINKLE)).score
+    instrumental = copy.deepcopy(predicted)
+    for measure in instrumental["parts"][0]["measures"]:
+        for event in measure["events"]:
+            if event["kind"] == "note":
+                event["lyrics"] = []
+    good["correctness"] = compare_scores(instrumental, predicted)
+    report["summary"]["correctness"] = summarize([good["correctness"], bad["correctness"]])
+    invented = good["correctness"]["lyrics"]["extra_predicted_verses"][0]["predicted_characters"]
+    assert invented > 0
+    assert f"| – (+{invented} chars) |" in render_markdown(report)
+
+
+def test_ground_truth_conversion_warnings_are_reported(tmp_path: Path) -> None:
+    text = TWINKLE.read_text(encoding="utf-8")
+    start = text.index("<note")
+    duration = text.index("<duration>", start)
+    end = text.index("</duration>", duration) + len("</duration>")
+    broken = (text[:duration] + text[end:]).encode()  # first note without a duration
+
+    report = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path, broken)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    ).report
+    validate_benchmark_report(report)
+    good, _, plain = report["samples"]
+
+    assert good["ground_truth_warning_codes"]
+    assert good["correctness"]["notes"]["duration"]["matched"] == 41
+    assert plain["ground_truth_warning_codes"] is None
+    assert "Ground truth of good had warnings: " in render_markdown(report)
+
+
+def test_ground_truth_loader_warnings_are_reported(tmp_path: Path) -> None:
+    text = TWINKLE.read_text(encoding="utf-8")
+    start = text.index("<part ")
+    end = text.index(">", start)
+    broken = (text[:start] + "<part" + text[end:]).encode()  # the part has no id
+
+    report = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path, broken)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    ).report
+    good = report["samples"][0]
+
+    assert "musicxml_part_without_id" in good["ground_truth_warning_codes"]
+    assert good["correctness"]["parts"]["ground_truth"] == 0
+
+
+def test_a_comparison_too_large_to_align_still_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(metrics, "MAX_ALIGNMENT_CELLS", 10)
+
+    report = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    ).report
+    validate_benchmark_report(report)
+    good = report["samples"][0]
+
+    assert good["correctness_problem"]["code"] == "comparison_too_large"
+    assert good["correctness"]["notes"]["pitch_and_duration"]["matched"] == 0
+    totals = report["summary"]["correctness"]
+    assert totals["samples"] == 2
+    assert totals["notes"]["pitch_and_duration"]["recall"] == 0.0
+    assert "| good | not aligned, all counted wrong: comparison_too_large" in render_markdown(
+        report
+    )
+
+
+def test_an_unexpected_comparison_error_keeps_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = benchmark.compare_scores
+
+    def broken(truth, predicted, **kwargs):
+        if predicted is not None:
+            raise KeyError("parts")
+        return real(truth, predicted, **kwargs)
+
+    monkeypatch.setattr(benchmark, "compare_scores", broken)
+
+    result = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    )
+    validate_benchmark_report(result.report)
+    good = result.report["samples"][0]
+
+    # Scored as a missing prediction, so it still lowers the totals.
+    assert good["correctness"]["prediction"] == "missing"
+    assert result.report["summary"]["correctness"]["samples"] == 2
+    assert good["correctness_problem"] == {
+        "code": "comparison_failed",
+        "message": "Unexpected KeyError: 'parts'",
+    }
+    assert (tmp_path / "out" / REPORT_JSON_FILENAME).is_file()
+    assert "| good | scored as a missing prediction: comparison_failed" in render_markdown(
+        result.report
+    )
+
+
+def test_a_failing_unaligned_fallback_keeps_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = benchmark.compare_scores
+
+    def broken(truth, predicted, align=True):
+        if predicted is None:
+            return real(truth, predicted)
+        if align:
+            raise metrics.ComparisonTooLargeError("too large")
+        raise KeyError("parts")
+
+    monkeypatch.setattr(benchmark, "compare_scores", broken)
+
+    result = run_benchmark(
+        load_manifest(_correctness_manifest(tmp_path)),
+        tmp_path / "out",
+        _EchoEngine(),
+        timeout_seconds=60,
+    )
+    validate_benchmark_report(result.report)
+    good = result.report["samples"][0]
+
+    assert good["correctness_problem"]["code"] == "comparison_failed"
+    assert good["correctness"]["prediction"] == "missing"
+
+
+def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: Path) -> None:
+    report = _run(manifest_path, tmp_path / "out").report
+    old = copy.deepcopy(report)
+    old["schema_version"] = "0.1.0"
+    del old["summary"]["correctness"]
+    for entry in old["samples"]:
+        del entry["correctness_problem"]
+        del entry["ground_truth_warning_codes"]
+
+    validate_benchmark_report(old)
+    assert "This report predates correctness measurement." in render_markdown(old)
+    with pytest.raises(BenchmarkDocumentValidationError, match="correctness"):
+        validate_benchmark_report({**old, "schema_version": "0.2.0"})
+
+
+def test_rates_are_shown_as_rounded() -> None:
+    # 2999/3000 and 1/30000 as metrics rounds them: shown as is, never as 1 or 0.
+    assert benchmark.format_rate(0.9996) == "0.9996"
+    assert benchmark.format_rate(0.0001) == "0.0001"
 
 
 def test_success_rate_rounds_down() -> None:
     run = {"engine_version": None, "error_code": None, "duration_seconds": 0.0}
-    entries = [{"status": "succeeded", "run": run}] * 2999 + [
-        {"status": "failed", "run": {**run, "error_code": "engine_failed"}}
+    entries = [{"status": "succeeded", "run": run, "correctness": None}] * 2999 + [
+        {"status": "failed", "run": {**run, "error_code": "engine_failed"}, "correctness": None}
     ]
     assert benchmark._summary(entries)["success_rate"] == 0.999
 

@@ -18,7 +18,13 @@ from pathlib import Path
 from typing import TextIO
 
 from omr_lab import __version__
-from omr_lab.benchmark import ManifestError, load_manifest, run_benchmark
+from omr_lab.benchmark import (
+    ManifestError,
+    format_lyric_error_rate,
+    format_rate,
+    load_manifest,
+    run_benchmark,
+)
 from omr_lab.engines import AudiverisEngine, Engine, EngineOptions, EngineOptionValue
 from omr_lab.engines.mock import MockEngine
 from omr_lab.pipeline import (
@@ -423,6 +429,15 @@ def _benchmark(
         f"not run {summary['not_run']}, succeeded {summary['succeeded']}, "
         f"failed {summary['failed']}"
     )
+    totals = summary["correctness"]
+    if totals is not None:
+        notes = totals["notes"]["pitch_and_duration"]
+        print(
+            f"Correctness over {totals['samples']} measured sample(s): notes precision "
+            f"{format_rate(notes['precision'], 'n/a')}, "
+            f"recall {format_rate(notes['recall'], 'n/a')}; lyrics character error rate "
+            f"{format_lyric_error_rate(totals['lyrics'], 'n/a')}"
+        )
     return EXIT_OK if result.all_succeeded else EXIT_RUN_FAILED
 
 

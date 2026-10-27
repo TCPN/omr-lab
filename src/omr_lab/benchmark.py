@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import platform
 import stat
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +22,8 @@ from typing import Any
 
 from omr_lab import __version__
 from omr_lab.engines import Engine, EngineOptions
+from omr_lab.metrics import ComparisonTooLargeError, compare_scores, lyric_totals, summarize
+from omr_lab.musicxml import MusicXmlError, load_musicxml
 from omr_lab.pipeline import (
     RUN_DOCUMENT_FILENAME,
     OutputDirectoryError,
@@ -33,6 +37,7 @@ from omr_lab.schemas.benchmark import (
     validate_benchmark_manifest,
     validate_benchmark_report,
 )
+from omr_lab.score import score_from_musicxml
 
 REPORT_JSON_FILENAME = "report.json"
 """File name of the report in the benchmark output directory."""
@@ -42,6 +47,8 @@ REPORT_MARKDOWN_FILENAME = "report.md"
 
 RUNS_DIRNAME = "runs"
 """Directory holding one pipeline run directory per sample, named by sample id."""
+
+logger = logging.getLogger(__name__)
 
 
 class ManifestError(ValueError):
@@ -241,6 +248,8 @@ def _run_sample(
         "problem": None,
         "run": None,
         "correctness": None,
+        "correctness_problem": None,
+        "ground_truth_warning_codes": None,
     }
     if "excluded" in sample:
         entry["status"] = "excluded"
@@ -284,7 +293,67 @@ def _run_sample(
         "duration_seconds": document["timing"]["duration_seconds"],
         "warning_codes": dict(sorted(Counter(w["code"] for w in document["warnings"]).items())),
     }
+    if sample.get("ground_truth") is not None:
+        _measure_correctness(
+            entry, manifest.base_dir / sample["ground_truth"], document, runs_dir.parent
+        )
     return entry
+
+
+def _measure_correctness(
+    entry: dict[str, Any], ground_truth: Path, document: dict[str, Any], output_dir: Path
+) -> None:
+    """Fill the entry's correctness, or its correctness_problem, for a sample that ran.
+
+    A failed run, or one without a score, is compared as a missing prediction, so its
+    ground truth counts as missed rather than leaving the sample out of the totals.
+    An unexpected error is logged and recorded on the sample, so the runs already done
+    still get their report.
+    """
+    # The ground truth's directory becomes <input_dir> in messages.
+    redact = _path_redactor(ground_truth, output_dir)
+    try:
+        loaded = load_musicxml(ground_truth)
+        conversion = score_from_musicxml(loaded)
+    except MusicXmlError as exc:
+        entry["correctness_problem"] = {"code": "ground_truth_invalid", "message": redact(str(exc))}
+        return
+    except Exception as exc:  # Recorded on the sample and logged, not swallowed.
+        logger.exception("Converting the ground truth failed unexpectedly")
+        entry["correctness_problem"] = _comparison_failed(exc, redact)
+        return
+    # The converter drops or nulls what it cannot read instead of failing, so the
+    # report must say when the ground truth itself lost something.
+    entry["ground_truth_warning_codes"] = dict(
+        sorted(Counter(str(w.code) for w in (*loaded.warnings, *conversion.warnings)).items())
+    )
+    truth = conversion.score
+    predicted = document.get("score")
+    try:
+        try:
+            entry["correctness"] = compare_scores(truth, predicted)
+        except ComparisonTooLargeError as exc:
+            # Still counted, with nothing matched, so that a run inventing far too much
+            # lowers the totals instead of leaving them.
+            entry["correctness_problem"] = {"code": "comparison_too_large", "message": str(exc)}
+            entry["correctness"] = compare_scores(truth, predicted, align=False)
+    except Exception as exc:  # Recorded on the sample and logged, not swallowed.
+        logger.exception("Measuring correctness failed unexpectedly")
+        entry["correctness_problem"] = _comparison_failed(exc, redact)
+        # Scored as a missing prediction, so that output which breaks the metrics
+        # lowers the totals like a failed run instead of leaving them.
+        try:
+            entry["correctness"] = compare_scores(truth, None)
+        except Exception:
+            logger.exception("Measuring the ground truth alone failed too")
+            entry["correctness"] = None
+
+
+def _comparison_failed(exc: Exception, redact: Callable[[str], str]) -> dict[str, str]:
+    return {
+        "code": "comparison_failed",
+        "message": redact(f"Unexpected {type(exc).__name__}: {exc}"),
+    }
 
 
 def _checksum_problem(
@@ -344,11 +413,15 @@ def _summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
             sorted(Counter(run["error_code"] for run in runs if run["error_code"]).items())
         ),
         "run_duration_seconds": round(sum(run["duration_seconds"] for run in runs), 3),
+        "correctness": summarize(
+            [entry["correctness"] for entry in entries if entry["correctness"] is not None]
+        ),
     }
 
 
 def render_markdown(report: dict[str, Any]) -> str:
-    """A short human-readable view of a report; report.json stays the full record."""
+    """A short human-readable view of a report of any supported schema version;
+    report.json stays the full record."""
     manifest = report["manifest"]
     environment = report["environment"]
     engine = report["engine"]
@@ -372,7 +445,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         + (f" (success rate {rate:.1%})" if rate is not None else ""),
         "",
         "Succeeded means the pipeline completed; it is not a claim that the music was "
-        "recognized correctly. Correctness is not measured in this report.",
+        "recognized correctly. Correctness against the ground truth is in the next "
+        "section, for samples that have one (definitions: docs/metrics.md).",
         "",
         "| Sample | Status | Condition | Duration (s) | Error or reason | Warnings |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -396,7 +470,99 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"| {_markdown_cell(entry['condition'])} | {duration} "
             f"| {_markdown_cell(detail)} | {_markdown_cell(warnings)} |"
         )
+    lines += _markdown_correctness(report)
     return "\n".join(lines) + "\n"
+
+
+def _markdown_correctness(report: dict[str, Any]) -> list[str]:
+    if "correctness" not in report["summary"]:  # schema 0.1.0
+        return ["", "## Correctness", "", "This report predates correctness measurement."]
+    totals = report["summary"]["correctness"]
+    problems = [entry for entry in report["samples"] if entry["correctness_problem"] is not None]
+    if totals is None and not problems:
+        return ["", "## Correctness", "", "No sample with a ground truth ran."]
+    lines = [
+        "",
+        "## Correctness",
+        "",
+        "Notes are pitch and duration together; P / R is precision / recall after "
+        "alignment. Lyrics CER is the character error rate over all verses, extra "
+        "predicted verses included. The total leaves out samples that were not measured.",
+        "",
+        "| Sample | Notes P / R | Pitch F1 | Duration F1 | Measures | Key | Time "
+        "| Chords F1 | Lyrics CER |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for entry in report["samples"]:
+        if entry["correctness"] is not None:
+            lines.append(_correctness_row(entry["id"], entry["correctness"], is_total=False))
+    for entry in problems:
+        problem = entry["correctness_problem"]
+        if entry["correctness"] is None:
+            state = "not measured"
+        elif entry["correctness"]["prediction"] == "missing":
+            state = "scored as a missing prediction"
+        else:
+            state = "not aligned, all counted wrong"
+        lines.append(
+            f"| {_markdown_cell(entry['id'])} | {state}: "
+            f"{_markdown_cell(problem['code'] + ': ' + problem['message'])} "
+            "| | | | | | | |"
+        )
+    if totals is not None:
+        lines.append(_correctness_row("**Total**", totals, is_total=True))
+    for entry in report["samples"]:
+        if entry.get("ground_truth_warning_codes"):
+            codes = ", ".join(
+                f"{code} × {n}" for code, n in entry["ground_truth_warning_codes"].items()
+            )
+            lines += ["", f"Ground truth of {_markdown_cell(entry['id'])} had warnings: {codes}."]
+    return lines
+
+
+def _correctness_row(name: str, correctness: dict[str, Any], *, is_total: bool) -> str:
+    """One table row: a sample's correctness object, or summary.correctness, which
+    holds counts instead of per-sample results for signatures and lyrics."""
+    notes = correctness["notes"]
+    both = notes["pitch_and_duration"]
+    measures = correctness["measures"]
+    return (
+        f"| {_markdown_cell(name)} "
+        f"| {format_rate(both['precision'])} / {format_rate(both['recall'])} "
+        f"| {format_rate(notes['pitch']['f1'])} | {format_rate(notes['duration']['f1'])} "
+        f"| {measures['exact']}/{measures['compared']} "
+        f"| {_signature_cell(correctness, 'key_signatures', is_total)} "
+        f"| {_signature_cell(correctness, 'time_signatures', is_total)} "
+        f"| {format_rate(correctness['chord_symbols']['f1'])} "
+        f"| {_lyric_cell(correctness, is_total)} |"
+    )
+
+
+def _signature_cell(correctness: dict[str, Any], key: str, is_total: bool) -> str:
+    if is_total:
+        return f"{correctness[key + '_correct']}/{correctness['samples']}"
+    return "yes" if correctness[key]["correct"] else "no"
+
+
+def _lyric_cell(correctness: dict[str, Any], is_total: bool) -> str:
+    lyrics = correctness["lyrics"]
+    return format_lyric_error_rate(lyrics if is_total else lyric_totals([lyrics]))
+
+
+def format_rate(value: float | None, missing: str = "–") -> str:
+    """A rate with all 4 of its decimals (it is already rounded against the engine), or
+    ``missing`` when it is null."""
+    return missing if value is None else f"{value:.4f}"
+
+
+def format_lyric_error_rate(totals: dict[str, Any], missing: str = "–") -> str:
+    """The character error rate of lyric totals. When the ground truth has no lyrics but
+    the engine invented some, the rate is null; the invented characters are shown then,
+    so that this case does not look like a score without lyrics on either side."""
+    rate = totals["character_error_rate"]
+    if rate is None and totals["predicted_characters"]:
+        return f"{missing} (+{totals['predicted_characters']} chars)"
+    return format_rate(rate, missing)
 
 
 def _markdown_cell(text: str) -> str:
@@ -411,6 +577,8 @@ __all__ = [
     "Manifest",
     "ManifestError",
     "collect_environment",
+    "format_lyric_error_rate",
+    "format_rate",
     "load_manifest",
     "render_markdown",
     "run_benchmark",

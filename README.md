@@ -30,7 +30,7 @@ uv run omr-lab run score.png -o runs/0001                # recognize with Audive
 uv run omr-lab run score.png -o runs/0002 --engine mock  # try the CLI without an engine
 ```
 
-`run` writes `runs/0001/run.json` (the run document, [docs/json-schema.md](docs/json-schema.md)) and the engine's raw output under `runs/0001/raw/`, and exits with a documented code (0 on success). Options, output and exit codes are in [docs/cli.md](docs/cli.md). `omr-lab benchmark MANIFEST -o DIR` runs every sample of a benchmark manifest and writes a report ([docs/benchmark.md](docs/benchmark.md)). `omr-lab synthesize SPEC -o DIR` renders and degrades a synthetic corpus with exact ground truth ([docs/synthetic-corpus.md](docs/synthetic-corpus.md)); it needs `uv sync --extra synthetic`. The mock engine recognizes nothing; real recognition needs Audiveris (see `docs/engines/audiveris.md`).
+`run` writes `runs/0001/run.json` (the run document, [docs/json-schema.md](docs/json-schema.md)) and the engine's raw output under `runs/0001/raw/`, and exits with a documented code (0 on success). Options, output and exit codes are in [docs/cli.md](docs/cli.md). `omr-lab benchmark MANIFEST -o DIR` runs every sample of a benchmark manifest and writes a report, including correctness against the ground truth ([docs/benchmark.md](docs/benchmark.md), [docs/metrics.md](docs/metrics.md)). `omr-lab synthesize SPEC -o DIR` renders and degrades a synthetic corpus with exact ground truth ([docs/synthetic-corpus.md](docs/synthetic-corpus.md)); it needs `uv sync --extra synthetic`. The mock engine recognizes nothing; real recognition needs Audiveris (see `docs/engines/audiveris.md`).
 
 ## Test selection
 Tests that need more than a plain Python environment carry a pytest marker:
@@ -72,6 +72,7 @@ OMR_LAB_E2E_OUTPUT=outputs/e2e uv run pytest -m integration -s tests/integration
 - `docs/pipeline.md`: pipeline orchestration, output layout, and the mock engine
 - `docs/cli.md`: `omr-lab doctor`, `omr-lab run`, `omr-lab benchmark` and `omr-lab synthesize`, options and exit codes
 - `docs/benchmark.md`: benchmark manifest and report formats
+- `docs/metrics.md`: correctness metrics (notes, measures, signatures, chord symbols, lyrics), with a worked example
 - `docs/synthetic-corpus.md`: synthetic corpus specification, degradations and reproducibility
 - `docs/musicxml.md`: MusicXML loading, validation errors/warnings, and XML safety
 - `docs/governance/`: roles, workflow, milestones and labels

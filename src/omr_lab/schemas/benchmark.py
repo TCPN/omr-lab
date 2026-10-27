@@ -17,8 +17,11 @@ BENCHMARK_MANIFEST_SCHEMA_VERSION = "0.2.0"
 SUPPORTED_BENCHMARK_MANIFEST_SCHEMA_VERSIONS: tuple[str, ...] = ("0.1.0", "0.2.0")
 """Manifest schema versions that this package reads."""
 
-BENCHMARK_REPORT_SCHEMA_VERSION = "0.1.0"
+BENCHMARK_REPORT_SCHEMA_VERSION = "0.2.0"
 """Version of the benchmark report schema that this package writes."""
+
+SUPPORTED_BENCHMARK_REPORT_SCHEMA_VERSIONS: tuple[str, ...] = ("0.1.0", "0.2.0")
+"""Report schema versions that this package validates."""
 
 
 class BenchmarkDocumentValidationError(ValueError):
@@ -50,8 +53,14 @@ def load_benchmark_manifest_schema(
     return _load("benchmark-manifest", version)
 
 
-def load_benchmark_report_schema() -> dict[str, Any]:
-    return _load("benchmark-report", BENCHMARK_REPORT_SCHEMA_VERSION)
+def load_benchmark_report_schema(version: str = BENCHMARK_REPORT_SCHEMA_VERSION) -> dict[str, Any]:
+    if version not in SUPPORTED_BENCHMARK_REPORT_SCHEMA_VERSIONS:
+        supported = ", ".join(SUPPORTED_BENCHMARK_REPORT_SCHEMA_VERSIONS)
+        raise ValueError(
+            f"Unsupported benchmark report schema version {version!r}; "
+            f"supported versions: {supported}."
+        )
+    return _load("benchmark-report", version)
 
 
 @cache
@@ -84,14 +93,21 @@ def validate_benchmark_manifest(document: Any) -> None:
 
 
 def validate_benchmark_report(document: Any) -> None:
-    """Validate a decoded report; raise BenchmarkDocumentValidationError."""
-    _validate("benchmark-report", BENCHMARK_REPORT_SCHEMA_VERSION, "report", document)
+    """Validate a decoded report; raise BenchmarkDocumentValidationError.
+
+    The schema is chosen by the document's ``schema_version`` as for manifests.
+    """
+    version = document.get("schema_version") if isinstance(document, dict) else None
+    if version not in SUPPORTED_BENCHMARK_REPORT_SCHEMA_VERSIONS:
+        version = BENCHMARK_REPORT_SCHEMA_VERSION
+    _validate("benchmark-report", version, "report", document)
 
 
 __all__ = [
     "BENCHMARK_MANIFEST_SCHEMA_VERSION",
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "SUPPORTED_BENCHMARK_MANIFEST_SCHEMA_VERSIONS",
+    "SUPPORTED_BENCHMARK_REPORT_SCHEMA_VERSIONS",
     "BenchmarkDocumentValidationError",
     "load_benchmark_manifest_schema",
     "load_benchmark_report_schema",

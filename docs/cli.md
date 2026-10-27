@@ -49,7 +49,7 @@ A directory that has `raw/` but no `run.json` is reported as an aborted run (a r
 uv run omr-lab benchmark tests/fixtures/e2e/manifest.json -o benchmarks/reports/generated/0001 --engine mock
 ```
 
-`MANIFEST` and `-o`/`--output DIR` (missing or empty) are required; `--engine`, `--option` and `--timeout` are as for `run` and apply to every sample. It prints the report paths and one line per sample. The manifest, report and exit codes are described in [benchmark.md](benchmark.md); the table below is for `doctor` and `run`.
+`MANIFEST` and `-o`/`--output DIR` (missing or empty) are required; `--engine`, `--option` and `--timeout` are as for `run` and apply to every sample. It prints the report paths, one line per sample and, when samples have a ground truth, the total note precision and recall and the lyrics character error rate ([metrics.md](metrics.md)). The manifest, report and exit codes are described in [benchmark.md](benchmark.md); the table below is for `doctor` and `run`.
 
 ## synthesize
 
