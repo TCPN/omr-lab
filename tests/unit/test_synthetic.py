@@ -349,6 +349,9 @@ def test_place_shrinks_the_page_onto_the_background(degradations, page) -> None:
         "texture_seed": 1,
     }
     placed = degradations.apply(page, "place", params)
+    for offset in (2.0, -0.5, float("nan")):
+        with pytest.raises(ValueError, match="offset_x from 0 to 1"):
+            degradations.apply(page, "place", {**params, "offset_x": offset})
 
     assert placed.size == page.size
     assert placed.getpixel((0, 299)) == 80  # background

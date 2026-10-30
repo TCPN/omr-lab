@@ -214,6 +214,9 @@ def _place(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     The page keeps its aspect ratio and loses resolution, as in a photo where the page
     fills only part of the frame; nothing is cut off.
     """
+    for name in ("offset_x", "offset_y"):
+        if not 0 <= float(params[name]) <= 1:  # also rejects NaN
+            raise ValueError(f"Degradation 'place' needs {name} from 0 to 1")
     width, height = image.size
     scale = float(params["scale"])
     page = image.resize(
@@ -237,7 +240,7 @@ def _texture(shape: tuple[int, int], seed: int) -> np.ndarray:
     total = np.zeros(shape)
     for cell in _TEXTURE_CELLS:
         grid = rng.normal(size=(math.ceil(height / cell) + 1, math.ceil(width / cell) + 1))
-        coarse = Image.fromarray(grid.astype(np.float32), mode="F")
+        coarse = Image.fromarray(grid.astype(np.float32))
         total += np.asarray(coarse.resize((width, height), Image.Resampling.BICUBIC))
     deviation = total.std()
     return total / deviation if deviation > 0 else total
