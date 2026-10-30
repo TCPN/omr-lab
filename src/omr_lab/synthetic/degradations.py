@@ -285,6 +285,8 @@ _FOLD_BAND = 0.005
 _UNDULATION_CELL = 0.5
 # A field this steep or steeper could fold the page over itself and hide music.
 _MAX_SLOPE = 0.95
+# Rows per tile when shading and warping.
+_TILE_ROWS = 256
 
 
 def _draw_warp(params: ResolvedParams, rng: np.random.Generator) -> ResolvedParams:
@@ -319,38 +321,43 @@ def _draw_warp(params: ResolvedParams, rng: np.random.Generator) -> ResolvedPara
 def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     """Move each pixel along a smooth displacement field with kinks at fold lines.
 
-    The canvas grows by the largest shift, then is trimmed to the moved page, so no part
-    of the page is cut off.
+    The canvas grows to hold the whole moved page, then is trimmed to it, so no part of
+    the page is cut off. Rows are processed in tiles, so memory stays bounded however
+    far the field moves the page.
     """
-    pixels = np.asarray(image, dtype=np.float64)
+    pixels = np.array(image, dtype=np.float64)
     height, width = pixels.shape
     field = _WarpField(params, width, height)
-    pixels = field.shade(pixels)
-
-    # The largest shift on the page, and a bound on the field's slope everywhere: content
-    # at distance t outside the page moves at most largest + slope * t, so a margin of
-    # largest / (1 - slope) holds every moved pixel.
-    ys, xs = np.mgrid[0:height, 0:width].astype(np.float64)
-    dx, dy = field.shift(xs, ys)
-    largest = float(np.sqrt(dx**2 + dy**2).max())
-    del xs, ys, dx, dy
     slope = field.slope_bound()
     if slope >= _MAX_SLOPE:
         raise ValueError(
             f"Degradation 'warp' is too steep (slope up to {slope:.2f}); use smaller values"
         )
-    pad = math.ceil(largest / (1 - slope)) + 2
+    field.shade(pixels)
 
-    ys, xs = np.mgrid[-pad : height + pad, -pad : width + pad].astype(np.float64)
-    dx, dy = field.shift(xs, ys)
-    source_x, source_y = xs - dx, ys - dy
-    del xs, ys, dx, dy
-    warped = _sample(pixels, source_x, source_y, WHITE)
-    coverage = _sample(np.ones_like(pixels), source_x, source_y, 0.0)
-    rows = np.flatnonzero(coverage.max(axis=1) > 0)
-    columns = np.flatnonzero(coverage.max(axis=0) > 0)
-    warped = warped[rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1]
-    return _to_image(warped)
+    left, top, right, bottom = field.canvas()
+    warped = np.empty((bottom - top, right - left), dtype=np.uint8)
+    covered_rows = np.zeros(bottom - top, dtype=bool)
+    covered_columns = np.zeros(right - left, dtype=bool)
+    for start in range(top, bottom, _TILE_ROWS):
+        stop = min(start + _TILE_ROWS, bottom)
+        xs, ys = _grid(left, right, start, stop)
+        dx, dy = field.shift(xs, ys)
+        source_x, source_y = xs - dx, ys - dy
+        tile = _sample(pixels, source_x, source_y, WHITE)
+        warped[start - top : stop - top] = np.clip(np.rint(tile), 0, 255)
+        # Where a bilinear sample has some weight on the page.
+        covered = (source_x > -1) & (source_x < width) & (source_y > -1) & (source_y < height)
+        covered_rows[start - top : stop - top] = covered.any(axis=1)
+        covered_columns |= covered.any(axis=0)
+    rows, columns = np.flatnonzero(covered_rows), np.flatnonzero(covered_columns)
+    return Image.fromarray(warped[rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1])
+
+
+def _grid(left: int, right: int, top: int, bottom: int) -> tuple[np.ndarray, np.ndarray]:
+    """x and y coordinates of every pixel in a rectangle, as two arrays of its shape."""
+    ys, xs = np.mgrid[top:bottom, left:right]
+    return xs.astype(np.float64), ys.astype(np.float64)
 
 
 class _WarpField:
@@ -381,27 +388,64 @@ class _WarpField:
         # for each of the four partial derivatives.
         return bound + 2 * 3 * self.undulation / self.cell
 
-    def _line(self, fold: list[float], xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+    def largest_shift(self) -> float:
+        """An upper bound of the shift's length anywhere on the page, in pixels."""
+        corners = [(0, 0), (self.width, 0), (0, self.height), (self.width, self.height)]
+        largest = sum(
+            abs(fold[3]) * max(abs(self._line(fold, x, y)) for x, y in corners)
+            for fold in self.folds
+        )
+        largest += sum(abs(bend[3]) * self.shorter for bend in self.bends)
+        # Each undulation component is a weighted mean of grid values from -1 to 1.
+        return largest + math.sqrt(2) * self.undulation
+
+    def canvas(self) -> tuple[int, int, int, int]:
+        """A rectangle (left, top, right, bottom) of output positions that holds every
+        moved page pixel, in input pixel coordinates.
+
+        Page pixel p ends up at the q with q - shift(q) = p. Since the shift's slope L is
+        below 1, |shift(q) - shift(p)| <= L |shift(q)| <= L M / (1 - L), where M is the
+        largest shift on the page; so q lies within that margin of p + shift(p). Along a
+        row, x + shift_x grows with x (its slope is at least 1 - L), so its extremes lie
+        on the page's left and right edges; likewise y on the top and bottom edges.
+        """
+        slope = self.slope_bound()
+        margin = slope * self.largest_shift() / (1 - slope)
+        last_x, last_y = self.width - 1, self.height - 1
+        xs = np.arange(self.width, dtype=np.float64)
+        ys = np.arange(self.height, dtype=np.float64)
+        left_x, _ = self.shift(np.zeros_like(ys), ys)
+        right_x, _ = self.shift(np.full_like(ys, last_x), ys)
+        _, top_y = self.shift(xs, np.zeros_like(xs))
+        _, bottom_y = self.shift(xs, np.full_like(xs, last_y))
+        return (
+            math.floor(float(left_x.min()) - margin) - 1,
+            math.floor(float(top_y.min()) - margin) - 1,
+            math.ceil(last_x + float(right_x.max()) + margin) + 2,
+            math.ceil(last_y + float(bottom_y.max()) + margin) + 2,
+        )
+
+    def _line(self, fold: list[float], xs: Any, ys: Any) -> Any:
         """Signed distance in pixels from the fold line."""
         x, y, angle = fold[0] * self.width, fold[1] * self.height, np.deg2rad(fold[2])
         return (xs - x) * -np.sin(angle) + (ys - y) * np.cos(angle)
 
-    def shade(self, pixels: np.ndarray) -> np.ndarray:
-        """Shade each crease: lighter on one side of the line and darker on the other.
+    def shade(self, pixels: np.ndarray) -> None:
+        """Shade each crease in place: lighter on one side of the line, darker on the other.
 
         The profile is a Gaussian's derivative scaled to peak at the fold's shade; a
         positive shade lightens the side the line's normal points to.
         """
-        if not self.folds:
-            return pixels
-        ys, xs = np.mgrid[0 : self.height, 0 : self.width].astype(np.float64)
         sigma = max(_FOLD_BAND * self.shorter, 0.5)
-        for fold in self.folds:
-            distance = self._line(fold, xs, ys) / sigma
-            amount = fold[5] * distance * np.exp(0.5 - 0.5 * distance**2)
-            lighter = np.maximum(amount, 0)
-            pixels = pixels + lighter * (WHITE - pixels) - np.maximum(-amount, 0) * pixels
-        return pixels
+        for start in range(0, self.height if self.folds else 0, _TILE_ROWS):
+            stop = min(start + _TILE_ROWS, self.height)
+            xs, ys = _grid(0, self.width, start, stop)
+            tile = pixels[start:stop]
+            for fold in self.folds:
+                distance = self._line(fold, xs, ys) / sigma
+                amount = fold[5] * distance * np.exp(0.5 - 0.5 * distance**2)
+                lighter, darker = np.maximum(amount, 0), np.maximum(-amount, 0)
+                tile[:] = tile + lighter * (WHITE - tile) - darker * tile
 
     def shift(self, xs: np.ndarray, ys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """How far the content at each output position came from: (x, y) in pixels."""

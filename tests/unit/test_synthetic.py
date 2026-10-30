@@ -458,6 +458,25 @@ def _count_marks(dark) -> int:
     return count
 
 
+def test_warp_canvas_stays_bounded_on_a_full_page_at_the_limits(degradations) -> None:
+    import numpy as np
+
+    from omr_lab.synthetic.spec import DEGRADATION_PARAMETERS
+
+    # An A4 page at 300 dpi; the canvas is computed without warping anything.
+    width, height = 2480, 3508
+    limits = {name: rule.maximum for name, rule in DEGRADATION_PARAMETERS["warp"].items()}
+    spec = DegradationSpec(kind="warp", params=limits)
+    for seed in range(20):
+        params = degradations.resolve(spec, np.random.default_rng(seed))
+        field = degradations._WarpField(params, width, height)
+        left, top, right, bottom = field.canvas()
+        assert field.slope_bound() < 0.95
+        assert (right - left) * (bottom - top) < 8 * width * height, seed
+    # Tiles keep the memory per step at a few rows of the canvas, whatever its size.
+    assert degradations._TILE_ROWS * (right - left) < 5_000_000
+
+
 def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
     import numpy as np
     from PIL import Image, ImageDraw
