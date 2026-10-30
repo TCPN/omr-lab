@@ -61,10 +61,12 @@ def apply(image: Image.Image, kind: str, params: Mapping[str, Any]) -> Image.Ima
             or not isinstance(value, int | float)
             or not math.isfinite(value)
             or not rule.minimum <= value <= rule.maximum
+            or (rule.integer and not float(value).is_integer())
         ):
+            expected = "an integer" if rule.integer else "a number"
             raise ValueError(
                 f"Degradation {kind!r} parameter {name!r} is {value!r}; "
-                f"expected a number from {rule.minimum:g} to {rule.maximum:g}"
+                f"expected {expected} from {rule.minimum:g} to {rule.maximum:g}"
             )
     return KINDS[kind].apply(image, params)
 
@@ -388,13 +390,12 @@ class _WarpField:
         ):
             if len(groups) != int(count):
                 raise ValueError(
-                    f"Degradation 'warp' has {len(groups)} groups in {name}, expected {count}"
+                    f"Degradation 'warp' has {len(groups)} group(s) in {name}; expected {count}"
                 )
         if any(not bend[2] > 0 for bend in self.bends):
             raise ValueError("Degradation 'warp' needs a positive radius for every bend")
         self.undulation = float(params["undulation"]) * self.shorter
-        cell = max(_UNDULATION_CELL * self.shorter, 1.0)
-        self.cell = cell
+        self.cell = cell = max(_UNDULATION_CELL * self.shorter, 1.0)
         rng = np.random.default_rng(int(params["undulation_seed"]))
         shape = (2, math.ceil(height / cell) + 1, math.ceil(width / cell) + 1)
         self.grid = rng.uniform(-1, 1, shape)
@@ -460,8 +461,10 @@ class _WarpField:
         The profile is a Gaussian's derivative scaled to peak at the fold's shade; a
         positive shade lightens the side the line's normal points to.
         """
+        if not self.folds:
+            return
         sigma = max(_FOLD_BAND * self.shorter, 0.5)
-        for start in range(0, self.height if self.folds else 0, _TILE_ROWS):
+        for start in range(0, self.height, _TILE_ROWS):
             stop = min(start + _TILE_ROWS, self.height)
             xs, ys = _grid(0, self.width, start, stop)
             tile = pixels[start:stop]

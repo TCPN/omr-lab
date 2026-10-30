@@ -301,6 +301,8 @@ def test_apply_names_a_missing_or_unknown_parameter_set(degradations, page) -> N
         degradations.apply(page, "smudge", {})
     with pytest.raises(ValueError, match="'degrees' is 90.0; expected a number from -45 to 45"):
         degradations.apply(page, "rotate", {"degrees": 90.0})
+    with pytest.raises(ValueError, match="'quality' is 50.5; expected an integer"):
+        degradations.apply(page, "jpeg", {"quality": 50.5})
     with pytest.raises(ValueError, match="'quality' is '50'"):
         degradations.apply(page, "jpeg", {"quality": "50"})
 
@@ -506,7 +508,7 @@ def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
 def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page) -> None:
     with pytest.raises(ValueError, match="fold_lines in groups of 6"):
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": [0.5, 0.5]})
-    with pytest.raises(ValueError, match="1 groups in fold_lines, expected 0"):
+    with pytest.raises(ValueError, match=r"1 group\(s\) in fold_lines; expected 0"):
         fold = [0.5, 0.5, 0.0, 0.01, 0.0, 0.0]
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": fold})
     for radius in (0.0, -0.3):
