@@ -536,7 +536,8 @@ def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
     ImageDraw.Draw(image).line([(0, 150), (399, 150)], fill=0, width=3)
     # A vertical fold through the middle that shifts content down, and a dark crease.
     fold = [0.5, 0.5, 90.0, 0.05, 90.0, -0.5]
-    warped = degradations.apply(image, "warp", {**_FLAT_WARP, "folds": 1, "fold_lines": fold})
+    params = {**_FLAT_WARP, "folds": 1, "fold_slope": 0.05, "fold_shade": 0.5, "fold_lines": fold}
+    warped = degradations.apply(image, "warp", params)
     pixels = np.asarray(warped)
 
     def line_row(column: int) -> float:
@@ -557,7 +558,7 @@ def test_warp_fold_darkens_one_face_fading_with_distance(degradations) -> None:
     white = Image.new("L", (800, 300), 255)
     # A vertical fold in the middle with no kink; a negative shade darkens the left face.
     fold = [0.5, 0.5, 90.0, 0.0, 0.0, -0.5]
-    params = {**_FLAT_WARP, "folds": 1, "fold_lines": fold}
+    params = {**_FLAT_WARP, "folds": 1, "fold_shade": 0.5, "fold_lines": fold}
     pixels = np.asarray(degradations.apply(white, "warp", params), dtype=float)
     middle = pixels.shape[1] // 2
 
@@ -574,9 +575,13 @@ def test_warp_crease_shading_stays_on_the_kink_when_bends_move_it(degradations) 
     image = Image.new("L", (400, 300), 255)
     ImageDraw.Draw(image).line([(0, 150), (399, 150)], fill=0, width=3)
     # A vertical fold and a bend centred on it that shifts content sideways, across it.
-    fold = [0.5, 0.5, 90.0, 0.2, 90.0, -0.5]
+    fold = [0.5, 0.5, 90.0, 0.1, 90.0, -0.5]
     bend = [0.5, 0.2, 0.5, 0.05, 0.0]
-    params = {**_FLAT_WARP, "folds": 1, "fold_lines": fold, "bends": 1, "bend_shapes": bend}
+    params = {
+        **_FLAT_WARP,
+        **{"folds": 1, "fold_slope": 0.1, "fold_shade": 0.5, "fold_lines": fold},
+        **{"bends": 1, "bend_amplitude": 0.05, "bend_shapes": bend},
+    }
     pixels = np.asarray(degradations.apply(image, "warp", params), dtype=float)
 
     # The V's tip: the column where the line's topmost dark pixel is highest.
@@ -587,26 +592,37 @@ def test_warp_crease_shading_stays_on_the_kink_when_bends_move_it(degradations) 
     assert abs(crease - kink) <= 4
 
 
-def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page) -> None:
+def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page, monkeypatch) -> None:
+    one_fold = {**_FLAT_WARP, "folds": 1, "fold_slope": 0.03, "fold_shade": 0.2}
+    one_bend = {**_FLAT_WARP, "bends": 1, "bend_amplitude": 0.01}
     with pytest.raises(ValueError, match="fold_lines in groups of 6"):
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": [0.5, 0.5]})
     with pytest.raises(ValueError, match=r"1 group\(s\) in fold_lines; expected 0"):
         fold = [0.5, 0.5, 0.0, 0.01, 0.0, 0.0]
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": fold})
-    for radius in (0.0, -0.3):
-        with pytest.raises(ValueError, match="positive radius"):
-            bend = [0.5, 0.5, radius, 0.01, 0.0]
-            degradations.apply(page, "warp", {**_FLAT_WARP, "bends": 1, "bend_shapes": bend})
+    # Group values that resolve() could not have drawn from the recorded parameters.
+    for fold in ([0.5, 0.5, 0.0, 0.03, 0.0, 3.0], [0.5, 0.5, 0.0, 0.5, 0.0, 0.0]):
+        with pytest.raises(ValueError, match="slope equal to fold_slope"):
+            degradations.apply(page, "warp", {**one_fold, "fold_lines": fold})
+    for bend in (
+        [0.5, 0.5, 0.0, 0.01, 0.0],
+        [0.5, 0.5, -0.3, 0.01, 0.0],
+        [0.5, 0.5, 0.3, 0.5, 0.0],
+    ):
+        with pytest.raises(ValueError, match="radius from 0.2 to 0.5"):
+            degradations.apply(page, "warp", {**one_bend, "bend_shapes": bend})
     with pytest.raises(ValueError, match="finite"):
-        fold = [0.5, float("nan"), 0.0, 0.01, 0.0, 0.0]
-        degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": fold})
+        fold = [0.5, float("nan"), 0.0, 0.03, 0.0, 0.0]
+        degradations.apply(page, "warp", {**one_fold, "fold_lines": fold})
     for undulation in (-0.05, float("nan")):
         flattened = {**_FLAT_WARP, "undulation": undulation}
         with pytest.raises(ValueError, match="'undulation' is"):
             degradations.apply(page, "warp", flattened)
-    steep = [0.5, 0.5, 0.0, 0.6, 90.0, 0.0] * 2
+    # The spec's limits keep the slope below the guard; lower the guard to reach it.
+    monkeypatch.setattr(degradations, "_MAX_SLOPE", 0.05)
     with pytest.raises(ValueError, match="too steep"):
-        degradations.apply(page, "warp", {**_FLAT_WARP, "folds": 2, "fold_lines": steep})
+        fold = [0.5, 0.5, 0.0, 0.1, 90.0, 0.0]
+        degradations.apply(page, "warp", {**one_fold, "fold_slope": 0.1, "fold_lines": fold})
 
 
 def test_lighting_darkens_towards_the_angle(degradations, page) -> None:

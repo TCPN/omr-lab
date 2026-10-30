@@ -327,6 +327,8 @@ _FOLD_BAND = 0.005
 # shorter side, and how dark it gets relative to the crease.
 _FOLD_FACE = 0.25
 _FACE_SHADE = 0.6
+# Range of a bend's Gaussian radius, as a fraction of the diagonal.
+_BEND_RADIUS = (0.2, 0.5)
 # Undulation grid cell, as a fraction of the shorter side.
 _UNDULATION_CELL = 0.5
 # A field this steep or steeper could fold the page over itself and hide music.
@@ -351,7 +353,7 @@ def _draw_warp(params: ResolvedParams, rng: np.random.Generator) -> ResolvedPara
     bends = [
         [
             *rng.uniform(0, 1, 2),  # centre, fractions of width and height
-            rng.uniform(0.2, 0.5),  # Gaussian radius as a fraction of the diagonal
+            rng.uniform(*_BEND_RADIUS),  # Gaussian radius as a fraction of the diagonal
             amplitude,  # peak shift as a fraction of the shorter side
             rng.uniform(0, 360),  # direction of the shift in degrees
         ]
@@ -421,8 +423,20 @@ class _WarpField:
                 raise ValueError(
                     f"Degradation 'warp' has {len(groups)} group(s) in {name}; expected {count}"
                 )
-        if any(not bend[2] > 0 for bend in self.bends):
-            raise ValueError("Degradation 'warp' needs a positive radius for every bend")
+        # Each group must be one that resolve() could have drawn from the parameters.
+        slope, shade = float(params["fold_slope"]), float(params["fold_shade"])
+        if any(not (fold[3] == slope and abs(fold[5]) <= shade) for fold in self.folds):
+            raise ValueError(
+                "Degradation 'warp' needs each fold's slope equal to fold_slope and its "
+                "shade within fold_shade"
+            )
+        low, high = _BEND_RADIUS
+        amplitude = float(params["bend_amplitude"])
+        if any(not (low <= bend[2] <= high and bend[3] == amplitude) for bend in self.bends):
+            raise ValueError(
+                f"Degradation 'warp' needs each bend's radius from {low} to {high} and its "
+                "amplitude equal to bend_amplitude"
+            )
         self.undulation = float(params["undulation"]) * self.shorter
         self.cell = cell = max(_UNDULATION_CELL * self.shorter, 1.0)
         rng = np.random.default_rng(int(params["undulation_seed"]))
