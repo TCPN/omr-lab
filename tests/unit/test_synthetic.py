@@ -299,6 +299,10 @@ def test_apply_names_a_missing_or_unknown_parameter_set(degradations, page) -> N
         degradations.apply(page, "perspective", {"strength": 0.05})
     with pytest.raises(ValueError, match="Unknown degradation kind 'smudge'"):
         degradations.apply(page, "smudge", {})
+    with pytest.raises(ValueError, match="'degrees' is 90.0; expected a number from -45 to 45"):
+        degradations.apply(page, "rotate", {"degrees": 90.0})
+    with pytest.raises(ValueError, match="'quality' is '50'"):
+        degradations.apply(page, "jpeg", {"quality": "50"})
 
 
 def test_rotation_keeps_the_whole_page_and_fills_with_white(degradations, page) -> None:
@@ -512,6 +516,10 @@ def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page) -> Non
     with pytest.raises(ValueError, match="finite"):
         fold = [0.5, float("nan"), 0.0, 0.01, 0.0, 0.0]
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": fold})
+    for undulation in (-0.05, float("nan")):
+        flattened = {**_FLAT_WARP, "undulation": undulation}
+        with pytest.raises(ValueError, match="'undulation' is"):
+            degradations.apply(page, "warp", flattened)
     steep = [0.5, 0.5, 0.0, 0.6, 90.0, 0.0] * 2
     with pytest.raises(ValueError, match="too steep"):
         degradations.apply(page, "warp", {**_FLAT_WARP, "folds": 2, "fold_lines": steep})

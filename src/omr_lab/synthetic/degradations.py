@@ -43,8 +43,8 @@ def resolve(degradation: DegradationSpec, rng: np.random.Generator) -> ResolvedP
 def apply(image: Image.Image, kind: str, params: Mapping[str, Any]) -> Image.Image:
     """Apply one resolved degradation to a grayscale image and return a new image.
 
-    Raises ValueError for an unknown kind or a missing parameter, for example in a
-    manifest edited by hand.
+    Raises ValueError for an unknown kind, or a missing or out-of-range parameter, for
+    example in a manifest edited by hand.
     """
     if kind not in KINDS:
         raise ValueError(f"Unknown degradation kind {kind!r}; known: {', '.join(KINDS)}")
@@ -52,6 +52,20 @@ def apply(image: Image.Image, kind: str, params: Mapping[str, Any]) -> Image.Ima
     missing = [name for name in needed if name not in params]
     if missing:
         raise ValueError(f"Degradation {kind!r} is missing parameters: {', '.join(missing)}")
+    # The kind's own parameters must stay in the specification's ranges: the kinds'
+    # guarantees, such as warp's slope bound, rely on them.
+    for name, rule in DEGRADATION_PARAMETERS[kind].items():
+        value = params[name]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not math.isfinite(value)
+            or not rule.minimum <= value <= rule.maximum
+        ):
+            raise ValueError(
+                f"Degradation {kind!r} parameter {name!r} is {value!r}; "
+                f"expected a number from {rule.minimum:g} to {rule.maximum:g}"
+            )
     return KINDS[kind].apply(image, params)
 
 
