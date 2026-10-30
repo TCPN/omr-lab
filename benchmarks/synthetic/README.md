@@ -1,6 +1,6 @@
 # Synthetic corpus specification
 
-[`corpus.json`](corpus.json) is the specification for `omr-lab synthesize` ([docs/synthetic-corpus.md](../../docs/synthetic-corpus.md)): four lead sheets, each rendered clean and with three degradation recipes (a simulated scan, a simulated phone photo, and a phone photo of a folded song book lying on a table), 16 samples in all.
+[`corpus.json`](corpus.json) is the specification for `omr-lab synthesize` ([docs/synthetic-corpus.md](../../docs/synthetic-corpus.md)): four lead sheets, each rendered clean and with four degradation recipes (a simulated scan, a simulated phone photo, and two phone photos of a folded song book lying on a table, one held square to the camera and one tilted and rotated), 20 samples in all.
 
 ```bash
 uv sync --extra synthetic
