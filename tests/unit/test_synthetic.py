@@ -358,6 +358,8 @@ def test_place_shrinks_the_page_onto_the_background(degradations, page) -> None:
         "corner_insets": [0.0] * 8,
     }
     placed = degradations.apply(page, "place", params)
+    with pytest.raises(ValueError, match="finite gradient_angle"):
+        degradations.apply(page, "place", {**params, "gradient_angle": float("nan")})
     for offset in (2.0, -0.5, float("nan")):
         with pytest.raises(ValueError, match="offset_x from 0 to 1"):
             degradations.apply(page, "place", {**params, "offset_x": offset})

@@ -230,6 +230,8 @@ def _place(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     for name in ("offset_x", "offset_y"):
         if not 0 <= float(params[name]) <= 1:  # also rejects NaN
             raise ValueError(f"Degradation 'place' needs {name} from 0 to 1")
+    if not math.isfinite(float(params["gradient_angle"])):
+        raise ValueError("Degradation 'place' needs a finite gradient_angle")
     width, height = image.size
     # The mask marks the paper: 255 on the page, 0 where the moves uncover the canvas.
     page, mask = image, Image.new("L", image.size, 255)
@@ -431,7 +433,8 @@ class _WarpField:
         ):
             if len(groups) != int(count):
                 raise ValueError(
-                    f"Degradation 'warp' has {len(groups)} group(s) in {name}; expected {count}"
+                    f"Degradation 'warp' has {len(groups)} group(s) in {name}; "
+                    f"expected {int(count)}"
                 )
         # Each group must be one that resolve() could have drawn from the parameters.
         slope, shade = float(params["fold_slope"]), float(params["fold_shade"])
