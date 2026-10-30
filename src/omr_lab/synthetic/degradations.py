@@ -456,6 +456,18 @@ class _WarpField:
                 f"Degradation 'warp' needs each bend's radius from {low} to {high} and its "
                 "amplitude equal to bend_amplitude"
             )
+
+        # Points and centres lie on the page, angles in their drawn ranges.
+        def inside(x: float, y: float, *angles: tuple[float, float]) -> bool:
+            return 0 <= x <= 1 and 0 <= y <= 1 and all(0 <= a <= top for a, top in angles)
+
+        if not all(inside(f[0], f[1], (f[2], 180), (f[4], 360)) for f in self.folds) or not all(
+            inside(b[0], b[1], (b[4], 360)) for b in self.bends
+        ):
+            raise ValueError(
+                "Degradation 'warp' needs fold points and bend centres from 0 to 1, line "
+                "angles from 0 to 180 and shift angles from 0 to 360"
+            )
         self.undulation = float(params["undulation"]) * self.shorter
         self.cell = cell = max(_UNDULATION_CELL * self.shorter, 1.0)
         rng = np.random.default_rng(int(params["undulation_seed"]))

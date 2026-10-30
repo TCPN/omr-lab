@@ -633,6 +633,12 @@ def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page, monkey
     ):
         with pytest.raises(ValueError, match="radius from 0.2 to 0.5"):
             degradations.apply(page, "warp", {**one_bend, "bend_shapes": bend})
+    for fold in ([2.0, 0.5, 90.0, 0.03, 0.0, 0.0], [0.5, 0.5, 200.0, 0.03, 0.0, 0.0]):
+        with pytest.raises(ValueError, match="fold points and bend centres from 0 to 1"):
+            degradations.apply(page, "warp", {**one_fold, "fold_lines": fold})
+    with pytest.raises(ValueError, match="fold points and bend centres from 0 to 1"):
+        bend = [0.5, -1.0, 0.3, 0.01, 0.0]
+        degradations.apply(page, "warp", {**one_bend, "bend_shapes": bend})
     with pytest.raises(ValueError, match="finite"):
         fold = [0.5, float("nan"), 0.0, 0.03, 0.0, 0.0]
         degradations.apply(page, "warp", {**one_fold, "fold_lines": fold})
