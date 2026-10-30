@@ -2,6 +2,7 @@ import copy
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -430,7 +431,15 @@ def test_shadow_darkens_inside_its_polygon_only(degradations, page) -> None:
         "size": 0.2,
         "softness": 0.0,
         "centre": [0.25, 0.25],
-        "vertices": [-0.1, -0.1, 0.1, -0.1, 0.1, 0.1, -0.1, 0.1],
+        # A regular hexagon, vertices at 0, 60, ... 300 degrees.
+        "vertices": [
+            v
+            for degrees in range(0, 360, 60)
+            for v in (
+                0.15 * math.cos(math.radians(degrees)),
+                0.15 * math.sin(math.radians(degrees)),
+            )
+        ],
     }
     shaded = degradations.apply(page, "shadow", params)
 
@@ -440,8 +449,13 @@ def test_shadow_darkens_inside_its_polygon_only(degradations, page) -> None:
         degradations.apply(page, "shadow", {**params, "centre": [1.5, 0.5]})
     with pytest.raises(ValueError, match="half to the full size"):
         degradations.apply(page, "shadow", {**params, "size": 0.05})
-    with pytest.raises(ValueError, match="even number"):
-        degradations.apply(page, "shadow", {**params, "vertices": [0.1, 0.1, 0.2]})
+    with pytest.raises(ValueError, match="12 vertices values"):
+        degradations.apply(page, "shadow", {**params, "vertices": params["vertices"][:8]})
+    with pytest.raises(ValueError, match="centre of 2 values"):
+        degradations.apply(page, "shadow", {**params, "centre": [0.5]})
+    swapped = params["vertices"][2:4] + params["vertices"][:2] + params["vertices"][4:]
+    with pytest.raises(ValueError, match="increasing angle"):
+        degradations.apply(page, "shadow", {**params, "vertices": swapped})
 
 
 def test_vignette_darkens_the_corners_not_the_centre(degradations) -> None:

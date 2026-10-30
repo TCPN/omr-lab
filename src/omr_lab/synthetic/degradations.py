@@ -295,10 +295,12 @@ def _draw_shadow(params: ResolvedParams, rng: np.random.Generator) -> ResolvedPa
 def _shadow(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     width, height = image.size
     shorter = min(width, height)
+    if len(params["centre"]) != 2:
+        raise ValueError("Degradation 'shadow' needs a centre of 2 values")
     centre_x, centre_y = (float(v) for v in params["centre"])
     offsets = [float(v) for v in params["vertices"]]
-    if len(offsets) < 6 or len(offsets) % 2:
-        raise ValueError("Degradation 'shadow' needs an even number of vertices values, >= 6")
+    if len(offsets) != 2 * _SHADOW_VERTICES:
+        raise ValueError(f"Degradation 'shadow' needs {2 * _SHADOW_VERTICES} vertices values")
     if not (0 <= centre_x <= 1 and 0 <= centre_y <= 1):  # also rejects NaN
         raise ValueError("Degradation 'shadow' needs a centre from 0 to 1")
     # As drawn: every vertex at half to the full size from the centre.
@@ -306,6 +308,10 @@ def _shadow(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     distances = np.hypot(offsets[::2], offsets[1::2])
     if not np.all((distances >= size / 2 - 1e-9) & (distances <= size + 1e-9)):
         raise ValueError("Degradation 'shadow' needs every vertex at half to the full size")
+    # As drawn: vertices in order of increasing angle, so the polygon never crosses itself.
+    angles = np.arctan2(offsets[1::2], offsets[::2]) % (2 * np.pi)
+    if np.any(np.diff(angles) < 0):
+        raise ValueError("Degradation 'shadow' needs vertices in order of increasing angle")
     points = [
         (centre_x * width + dx * shorter, centre_y * height + dy * shorter)
         for dx, dy in zip(offsets[::2], offsets[1::2], strict=True)
