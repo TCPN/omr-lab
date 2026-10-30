@@ -19,8 +19,8 @@ Rendering needs the optional `synthetic` extra, which the rest of omr-lab does n
 | --- | --- | --- |
 | [Verovio](https://www.verovio.org/) | LGPL-3.0 | MusicXML to SVG; its default music font, Leipzig, is under the SIL OFL 1.1 |
 | [cairosvg](https://cairosvg.org/) | LGPL-3.0 | SVG to PNG; needs the cairo C library (`libcairo2`) |
-| [Pillow](https://python-pillow.org/) | MIT-CMU | Image handling, blur, rotation, perspective, JPEG |
-| [NumPy](https://numpy.org/) | BSD-3-Clause | Random numbers, noise, curvature, lighting |
+| [Pillow](https://python-pillow.org/) | MIT-CMU | Image handling, blur, rotation, perspective, scaling, shadow polygons, JPEG |
+| [NumPy](https://numpy.org/) | BSD-3-Clause | Random numbers, noise, curvature, lighting, background texture, vignette, warp |
 
 They are used as unmodified libraries. Their licenses place no conditions on the images they produce. Distributing omr-lab together with them would bring the LGPL's notice and relinking terms for Verovio and cairosvg; that is not done today.
 
@@ -57,13 +57,19 @@ Each degradation has a `kind` and the parameters below, all required. A paramete
 | `noise` | `sigma` (0 to 128) | Gaussian noise, standard deviation in grey levels. |
 | `lighting` | `strength` (0 to 0.9), `angle` (0 to 360) | Linear darkening across the page, up to `strength` darker towards `angle` degrees (0 = right, 90 = down). |
 | `jpeg` | `quality` (1 to 95, rounded to an integer) | JPEG compression artifacts; the image is still saved as PNG. |
+| `place` | `scale` (0.2 to 1), `degrees` (−45 to 45), `tilt` (0 to 0.25), `background` (0 to 255), `gradient` (0 to 0.9), `texture` (0 to 64) | The page is tilted as by `perspective` with strength `tilt`, rotated counter-clockwise by `degrees`, shrunk so that its bounding box fits `scale` of the image's width and height, and laid at a random position on a background, like a photo in which the page fills only part of the frame. The paper's outline follows the tilt and rotation, so the background shows around it. The image keeps its size, so the page loses resolution. The background is the grey level `background`, up to `gradient` darker in a random direction, plus smooth random texture with a standard deviation of `texture` grey levels. Use `gradient` and `texture` 0 for a plain background. |
+| `shadow` | `strength` (0 to 0.9), `size` (0.05 to 1), `softness` (0 to 0.2) | A random six-sided polygon, such as the shadow of a hand or a phone, up to `strength` darker. Its vertices lie at half to the full `size` from a random centre, and its edge is blurred by `softness`; both are fractions of the image's shorter side. |
+| `vignette` | `strength` (0 to 0.9) | Darkening that grows from none in the centre to `strength` in the corners, like a phone lens. |
+| `warp` | `folds` (0 to 3, integer), `fold_slope` (0 to 0.1), `fold_shade` (0 to 0.5), `bends` (0 to 3, integer), `bend_amplitude` (0 to 0.05), `undulation` (0 to 0.01) | A 2D displacement field, the sum of: `folds` straight creases at random positions and angles, where the shift grows by `fold_slope` pixels per pixel of distance from the line in a random direction, so straight lines kink at the crease, the crease is up to `fold_shade` lighter on one side (chosen at random) and darker on the other, and the face on the dark side is darker too, fading over about a quarter of the shorter side; `bends`, Gaussian bulges at random centres with radii of 0.2 to 0.5 of the diagonal, each shifting the page at its centre by `bend_amplitude` of the shorter side in a random direction; and smooth random undulation up to `undulation` of the shorter side. The limits keep the field's total slope below 1, so it never folds the page over itself; the canvas grows to hold every moved pixel and is then trimmed to the page, so nothing is cut off. A manifest's `fold_lines` and `bend_shapes` must hold `folds` and `bends` groups. It is a 2D approximation, not a 3D page model. |
 
 Areas uncovered by a geometric change are white. Images are 8-bit grayscale PNG, 2480 px wide at 300 dpi before rotation (A4 width), with the height trimmed to the music.
+
+Degradations apply in the order listed. Put `warp` before `place`, since a page bends but the table it lies on does not, and use `place`'s own `degrees` and `tilt` rather than `rotate` and `perspective`: those fill the corners they uncover with white, which on a background would look like paper. For the same reason the paper's outline does not follow `warp` or `curvature`.
 
 ## Reproducibility
 
 - Each sample has its own seed, derived from the corpus seed and its source and variant ids (`omr_lab.synthetic.sample_seed`). Adding a source or variant does not change the other samples. Sample seeds and noise seeds stay below 2^53, so the numbers survive JSON readers that parse them as doubles.
-- All random choices are drawn first and recorded as plain numbers in the manifest, including the `corner_insets` of `perspective` and a `noise_seed` for `noise`. Applying the recorded degradations to the clean image (`omr_lab.synthetic.degradations.apply`) reproduces the degraded image, without the seed.
+- All random choices are drawn first and recorded as plain numbers in the manifest, for example the `corner_insets` of `perspective`, a `noise_seed` for `noise`, the `offset_x`, `offset_y`, `gradient_angle`, `texture_seed` and `corner_insets` of `place`, the `centre` and `vertices` of `shadow`, and the `fold_lines` (six numbers per fold: x, y, line angle, slope, shift angle, shade), `bend_shapes` (five per bend: x, y, radius, amplitude, shift angle) and `undulation_seed` of `warp`. The comments in `omr_lab/synthetic/degradations.py` give their units. Applying the recorded degradations to the clean image (`omr_lab.synthetic.degradations.apply`) reproduces the degraded image, without the seed. It rejects a recorded value outside the ranges above, and drawn values that could not come from the recorded parameters (for example a fold group whose slope is not `fold_slope`), as in a manifest edited by hand.
 - The same specification, seed, package versions and fonts give byte-identical images; a unit test checks this. Other versions of Verovio, cairosvg, Pillow, NumPy or the text font can change pixels, so the manifest records the versions and the font in each sample's `renderer`, and the checksums of the files that were actually written.
 
 ## Text fonts
@@ -109,6 +115,6 @@ Each sample has the usual manifest fields (`source`, `license` and `work` from t
 ## Limits
 
 - One page per source, one part per score in the committed sources. Multi-page scores and several parts are not covered.
-- The degradations are simple models. They are not a substitute for real phone photos and scans, which [benchmark-protocol.md](benchmark-protocol.md) still asks for.
+- The degradations are simple 2D models. They are not a substitute for real phone photos and scans, which [benchmark-protocol.md](benchmark-protocol.md) still asks for.
 - Verovio's layout differs from the engraving of printed song books; a corpus from one renderer can favour engines tuned to similar layouts.
 - The corpus measures recognition against exact ground truth, but this command does not score anything. Metrics are issue #24.

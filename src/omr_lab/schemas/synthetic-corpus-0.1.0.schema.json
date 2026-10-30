@@ -144,7 +144,11 @@
             "blur",
             "noise",
             "lighting",
-            "jpeg"
+            "jpeg",
+            "place",
+            "shadow",
+            "vignette",
+            "warp"
           ]
         }
       },

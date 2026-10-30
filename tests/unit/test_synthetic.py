@@ -2,6 +2,7 @@ import copy
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -40,6 +41,26 @@ EVERY_KIND = [
     {"kind": "noise", "sigma": 12},
     {"kind": "lighting", "strength": 0.4, "angle": {"min": 0, "max": 360}},
     {"kind": "jpeg", "quality": {"min": 40, "max": 70}},
+    {
+        "kind": "warp",
+        "folds": 1,
+        "fold_slope": 0.02,
+        "fold_shade": 0.3,
+        "bends": 1,
+        "bend_amplitude": 0.01,
+        "undulation": 0.003,
+    },
+    {
+        "kind": "place",
+        "scale": {"min": 0.5, "max": 0.8},
+        "degrees": {"min": -5, "max": 5},
+        "tilt": 0.05,
+        "background": 100,
+        "gradient": 0.3,
+        "texture": 8,
+    },
+    {"kind": "shadow", "strength": 0.4, "size": 0.4, "softness": 0.03},
+    {"kind": "vignette", "strength": 0.3},
 ]
 
 
@@ -117,7 +138,7 @@ _DELETE = object()
         (["seed"], -1, "seed"),
         (["sources", 0, "id"], "Bad_Id", "sources[0].id"),
         (["sources", 0, "id"], "aux", "sources[0].id"),
-        (["variants", 1, "degradations", 0, "kind"], "warp", "kind"),
+        (["variants", 1, "degradations", 0, "kind"], "smudge", "kind"),
         (["variants", 1, "degradations", 0, "degrees"], "3", "degrees"),
         (["variants", 1, "degradations", 0, "angle"], 3, "unknown parameter 'angle'"),
         (["variants", 1, "degradations", 0, "degrees"], _DELETE, "needs parameter 'degrees'"),
@@ -223,7 +244,7 @@ def test_degradation_kinds_agree_across_schema_rules_and_implementations(degrada
     from omr_lab.schemas.synthetic import load_synthetic_corpus_schema
 
     schema_kinds = load_synthetic_corpus_schema()["$defs"]["degradation"]["properties"]["kind"]
-    assert set(schema_kinds["enum"]) == set(DEGRADATION_PARAMETERS) == set(degradations._APPLY)
+    assert set(schema_kinds["enum"]) == set(DEGRADATION_PARAMETERS) == set(degradations.KINDS)
 
 
 def test_resolved_parameters_repeat_for_a_seed_and_stay_in_range(degradations) -> None:
@@ -243,6 +264,21 @@ def test_resolved_parameters_repeat_for_a_seed_and_stay_in_range(degradations) -
     assert len(corners) == 8 and all(0 <= c <= 0.05 for c in corners)
     assert isinstance(by_kind["noise"]["noise_seed"], int)
     assert 0 <= by_kind["noise"]["noise_seed"] < 2**53
+    warp = by_kind["warp"]
+    assert len(warp["fold_lines"]) == 6 and len(warp["bend_shapes"]) == 5
+    assert warp["fold_lines"][3] == 0.02 and abs(warp["fold_lines"][5]) == 0.3
+    assert 0.2 <= warp["bend_shapes"][2] <= 0.5 and warp["bend_shapes"][3] == 0.01
+    assert 0 <= warp["undulation_seed"] < 2**53
+    place = by_kind["place"]
+    assert 0.5 <= place["scale"] <= 0.8
+    assert 0 <= place["offset_x"] <= 1 and 0 <= place["offset_y"] <= 1
+    assert 0 <= place["texture_seed"] < 2**53
+    assert -5 <= place["degrees"] <= 5
+    assert len(place["corner_insets"]) == 8 and all(0 <= c <= 0.05 for c in place["corner_insets"])
+    shadow = by_kind["shadow"]
+    assert len(shadow["centre"]) == 2 and len(shadow["vertices"]) == 12
+    radii = np.hypot(shadow["vertices"][::2], shadow["vertices"][1::2])
+    assert all(0.2 - 1e-9 <= r <= 0.4 + 1e-9 for r in radii)
     # Recorded values must survive JSON exactly.
     assert json.loads(json.dumps(first)) == first
 
@@ -266,8 +302,16 @@ def test_each_degradation_changes_the_image_reproducibly(degradations, page, kin
 def test_apply_names_a_missing_or_unknown_parameter_set(degradations, page) -> None:
     with pytest.raises(ValueError, match="missing parameters: corner_insets"):
         degradations.apply(page, "perspective", {"strength": 0.05})
-    with pytest.raises(ValueError, match="Unknown degradation kind 'warp'"):
-        degradations.apply(page, "warp", {})
+    with pytest.raises(ValueError, match="8 corner_insets from 0 to strength"):
+        degradations.apply(page, "perspective", {"strength": 0.05, "corner_insets": [0.1] * 8})
+    with pytest.raises(ValueError, match="Unknown degradation kind 'smudge'"):
+        degradations.apply(page, "smudge", {})
+    with pytest.raises(ValueError, match="'degrees' is 90.0; expected a number from -45 to 45"):
+        degradations.apply(page, "rotate", {"degrees": 90.0})
+    with pytest.raises(ValueError, match="'quality' is 50.5; expected an integer"):
+        degradations.apply(page, "jpeg", {"quality": 50.5})
+    with pytest.raises(ValueError, match="'quality' is '50'"):
+        degradations.apply(page, "jpeg", {"quality": "50"})
 
 
 def test_rotation_keeps_the_whole_page_and_fills_with_white(degradations, page) -> None:
@@ -292,6 +336,321 @@ def test_curvature_keeps_music_near_the_edges(degradations, amplitude) -> None:
     assert bent.size == (400, 330)
     # Both marks sit in the middle column, where the shift is largest; none is lost.
     assert int((np.asarray(bent.crop((190, 0, 211, 330))) < 128).sum()) == 2 * 21 * 4
+
+
+def _dark(image) -> int:
+    import numpy as np
+
+    return int((np.asarray(image) < 128).sum())
+
+
+def test_place_shrinks_the_page_onto_the_background(degradations, page) -> None:
+    params = {
+        "scale": 0.5,
+        "background": 80,
+        "gradient": 0.0,
+        "texture": 0.0,
+        "offset_x": 1.0,
+        "offset_y": 0.0,
+        "gradient_angle": 0.0,
+        "texture_seed": 1,
+        "degrees": 0.0,
+        "tilt": 0.0,
+        "corner_insets": [0.0] * 8,
+    }
+    placed = degradations.apply(page, "place", params)
+    with pytest.raises(ValueError, match="finite gradient_angle"):
+        degradations.apply(page, "place", {**params, "gradient_angle": float("nan")})
+    for offset in (2.0, -0.5, float("nan")):
+        with pytest.raises(ValueError, match="offset_x from 0 to 1"):
+            degradations.apply(page, "place", {**params, "offset_x": offset})
+
+    assert placed.size == page.size
+    assert placed.getpixel((0, 299)) == 80  # background
+    assert placed.getpixel((201, 1)) == 255  # the page's white corner, top right
+    assert placed.getpixel((199, 1)) == 80
+
+
+def test_place_rotates_and_tilts_the_paper_outline(degradations) -> None:
+    from PIL import Image
+
+    white = Image.new("L", (400, 300), 255)
+    params = {
+        "scale": 1.0,
+        "background": 50,
+        "gradient": 0.0,
+        "texture": 0.0,
+        "offset_x": 0.5,
+        "offset_y": 0.5,
+        "gradient_angle": 0.0,
+        "texture_seed": 1,
+        "degrees": 30.0,
+        "tilt": 0.0,
+        "corner_insets": [0.0] * 8,
+    }
+    rotated = degradations.apply(white, "place", params)
+    # The rotated paper's bounding box fills the canvas; its corners show the background.
+    assert rotated.getpixel((200, 150)) == 255
+    assert rotated.getpixel((2, 2)) == 50 and rotated.getpixel((397, 297)) == 50
+
+    insets = [0.2, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0]  # the top edge narrower: a tilt
+    tilted = degradations.apply(
+        white, "place", {**params, "degrees": 0.0, "tilt": 0.2, "corner_insets": insets}
+    )
+    assert tilted.getpixel((20, 5)) == 50 and tilted.getpixel((20, 295)) == 255
+    for insets in ([0.1], [], [0.3] + [0.0] * 7, [-0.1] + [0.0] * 7):
+        with pytest.raises(ValueError, match="8 corner_insets from 0 to tilt"):
+            degradations.apply(white, "place", {**params, "tilt": 0.2, "corner_insets": insets})
+
+
+def test_place_texture_and_gradient_vary_the_background(degradations, page) -> None:
+    import numpy as np
+
+    params = {
+        "scale": 0.2,
+        "background": 120,
+        "gradient": 0.5,
+        "texture": 10.0,
+        "offset_x": 0.0,
+        "offset_y": 0.0,
+        "gradient_angle": 0.0,
+        "texture_seed": 9,
+        "degrees": 0.0,
+        "tilt": 0.0,
+        "corner_insets": [0.0] * 8,
+    }
+    pixels = np.asarray(degradations.apply(page, "place", params), dtype=float)
+
+    assert pixels[150:, :40].mean() > pixels[150:, 360:].mean() + 30  # darker to the right
+    assert pixels[150:, 360:].std() > 3
+
+
+def test_shadow_darkens_inside_its_polygon_only(degradations, page) -> None:
+    params = {
+        "strength": 0.5,
+        "size": 0.2,
+        "softness": 0.0,
+        "centre": [0.25, 0.25],
+        # A regular hexagon, vertices at 0, 60, ... 300 degrees.
+        "vertices": [
+            v
+            for degrees in range(0, 360, 60)
+            for v in (
+                0.15 * math.cos(math.radians(degrees)),
+                0.15 * math.sin(math.radians(degrees)),
+            )
+        ],
+    }
+    shaded = degradations.apply(page, "shadow", params)
+
+    assert shaded.getpixel((100, 75)) == 128
+    assert shaded.getpixel((300, 250)) == 255
+    with pytest.raises(ValueError, match="centre from 0 to 1"):
+        degradations.apply(page, "shadow", {**params, "centre": [1.5, 0.5]})
+    with pytest.raises(ValueError, match="half to the full size"):
+        degradations.apply(page, "shadow", {**params, "size": 0.05})
+    with pytest.raises(ValueError, match="12 vertices values"):
+        degradations.apply(page, "shadow", {**params, "vertices": params["vertices"][:8]})
+    with pytest.raises(ValueError, match="centre of 2 values"):
+        degradations.apply(page, "shadow", {**params, "centre": [0.5]})
+    swapped = params["vertices"][2:4] + params["vertices"][:2] + params["vertices"][4:]
+    with pytest.raises(ValueError, match="increasing angle"):
+        degradations.apply(page, "shadow", {**params, "vertices": swapped})
+
+
+def test_vignette_darkens_the_corners_not_the_centre(degradations) -> None:
+    from PIL import Image
+
+    white = Image.new("L", (101, 81), 255)
+    vignetted = degradations.apply(white, "vignette", {"strength": 0.4})
+
+    assert vignetted.getpixel((50, 40)) == 255
+    assert vignetted.getpixel((0, 0)) < 160
+
+
+_FLAT_WARP = {
+    "folds": 0,
+    "fold_slope": 0,
+    "fold_shade": 0,
+    "bends": 0,
+    "bend_amplitude": 0,
+    "undulation": 0,
+    "fold_lines": [],
+    "bend_shapes": [],
+    "undulation_seed": 1,
+}
+
+
+def test_warp_without_components_changes_nothing(degradations, page) -> None:
+    assert degradations.apply(page, "warp", _FLAT_WARP).tobytes() == page.tobytes()
+
+
+def test_warp_at_its_limits_keeps_every_mark(degradations) -> None:
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    from omr_lab.synthetic.spec import DEGRADATION_PARAMETERS
+
+    image = Image.new("L", (400, 300), 255)
+    draw = ImageDraw.Draw(image)
+    for x, y in [(0, 0), (392, 0), (0, 292), (392, 292), (196, 146)]:
+        draw.rectangle([(x, y), (x + 7, y + 7)], fill=0)
+    limits = {name: rule.maximum for name, rule in DEGRADATION_PARAMETERS["warp"].items()}
+    spec = DegradationSpec(kind="warp", params={**limits, "fold_shade": 0})
+
+    for seed in range(5):
+        params = degradations.resolve(spec, np.random.default_rng(seed))
+        warped = degradations.apply(image, "warp", params)
+        # Each 8 x 8 mark moves and stretches but none is cut off.
+        assert _dark(warped) > 0.6 * _dark(image)
+        assert _count_marks(np.asarray(warped) < 128) == 5, (seed, params)
+
+
+def _count_marks(dark) -> int:
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    # Grow each mark a little so a split pixel still counts as one, then count blobs.
+    grown = Image.fromarray((dark * 255).astype("uint8")).filter(ImageFilter.MaxFilter(5))
+    seen = np.asarray(grown) > 0
+    labels = np.zeros(seen.shape, dtype=int)
+    count = 0
+    for start in zip(*np.nonzero(seen), strict=True):
+        if labels[start]:
+            continue
+        count += 1
+        stack = [start]
+        labels[start] = count
+        while stack:
+            y, x = stack.pop()
+            for ny, nx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                if 0 <= ny < seen.shape[0] and 0 <= nx < seen.shape[1]:
+                    if seen[ny, nx] and not labels[ny, nx]:
+                        labels[ny, nx] = count
+                        stack.append((ny, nx))
+    return count
+
+
+def test_warp_canvas_stays_bounded_on_a_full_page_at_the_limits(degradations) -> None:
+    import numpy as np
+
+    from omr_lab.synthetic.spec import DEGRADATION_PARAMETERS
+
+    # An A4 page at 300 dpi; the canvas is computed without warping anything.
+    width, height = 2480, 3508
+    limits = {name: rule.maximum for name, rule in DEGRADATION_PARAMETERS["warp"].items()}
+    spec = DegradationSpec(kind="warp", params=limits)
+    for seed in range(20):
+        params = degradations.resolve(spec, np.random.default_rng(seed))
+        field = degradations._WarpField(params, width, height)
+        left, top, right, bottom = field.canvas()
+        assert field.slope_bound() < 0.95
+        assert (right - left) * (bottom - top) < 8 * width * height, seed
+    # Tiles keep the memory per step at a few rows of the canvas, whatever its size.
+    assert degradations._TILE_ROWS * (right - left) < 5_000_000
+
+
+def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    image = Image.new("L", (400, 300), 255)
+    ImageDraw.Draw(image).line([(0, 150), (399, 150)], fill=0, width=3)
+    # A vertical fold through the middle that shifts content down, and a dark crease.
+    fold = [0.5, 0.5, 90.0, 0.05, 90.0, -0.5]
+    params = {**_FLAT_WARP, "folds": 1, "fold_slope": 0.05, "fold_shade": 0.5, "fold_lines": fold}
+    warped = degradations.apply(image, "warp", params)
+    pixels = np.asarray(warped)
+
+    def line_row(column: int) -> float:
+        return float(np.nonzero(pixels[:, column] < 128)[0].mean())
+
+    middle = warped.width // 2
+    # The line is straight on each side and bends at the fold: a V shape.
+    assert line_row(10) - line_row(middle) > 5
+    assert line_row(warped.width - 10) - line_row(middle) > 5
+    # The crease is shaded: darker than the paper on one side of the line.
+    assert pixels[20, middle - 15 : middle + 16].min() < 200
+
+
+def test_warp_fold_darkens_one_face_fading_with_distance(degradations) -> None:
+    import numpy as np
+    from PIL import Image
+
+    white = Image.new("L", (800, 300), 255)
+    # A vertical fold in the middle with no kink; a negative shade darkens the left face.
+    fold = [0.5, 0.5, 90.0, 0.0, 0.0, -0.5]
+    params = {**_FLAT_WARP, "folds": 1, "fold_shade": 0.5, "fold_lines": fold}
+    pixels = np.asarray(degradations.apply(white, "warp", params), dtype=float)
+    middle = pixels.shape[1] // 2
+
+    dark_face, light_face = pixels[:, middle - 40].mean(), pixels[:, middle + 40].mean()
+    assert dark_face < light_face - 20
+    assert light_face == 255
+    assert pixels[:, 20].mean() > 250  # far from the line the face fades out
+
+
+def test_warp_crease_shading_stays_on_the_kink_when_bends_move_it(degradations) -> None:
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    image = Image.new("L", (400, 300), 255)
+    ImageDraw.Draw(image).line([(0, 150), (399, 150)], fill=0, width=3)
+    # A vertical fold and a bend centred on it that shifts content sideways, across it.
+    fold = [0.5, 0.5, 90.0, 0.1, 90.0, -0.5]
+    bend = [0.5, 0.2, 0.5, 0.05, 0.0]
+    params = {
+        **_FLAT_WARP,
+        **{"folds": 1, "fold_slope": 0.1, "fold_shade": 0.5, "fold_lines": fold},
+        **{"bends": 1, "bend_amplitude": 0.05, "bend_shapes": bend},
+    }
+    pixels = np.asarray(degradations.apply(image, "warp", params), dtype=float)
+
+    # The V's tip: the column where the line's topmost dark pixel is highest.
+    dark = pixels < 128
+    tops = np.where(dark.any(axis=0), dark.argmax(axis=0), pixels.shape[0])
+    kink = float(np.flatnonzero(tops == tops.min()).mean())
+    crease = int(np.argmin(pixels[20]))  # the darkest pixel near the top, away from the line
+    assert abs(crease - kink) <= 4
+
+
+def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page, monkeypatch) -> None:
+    one_fold = {**_FLAT_WARP, "folds": 1, "fold_slope": 0.03, "fold_shade": 0.2}
+    one_bend = {**_FLAT_WARP, "bends": 1, "bend_amplitude": 0.01}
+    with pytest.raises(ValueError, match="fold_lines in groups of 6"):
+        degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": [0.5, 0.5]})
+    with pytest.raises(ValueError, match=r"1 group\(s\) in fold_lines; expected 0"):
+        fold = [0.5, 0.5, 0.0, 0.01, 0.0, 0.0]
+        degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": fold})
+    # Group values that resolve() could not have drawn from the recorded parameters.
+    for fold in ([0.5, 0.5, 0.0, 0.03, 0.0, 3.0], [0.5, 0.5, 0.0, 0.5, 0.0, 0.0]):
+        with pytest.raises(ValueError, match="slope equal to fold_slope"):
+            degradations.apply(page, "warp", {**one_fold, "fold_lines": fold})
+    for bend in (
+        [0.5, 0.5, 0.0, 0.01, 0.0],
+        [0.5, 0.5, -0.3, 0.01, 0.0],
+        [0.5, 0.5, 0.3, 0.5, 0.0],
+    ):
+        with pytest.raises(ValueError, match="radius from 0.2 to 0.5"):
+            degradations.apply(page, "warp", {**one_bend, "bend_shapes": bend})
+    for fold in ([2.0, 0.5, 90.0, 0.03, 0.0, 0.0], [0.5, 0.5, 200.0, 0.03, 0.0, 0.0]):
+        with pytest.raises(ValueError, match="fold points and bend centres from 0 to 1"):
+            degradations.apply(page, "warp", {**one_fold, "fold_lines": fold})
+    with pytest.raises(ValueError, match="fold points and bend centres from 0 to 1"):
+        bend = [0.5, -1.0, 0.3, 0.01, 0.0]
+        degradations.apply(page, "warp", {**one_bend, "bend_shapes": bend})
+    with pytest.raises(ValueError, match="finite"):
+        fold = [0.5, float("nan"), 0.0, 0.03, 0.0, 0.0]
+        degradations.apply(page, "warp", {**one_fold, "fold_lines": fold})
+    for undulation in (-0.05, float("nan")):
+        flattened = {**_FLAT_WARP, "undulation": undulation}
+        with pytest.raises(ValueError, match="'undulation' is"):
+            degradations.apply(page, "warp", flattened)
+    # The spec's limits keep the slope below the guard; lower the guard to reach it.
+    monkeypatch.setattr(degradations, "_MAX_SLOPE", 0.05)
+    with pytest.raises(ValueError, match="too steep"):
+        fold = [0.5, 0.5, 0.0, 0.1, 90.0, 0.0]
+        degradations.apply(page, "warp", {**one_fold, "fold_slope": 0.1, "fold_lines": fold})
 
 
 def test_lighting_darkens_towards_the_angle(degradations, page) -> None:
