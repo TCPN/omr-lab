@@ -550,6 +550,23 @@ def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
     assert pixels[20, middle - 15 : middle + 16].min() < 200
 
 
+def test_warp_fold_darkens_one_face_fading_with_distance(degradations) -> None:
+    import numpy as np
+    from PIL import Image
+
+    white = Image.new("L", (800, 300), 255)
+    # A vertical fold in the middle with no kink; a negative shade darkens the left face.
+    fold = [0.5, 0.5, 90.0, 0.0, 0.0, -0.5]
+    params = {**_FLAT_WARP, "folds": 1, "fold_lines": fold}
+    pixels = np.asarray(degradations.apply(white, "warp", params), dtype=float)
+    middle = pixels.shape[1] // 2
+
+    dark_face, light_face = pixels[:, middle - 40].mean(), pixels[:, middle + 40].mean()
+    assert dark_face < light_face - 20
+    assert light_face == 255
+    assert pixels[:, 20].mean() > 250  # far from the line the face fades out
+
+
 def test_warp_crease_shading_stays_on_the_kink_when_bends_move_it(degradations) -> None:
     import numpy as np
     from PIL import Image, ImageDraw
