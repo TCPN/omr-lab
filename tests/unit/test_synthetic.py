@@ -432,6 +432,10 @@ def test_shadow_darkens_inside_its_polygon_only(degradations, page) -> None:
 
     assert shaded.getpixel((100, 75)) == 128
     assert shaded.getpixel((300, 250)) == 255
+    with pytest.raises(ValueError, match="centre from 0 to 1"):
+        degradations.apply(page, "shadow", {**params, "centre": [1.5, 0.5]})
+    with pytest.raises(ValueError, match="half to the full size"):
+        degradations.apply(page, "shadow", {**params, "size": 0.05})
     with pytest.raises(ValueError, match="even number"):
         degradations.apply(page, "shadow", {**params, "vertices": [0.1, 0.1, 0.2]})
 

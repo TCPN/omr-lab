@@ -294,6 +294,13 @@ def _shadow(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     offsets = [float(v) for v in params["vertices"]]
     if len(offsets) < 6 or len(offsets) % 2:
         raise ValueError("Degradation 'shadow' needs an even number of vertices values, >= 6")
+    if not (0 <= centre_x <= 1 and 0 <= centre_y <= 1):  # also rejects NaN
+        raise ValueError("Degradation 'shadow' needs a centre from 0 to 1")
+    # As drawn: every vertex at half to the full size from the centre.
+    size = float(params["size"])
+    distances = np.hypot(offsets[::2], offsets[1::2])
+    if not np.all((distances >= size / 2 - 1e-9) & (distances <= size + 1e-9)):
+        raise ValueError("Degradation 'shadow' needs every vertex at half to the full size")
     points = [
         (centre_x * width + dx * shorter, centre_y * height + dy * shorter)
         for dx, dy in zip(offsets[::2], offsets[1::2], strict=True)
