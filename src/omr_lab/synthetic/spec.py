@@ -47,10 +47,13 @@ DEGRADATION_PARAMETERS: dict[str, dict[str, ParameterRule]] = {
     "lighting": {"strength": ParameterRule(0, 0.9), "angle": ParameterRule(0, 360)},
     # JPEG re-encoding quality.
     "jpeg": {"quality": ParameterRule(1, 95, integer=True)},
-    # The page shrunk to scale of the image on a background: base grey level, linear
+    # The page tilted (as perspective's strength), rotated (degrees counter-clockwise)
+    # and shrunk to scale of the image, on a background: base grey level, linear
     # darkening of the background, and texture amplitude in grey levels.
     "place": {
         "scale": ParameterRule(0.2, 1),
+        "degrees": ParameterRule(-45, 45),
+        "tilt": ParameterRule(0, 0.25),
         "background": ParameterRule(0, 255),
         "gradient": ParameterRule(0, 0.9),
         "texture": ParameterRule(0, 64),

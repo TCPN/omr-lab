@@ -52,6 +52,8 @@ EVERY_KIND = [
     {
         "kind": "place",
         "scale": {"min": 0.5, "max": 0.8},
+        "degrees": {"min": -5, "max": 5},
+        "tilt": 0.05,
         "background": 100,
         "gradient": 0.3,
         "texture": 8,
@@ -270,6 +272,8 @@ def test_resolved_parameters_repeat_for_a_seed_and_stay_in_range(degradations) -
     assert 0.5 <= place["scale"] <= 0.8
     assert 0 <= place["offset_x"] <= 1 and 0 <= place["offset_y"] <= 1
     assert 0 <= place["texture_seed"] < 2**53
+    assert -5 <= place["degrees"] <= 5
+    assert len(place["corner_insets"]) == 8 and all(0 <= c <= 0.05 for c in place["corner_insets"])
     shadow = by_kind["shadow"]
     assert len(shadow["centre"]) == 2 and len(shadow["vertices"]) == 12
     radii = np.hypot(shadow["vertices"][::2], shadow["vertices"][1::2])
@@ -347,6 +351,9 @@ def test_place_shrinks_the_page_onto_the_background(degradations, page) -> None:
         "offset_y": 0.0,
         "gradient_angle": 0.0,
         "texture_seed": 1,
+        "degrees": 0.0,
+        "tilt": 0.0,
+        "corner_insets": [0.0] * 8,
     }
     placed = degradations.apply(page, "place", params)
     for offset in (2.0, -0.5, float("nan")):
@@ -357,6 +364,37 @@ def test_place_shrinks_the_page_onto_the_background(degradations, page) -> None:
     assert placed.getpixel((0, 299)) == 80  # background
     assert placed.getpixel((201, 1)) == 255  # the page's white corner, top right
     assert placed.getpixel((199, 1)) == 80
+
+
+def test_place_rotates_and_tilts_the_paper_outline(degradations) -> None:
+    from PIL import Image
+
+    white = Image.new("L", (400, 300), 255)
+    params = {
+        "scale": 1.0,
+        "background": 50,
+        "gradient": 0.0,
+        "texture": 0.0,
+        "offset_x": 0.5,
+        "offset_y": 0.5,
+        "gradient_angle": 0.0,
+        "texture_seed": 1,
+        "degrees": 30.0,
+        "tilt": 0.0,
+        "corner_insets": [0.0] * 8,
+    }
+    rotated = degradations.apply(white, "place", params)
+    # The rotated paper's bounding box fills the canvas; its corners show the background.
+    assert rotated.getpixel((200, 150)) == 255
+    assert rotated.getpixel((2, 2)) == 50 and rotated.getpixel((397, 297)) == 50
+
+    insets = [0.2, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0]  # the top edge narrower: a tilt
+    tilted = degradations.apply(
+        white, "place", {**params, "degrees": 0.0, "tilt": 0.2, "corner_insets": insets}
+    )
+    assert tilted.getpixel((20, 5)) == 50 and tilted.getpixel((20, 295)) == 255
+    with pytest.raises(ValueError, match="corner_insets needs 8 values"):
+        degradations.apply(white, "place", {**params, "corner_insets": [0.1]})
 
 
 def test_place_texture_and_gradient_vary_the_background(degradations, page) -> None:
@@ -371,6 +409,9 @@ def test_place_texture_and_gradient_vary_the_background(degradations, page) -> N
         "offset_y": 0.0,
         "gradient_angle": 0.0,
         "texture_seed": 9,
+        "degrees": 0.0,
+        "tilt": 0.0,
+        "corner_insets": [0.0] * 8,
     }
     pixels = np.asarray(degradations.apply(page, "place", params), dtype=float)
 

@@ -63,12 +63,12 @@
     },
     {
       "id": "phone",
-      "condition": "simulated phone photo of a song book: folded and bent page, small in the frame on a textured background, hand shadow, vignette, JPEG",
+      "condition": "simulated phone photo of a song book: folded and bent page, tilted and rotated, small in the frame on a textured background, hand shadow, vignette, JPEG",
       "degradations": [
         {
           "kind": "warp",
           "folds": 1,
-          "fold_slope": {"min": 0.005, "max": 0.02},
+          "fold_slope": {"min": 0.03, "max": 0.06},
           "fold_shade": {"min": 0.15, "max": 0.4},
           "bends": {"min": 1, "max": 2},
           "bend_amplitude": {"min": 0.005, "max": 0.015},
@@ -76,7 +76,9 @@
         },
         {
           "kind": "place",
-          "scale": {"min": 0.55, "max": 0.8},
+          "scale": {"min": 0.6, "max": 0.85},
+          "degrees": {"min": -8, "max": 8},
+          "tilt": {"min": 0.02, "max": 0.08},
           "background": {"min": 50, "max": 170},
           "gradient": {"min": 0.1, "max": 0.4},
           "texture": {"min": 4, "max": 14}

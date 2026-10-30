@@ -97,8 +97,14 @@ def _rotate(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
 
 
 def _perspective(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
+    return _tilt(image, [float(v) for v in params["corner_insets"]], WHITE)
+
+
+def _tilt(image: Image.Image, insets: list[float], fill: int) -> Image.Image:
+    """Move each corner inward by its insets, as fractions of the width and height."""
+    if len(insets) != 8:
+        raise ValueError("corner_insets needs 8 values")
     width, height = image.size
-    insets = [float(v) for v in params["corner_insets"]]
     target = [
         (insets[0] * width, insets[1] * height),
         (width - insets[2] * width, insets[3] * height),
@@ -113,7 +119,7 @@ def _perspective(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
         Image.Transform.PERSPECTIVE,
         coefficients,
         resample=Image.Resampling.BICUBIC,
-        fillcolor=WHITE,
+        fillcolor=fill,
     )
 
 
@@ -205,31 +211,46 @@ def _draw_place(params: ResolvedParams, rng: np.random.Generator) -> ResolvedPar
         "offset_y": float(rng.uniform(0, 1)),
         "gradient_angle": float(rng.uniform(0, 360)),
         "texture_seed": _seed(rng),
+        # As perspective's: each page corner's inward offset, up to tilt.
+        "corner_insets": _floats(rng.uniform(0, params["tilt"], 8)),
     }
 
 
 def _place(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
-    """Shrink the page and lay it on a background of the same size as the input.
+    """Lay the page, tilted, rotated and shrunk, on a background the size of the input.
 
-    The page keeps its aspect ratio and loses resolution, as in a photo where the page
-    fills only part of the frame; nothing is cut off.
+    The page's outline follows the tilt and rotation, so the background shows around
+    it. The moved page's bounding box is scaled to fit scale of the image's width and
+    height, so the page loses resolution, as in a photo where it fills only part of the
+    frame; nothing is cut off.
     """
     for name in ("offset_x", "offset_y"):
         if not 0 <= float(params[name]) <= 1:  # also rejects NaN
             raise ValueError(f"Degradation 'place' needs {name} from 0 to 1")
     width, height = image.size
-    scale = float(params["scale"])
-    page = image.resize(
-        (max(1, round(width * scale)), max(1, round(height * scale))),
-        resample=Image.Resampling.LANCZOS,
-    )
+    # The mask marks the paper: 255 on the page, 0 where the moves uncover the canvas.
+    page, mask = image, Image.new("L", image.size, 255)
+    insets = [float(v) for v in params["corner_insets"]]
+    if any(insets):
+        page, mask = _tilt(page, insets, WHITE), _tilt(mask, insets, 0)
+    degrees = float(params["degrees"])
+    if degrees:
+        page, mask = (
+            layer.rotate(degrees, resample=Image.Resampling.BICUBIC, expand=True, fillcolor=fill)
+            for layer, fill in ((page, WHITE), (mask, 0))
+        )
+    fit = float(params["scale"]) * min(width / page.width, height / page.height)
+    size = (max(1, round(page.width * fit)), max(1, round(page.height * fit)))
+    page = page.resize(size, resample=Image.Resampling.LANCZOS)
+    mask = mask.resize(size, resample=Image.Resampling.LANCZOS)
+
     ramp = _ramp((height, width), float(params["gradient_angle"]))
     background = float(params["background"]) * (1 - float(params["gradient"]) * ramp)
     background += float(params["texture"]) * _texture((height, width), int(params["texture_seed"]))
     canvas = _to_image(background)
     left = round(float(params["offset_x"]) * (width - page.width))
     top = round(float(params["offset_y"]) * (height - page.height))
-    canvas.paste(page, (left, top))
+    canvas.paste(page, (left, top), mask)
     return canvas
 
 
@@ -300,6 +321,10 @@ _FOLD_VALUES = 6  # x, y, angle, slope, direction, shade
 _BEND_VALUES = 5  # x, y, radius, amplitude, direction
 # Width of a fold's shading (the Gaussian's sigma), as a fraction of the shorter side.
 _FOLD_BAND = 0.005
+# How far a fold's darker face reaches (its exponential falloff), as a fraction of the
+# shorter side, and how dark it gets relative to the crease.
+_FOLD_FACE = 0.25
+_FACE_SHADE = 0.6
 # Undulation grid cell, as a fraction of the shorter side.
 _UNDULATION_CELL = 0.5
 # A field this steep or steeper could fold the page over itself and hide music.
@@ -468,9 +493,16 @@ class _WarpField:
         lightens the side the line's normal points to.
         """
         sigma = max(_FOLD_BAND * self.shorter, 0.5)
+        face = _FOLD_FACE * self.shorter
         for fold in self.folds:
-            distance = self._line(fold, xs, ys) / sigma
-            amount = np.where(covered, fold[5] * distance * np.exp(0.5 - 0.5 * distance**2), 0)
+            line = self._line(fold, xs, ys)
+            distance = line / sigma
+            crease = distance * np.exp(0.5 - 0.5 * distance**2)
+            # The two faces meet the light at different angles: the face on the crease's
+            # dark side is darker too, fading with the distance from the line.
+            dark_side = np.clip(distance * -np.sign(fold[5]), 0, 1)
+            faces = _FACE_SHADE * dark_side * np.exp(-np.abs(line) / face)
+            amount = np.where(covered, fold[5] * crease - abs(fold[5]) * faces, 0)
             lighter, darker = np.maximum(amount, 0), np.maximum(-amount, 0)
             tile = tile + lighter * (WHITE - tile) - darker * tile
         return tile
@@ -566,7 +598,9 @@ KINDS: dict[str, DegradationKind] = {
     "lighting": DegradationKind(_lighting),
     "jpeg": DegradationKind(_jpeg),
     "place": DegradationKind(
-        _place, _draw_place, ("offset_x", "offset_y", "gradient_angle", "texture_seed")
+        _place,
+        _draw_place,
+        ("offset_x", "offset_y", "gradient_angle", "texture_seed", "corner_insets"),
     ),
     "shadow": DegradationKind(_shadow, _draw_shadow, ("centre", "vertices")),
     "vignette": DegradationKind(_vignette),
