@@ -502,16 +502,19 @@ def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
 def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page) -> None:
     with pytest.raises(ValueError, match="fold_lines in groups of 6"):
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": [0.5, 0.5]})
+    with pytest.raises(ValueError, match="1 groups in fold_lines, expected 0"):
+        fold = [0.5, 0.5, 0.0, 0.01, 0.0, 0.0]
+        degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": fold})
     for radius in (0.0, -0.3):
         with pytest.raises(ValueError, match="positive radius"):
             bend = [0.5, 0.5, radius, 0.01, 0.0]
-            degradations.apply(page, "warp", {**_FLAT_WARP, "bend_shapes": bend})
+            degradations.apply(page, "warp", {**_FLAT_WARP, "bends": 1, "bend_shapes": bend})
     with pytest.raises(ValueError, match="finite"):
         fold = [0.5, float("nan"), 0.0, 0.01, 0.0, 0.0]
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": fold})
     steep = [0.5, 0.5, 0.0, 0.6, 90.0, 0.0] * 2
     with pytest.raises(ValueError, match="too steep"):
-        degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": steep})
+        degradations.apply(page, "warp", {**_FLAT_WARP, "folds": 2, "fold_lines": steep})
 
 
 def test_lighting_darkens_towards_the_angle(degradations, page) -> None:

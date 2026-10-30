@@ -328,10 +328,10 @@ def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     pixels = np.array(image, dtype=np.float64)
     height, width = pixels.shape
     field = _WarpField(params, width, height)
-    slope = field.slope_bound()
-    if slope >= _MAX_SLOPE:
+    steepness = field.slope_bound()
+    if steepness >= _MAX_SLOPE:
         raise ValueError(
-            f"Degradation 'warp' is too steep (slope up to {slope:.2f}); use smaller values"
+            f"Degradation 'warp' is too steep (slope up to {steepness:.2f}); use smaller values"
         )
     field.shade(pixels)
 
@@ -368,6 +368,14 @@ class _WarpField:
         self.shorter = min(width, height)
         self.folds = _groups(params["fold_lines"], _FOLD_VALUES, "fold_lines")
         self.bends = _groups(params["bend_shapes"], _BEND_VALUES, "bend_shapes")
+        for name, groups, count in (
+            ("fold_lines", self.folds, params["folds"]),
+            ("bend_shapes", self.bends, params["bends"]),
+        ):
+            if len(groups) != int(count):
+                raise ValueError(
+                    f"Degradation 'warp' has {len(groups)} groups in {name}, expected {count}"
+                )
         if any(not bend[2] > 0 for bend in self.bends):
             raise ValueError("Degradation 'warp' needs a positive radius for every bend")
         self.undulation = float(params["undulation"]) * self.shorter
