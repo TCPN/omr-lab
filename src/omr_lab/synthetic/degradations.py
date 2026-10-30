@@ -368,6 +368,8 @@ class _WarpField:
         self.shorter = min(width, height)
         self.folds = _groups(params["fold_lines"], _FOLD_VALUES, "fold_lines")
         self.bends = _groups(params["bend_shapes"], _BEND_VALUES, "bend_shapes")
+        if any(not bend[2] > 0 for bend in self.bends):
+            raise ValueError("Degradation 'warp' needs a positive radius for every bend")
         self.undulation = float(params["undulation"]) * self.shorter
         cell = max(_UNDULATION_CELL * self.shorter, 1.0)
         self.cell = cell
@@ -487,6 +489,8 @@ class _WarpField:
 
 def _groups(values: Any, size: int, name: str) -> list[list[float]]:
     flat = [float(v) for v in values]
+    if not all(math.isfinite(v) for v in flat):
+        raise ValueError(f"Degradation 'warp' needs finite numbers in {name}")
     if len(flat) % size:
         raise ValueError(f"Degradation 'warp' needs {name} in groups of {size} values")
     return [flat[i : i + size] for i in range(0, len(flat), size)]
