@@ -47,6 +47,35 @@ DEGRADATION_PARAMETERS: dict[str, dict[str, ParameterRule]] = {
     "lighting": {"strength": ParameterRule(0, 0.9), "angle": ParameterRule(0, 360)},
     # JPEG re-encoding quality.
     "jpeg": {"quality": ParameterRule(1, 95, integer=True)},
+    # The page shrunk to scale of the image on a background: base grey level, linear
+    # darkening of the background, and texture amplitude in grey levels.
+    "place": {
+        "scale": ParameterRule(0.2, 1),
+        "background": ParameterRule(0, 255),
+        "gradient": ParameterRule(0, 0.9),
+        "texture": ParameterRule(0, 64),
+    },
+    # A soft-edged polygon up to strength darker; size and softness are fractions of the
+    # shorter side.
+    "shadow": {
+        "strength": ParameterRule(0, 0.9),
+        "size": ParameterRule(0.05, 1),
+        "softness": ParameterRule(0, 0.2),
+    },
+    # Darkening towards the corners, up to this fraction in each corner.
+    "vignette": {"strength": ParameterRule(0, 0.9)},
+    # Displacement field: fold lines (slope of the kink, shading of the crease), Gaussian
+    # bends (peak shift as a fraction of the shorter side) and random undulation (peak
+    # shift as a fraction of the shorter side). The limits keep the field's total slope
+    # below 1, so the map stays one-to-one and no part of the page is lost.
+    "warp": {
+        "folds": ParameterRule(0, 3, integer=True),
+        "fold_slope": ParameterRule(0, 0.1),
+        "fold_shade": ParameterRule(0, 0.5),
+        "bends": ParameterRule(0, 3, integer=True),
+        "bend_amplitude": ParameterRule(0, 0.05),
+        "undulation": ParameterRule(0, 0.01),
+    },
 }
 
 
