@@ -97,7 +97,10 @@ def _rotate(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
 
 
 def _perspective(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
-    return _tilt(image, [float(v) for v in params["corner_insets"]], WHITE)
+    insets = [float(v) for v in params["corner_insets"]]
+    if len(insets) != 8 or not all(0 <= v <= float(params["strength"]) for v in insets):
+        raise ValueError("Degradation 'perspective' needs 8 corner_insets from 0 to strength")
+    return _tilt(image, insets, WHITE)
 
 
 def _tilt(image: Image.Image, insets: list[float], fill: int) -> Image.Image:

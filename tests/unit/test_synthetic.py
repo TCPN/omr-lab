@@ -301,6 +301,8 @@ def test_each_degradation_changes_the_image_reproducibly(degradations, page, kin
 def test_apply_names_a_missing_or_unknown_parameter_set(degradations, page) -> None:
     with pytest.raises(ValueError, match="missing parameters: corner_insets"):
         degradations.apply(page, "perspective", {"strength": 0.05})
+    with pytest.raises(ValueError, match="8 corner_insets from 0 to strength"):
+        degradations.apply(page, "perspective", {"strength": 0.05, "corner_insets": [0.1] * 8})
     with pytest.raises(ValueError, match="Unknown degradation kind 'smudge'"):
         degradations.apply(page, "smudge", {})
     with pytest.raises(ValueError, match="'degrees' is 90.0; expected a number from -45 to 45"):
