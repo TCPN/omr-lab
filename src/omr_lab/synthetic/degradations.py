@@ -341,7 +341,7 @@ def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     the page is cut off. Rows are processed in tiles, so memory stays bounded however
     far the field moves the page.
     """
-    pixels = np.array(image, dtype=np.float64)
+    pixels = np.asarray(image, dtype=np.float64)
     height, width = pixels.shape
     field = _WarpField(params, width, height)
     steepness = field.slope_bound()
@@ -349,7 +349,6 @@ def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
         raise ValueError(
             f"Degradation 'warp' is too steep (slope up to {steepness:.2f}); use smaller values"
         )
-    field.shade(pixels)
 
     left, top, right, bottom = field.canvas()
     warped = np.empty((bottom - top, right - left), dtype=np.uint8)
@@ -360,10 +359,10 @@ def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
         xs, ys = _grid(left, right, start, stop)
         dx, dy = field.shift(xs, ys)
         source_x, source_y = xs - dx, ys - dy
-        tile = _sample(pixels, source_x, source_y, WHITE)
-        warped[start - top : stop - top] = np.clip(np.rint(tile), 0, 255)
         # Where a bilinear sample has some weight on the page.
         covered = (source_x > -1) & (source_x < width) & (source_y > -1) & (source_y < height)
+        tile = field.shade(_sample(pixels, source_x, source_y, WHITE), xs, ys, covered)
+        warped[start - top : stop - top] = np.clip(np.rint(tile), 0, 255)
         covered_rows[start - top : stop - top] = covered.any(axis=1)
         covered_columns |= covered.any(axis=0)
     rows, columns = np.flatnonzero(covered_rows), np.flatnonzero(covered_columns)
@@ -455,24 +454,23 @@ class _WarpField:
         x, y, angle = fold[0] * self.width, fold[1] * self.height, np.deg2rad(fold[2])
         return (xs - x) * -np.sin(angle) + (ys - y) * np.cos(angle)
 
-    def shade(self, pixels: np.ndarray) -> None:
-        """Shade each crease in place: lighter on one side of the line, darker on the other.
+    def shade(
+        self, tile: np.ndarray, xs: np.ndarray, ys: np.ndarray, covered: np.ndarray
+    ) -> np.ndarray:
+        """Shade each crease on output pixels: lighter on one side, darker on the other.
 
-        The profile is a Gaussian's derivative scaled to peak at the fold's shade; a
-        positive shade lightens the side the line's normal points to.
+        The crease lies where the fold's kink is in the output, so the other parts of the
+        field cannot move it away from the kink. Only page pixels are shaded. The profile
+        is a Gaussian's derivative scaled to peak at the fold's shade; a positive shade
+        lightens the side the line's normal points to.
         """
-        if not self.folds:
-            return
         sigma = max(_FOLD_BAND * self.shorter, 0.5)
-        for start in range(0, self.height, _TILE_ROWS):
-            stop = min(start + _TILE_ROWS, self.height)
-            xs, ys = _grid(0, self.width, start, stop)
-            tile = pixels[start:stop]
-            for fold in self.folds:
-                distance = self._line(fold, xs, ys) / sigma
-                amount = fold[5] * distance * np.exp(0.5 - 0.5 * distance**2)
-                lighter, darker = np.maximum(amount, 0), np.maximum(-amount, 0)
-                tile[:] = tile + lighter * (WHITE - tile) - darker * tile
+        for fold in self.folds:
+            distance = self._line(fold, xs, ys) / sigma
+            amount = np.where(covered, fold[5] * distance * np.exp(0.5 - 0.5 * distance**2), 0)
+            lighter, darker = np.maximum(amount, 0), np.maximum(-amount, 0)
+            tile = tile + lighter * (WHITE - tile) - darker * tile
+        return tile
 
     def shift(self, xs: np.ndarray, ys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """How far the content at each output position came from: (x, y) in pixels."""

@@ -505,6 +505,26 @@ def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
     assert pixels[20, middle - 15 : middle + 16].min() < 200
 
 
+def test_warp_crease_shading_stays_on_the_kink_when_bends_move_it(degradations) -> None:
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    image = Image.new("L", (400, 300), 255)
+    ImageDraw.Draw(image).line([(0, 150), (399, 150)], fill=0, width=3)
+    # A vertical fold and a bend centred on it that shifts content sideways, across it.
+    fold = [0.5, 0.5, 90.0, 0.2, 90.0, -0.5]
+    bend = [0.5, 0.2, 0.5, 0.05, 0.0]
+    params = {**_FLAT_WARP, "folds": 1, "fold_lines": fold, "bends": 1, "bend_shapes": bend}
+    pixels = np.asarray(degradations.apply(image, "warp", params), dtype=float)
+
+    # The V's tip: the column where the line's topmost dark pixel is highest.
+    dark = pixels < 128
+    tops = np.where(dark.any(axis=0), dark.argmax(axis=0), pixels.shape[0])
+    kink = float(np.flatnonzero(tops == tops.min()).mean())
+    crease = int(np.argmin(pixels[20]))  # the darkest pixel near the top, away from the line
+    assert abs(crease - kink) <= 4
+
+
 def test_warp_rejects_bad_groups_and_too_steep_fields(degradations, page) -> None:
     with pytest.raises(ValueError, match="fold_lines in groups of 6"):
         degradations.apply(page, "warp", {**_FLAT_WARP, "fold_lines": [0.5, 0.5]})
