@@ -231,6 +231,15 @@ def test_run_command_passes_arguments_without_shell(monkeypatch: pytest.MonkeyPa
         assert process.kwargs["start_new_session"] is True
 
 
+def test_run_command_closes_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    created = _install_fake_popen(monkeypatch, output=b"")
+
+    result = run_command(["prompting-tool"], timeout_seconds=5)
+
+    assert result.succeeded is True
+    assert created["process"].kwargs["stdin"] == subprocess.DEVNULL
+
+
 def test_run_command_reports_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     created = _install_fake_popen(monkeypatch, errors=b"still working", timeout_stderr=b"still")
 
