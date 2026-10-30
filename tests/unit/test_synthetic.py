@@ -393,8 +393,9 @@ def test_place_rotates_and_tilts_the_paper_outline(degradations) -> None:
         white, "place", {**params, "degrees": 0.0, "tilt": 0.2, "corner_insets": insets}
     )
     assert tilted.getpixel((20, 5)) == 50 and tilted.getpixel((20, 295)) == 255
-    with pytest.raises(ValueError, match="corner_insets needs 8 values"):
-        degradations.apply(white, "place", {**params, "corner_insets": [0.1]})
+    for insets in ([0.1], [], [0.3] + [0.0] * 7, [-0.1] + [0.0] * 7):
+        with pytest.raises(ValueError, match="8 corner_insets from 0 to tilt"):
+            degradations.apply(white, "place", {**params, "tilt": 0.2, "corner_insets": insets})
 
 
 def test_place_texture_and_gradient_vary_the_background(degradations, page) -> None:

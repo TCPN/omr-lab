@@ -231,6 +231,8 @@ def _place(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     # The mask marks the paper: 255 on the page, 0 where the moves uncover the canvas.
     page, mask = image, Image.new("L", image.size, 255)
     insets = [float(v) for v in params["corner_insets"]]
+    if len(insets) != 8 or not all(0 <= v <= float(params["tilt"]) for v in insets):
+        raise ValueError("Degradation 'place' needs 8 corner_insets from 0 to tilt")
     if any(insets):
         page, mask = _tilt(page, insets, WHITE), _tilt(mask, insets, 0)
     degrees = float(params["degrees"])
