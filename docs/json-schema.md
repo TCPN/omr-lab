@@ -78,6 +78,7 @@ Keys are snake_case artifact kinds. Values are POSIX-style paths relative to the
 Present as an object when preprocessing steps were requested ([preprocessing.md](preprocessing.md)). `input` still describes the original file, which is never modified; the engine read `output`.
 
 - `requested` (array of step names, at least one): the steps as requested, in order.
+- `orientation_applied` (nullable boolean): whether the input's EXIF orientation tag turned or mirrored the image before the steps ran (the output PNG has no tag, so the engine sees it upright); `null` when preprocessing failed before the image was read.
 - `steps` (array): one record per step that ran, in order; every requested step on success, `[]` when preprocessing failed (`error.code` is `preprocessing_failed`). Each record has:
   - `name`: the step name;
   - `params` (object of numbers): the step's effective parameters;

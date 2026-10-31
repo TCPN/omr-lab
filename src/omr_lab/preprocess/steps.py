@@ -306,42 +306,63 @@ STEPS: dict[str, Step] = {
 """The steps by name, in the order they are usually combined."""
 
 
-def load_image(data: bytes) -> np.ndarray | None:
+def _dihedral(image: np.ndarray) -> list[np.ndarray]:
+    """The eight rotations and mirror images of ``image`` (the EXIF orientations)."""
+    variants = []
+    for flipped in (image, image[:, ::-1]):
+        for turns in range(4):
+            variants.append(np.rot90(flipped, turns))
+    return variants
+
+
+def load_image(data: bytes) -> tuple[np.ndarray, bool] | None:
     """Decode an image file into 8-bit grayscale or BGR; None when OpenCV cannot read it.
 
-    The EXIF orientation tag is applied, as photo viewers do: a phone photo taken upright
-    is often stored sideways with a tag saying so, and the steps (and the PNG written
-    afterwards, which has no tag) must see it upright. Transparent pixels are composited
-    onto white and 16-bit images are scaled to 8 bits.
+    Also returns whether an EXIF orientation tag turned or mirrored the image. The tag
+    is applied, as photo viewers do: a phone photo taken upright is often stored
+    sideways with a tag saying so, and the steps (and the PNG written afterwards, which
+    has no tag) must see it upright. Transparent pixels are composited onto white and
+    16-bit images are scaled to 8 bits.
     """
     buffer = np.frombuffer(data, np.uint8)
     # ANYDEPTH | ANYCOLOR applies the orientation but drops an alpha channel;
     # IMREAD_UNCHANGED keeps alpha but ignores the orientation.
-    image = cv2.imdecode(buffer, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_ANYCOLOR)
-    if image is None:
+    oriented = cv2.imdecode(buffer, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_ANYCOLOR)
+    if oriented is None:
         return None
-    unchanged = cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED)
-    if (
-        unchanged is not None
-        and unchanged.ndim == 3
-        and unchanged.shape[2] in (2, 4)
-        and unchanged.shape[:2] == image.shape[:2]
-    ):
-        # Formats with transparency (PNG, TIFF) rarely carry an orientation tag.
-        image = unchanged
+    stored = cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED)
+    if stored is None:
+        return None
+    if stored.ndim == 3 and stored.shape[2] == 1:
+        stored = stored[:, :, 0]
+    colour = stored[:, :, :-1] if stored.ndim == 3 and stored.shape[2] in (2, 4) else stored
+    if colour.ndim == 3 and colour.shape[2] == 1:
+        colour = colour[:, :, 0]
+    image = oriented
+    orientation_applied = colour.shape != oriented.shape or not np.array_equal(colour, oriented)
+    if stored is not colour:
+        # Keep the alpha channel: apply to the stored image the turn or mirror that
+        # makes its colour match the oriented decode.
+        matches = [
+            index
+            for index, variant in enumerate(_dihedral(colour))
+            if variant.shape == oriented.shape and np.array_equal(variant, oriented)
+        ]
+        if not matches:
+            return None
+        image = _dihedral(stored)[matches[0]]
+        orientation_applied = matches[0] != 0
     if image.dtype == np.uint16:
         image = (image // 257).astype(np.uint8)
     elif image.dtype != np.uint8:
         return None
-    if image.ndim == 3 and image.shape[2] == 1:
-        image = image[:, :, 0]
     if image.ndim == 3 and image.shape[2] in (2, 4):
         alpha = image[:, :, -1:].astype(np.float64) / 255
         colour = image[:, :, :-1].astype(np.float64)
         image = np.round(colour * alpha + WHITE * (1 - alpha)).astype(np.uint8)
         if image.shape[2] == 1:
             image = image[:, :, 0]
-    return np.ascontiguousarray(image)
+    return np.ascontiguousarray(image), bool(orientation_applied)
 
 
 def encode_png(image: np.ndarray) -> bytes:

@@ -60,6 +60,8 @@ class StepRecord:
 class PreprocessResult:
     output_path: Path
     steps: tuple[StepRecord, ...]
+    orientation_applied: bool
+    """Whether the input's EXIF orientation tag turned or mirrored it before the steps."""
     width: int
     height: int
 
@@ -126,11 +128,12 @@ def preprocess_image(
         raise PreprocessingError(
             f"Input file {input_path.name!r} cannot be read: {exc.strerror or exc}."
         ) from exc
-    image = module.load_image(data)
-    if image is None:
+    loaded = module.load_image(data)
+    if loaded is None:
         raise PreprocessingError(
             f"OpenCV cannot decode {input_path.name!r} as an 8- or 16-bit image."
         )
+    image, orientation_applied = loaded
     records = []
     for name in names:
         step = module.STEPS[name]
@@ -153,7 +156,11 @@ def preprocess_image(
         stream.write(encoded)
     height, width = image.shape[:2]
     return PreprocessResult(
-        output_path=output_path, steps=tuple(records), width=int(width), height=int(height)
+        output_path=output_path,
+        steps=tuple(records),
+        orientation_applied=orientation_applied,
+        width=int(width),
+        height=int(height),
     )
 
 

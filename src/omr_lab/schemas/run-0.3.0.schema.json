@@ -1337,6 +1337,7 @@
       "additionalProperties": false,
       "required": [
         "requested",
+        "orientation_applied",
         "steps",
         "output",
         "output_sha256",
@@ -1351,6 +1352,13 @@
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]*$"
           }
+        },
+        "orientation_applied": {
+          "description": "Whether the input's EXIF orientation tag turned or mirrored the image before the steps ran (the output PNG has no tag); null when preprocessing failed before the image was read.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "steps": {
           "description": "One record per step that ran, in order. On success every requested step is listed; when preprocessing failed (see error), the list is empty.",

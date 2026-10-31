@@ -7,6 +7,7 @@
   "artifacts": {},
   "preprocessing": {
     "requested": ["deskew"],
+    "orientation_applied": null,
     "steps": [],
     "output": null,
     "output_sha256": null,

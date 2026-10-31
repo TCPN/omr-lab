@@ -20,6 +20,7 @@
       "page",
       "deskew"
     ],
+    "orientation_applied": false,
     "steps": [
       {
         "name": "page",

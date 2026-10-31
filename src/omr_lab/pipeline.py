@@ -390,6 +390,7 @@ def _preprocess(
     start = time.perf_counter()
     record: dict[str, Any] = {
         "requested": list(steps),
+        "orientation_applied": None,
         "steps": [],
         "output": None,
         "output_sha256": None,
@@ -409,6 +410,7 @@ def _preprocess(
         message = f"Unexpected {type(exc).__name__} while preprocessing: {exc}"
     else:
         record.update(
+            orientation_applied=result.orientation_applied,
             steps=[step.to_json() for step in result.steps],
             output=relative,
             output_sha256=digest,

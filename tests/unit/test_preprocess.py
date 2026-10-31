@@ -260,6 +260,7 @@ def test_preprocess_image_writes_a_new_file_and_leaves_the_input_unchanged(
 
     assert _sha256(source) == before
     assert result.output_path == output
+    assert not result.orientation_applied
     assert [step.name for step in result.steps] == ["deskew", "threshold"]
     assert result.steps[0].applied and result.steps[0].result["angle_degrees"] == pytest.approx(
         -3, abs=0.15
@@ -306,10 +307,52 @@ def test_exif_orientation_is_applied_before_the_steps(cv, tmp_path: Path) -> Non
     result = preprocess_image(source, tmp_path / "out.png", ["grayscale"])
 
     out = cv2.imread(str(tmp_path / "out.png"), cv2.IMREAD_UNCHANGED)
+    assert result.orientation_applied
     assert (result.width, result.height) == (100, 200)
     assert out.shape == (200, 100)
     # Turned clockwise, the stored top-left corner is now top-right.
     assert out[5, 95] < 64 and out[5, 5] > 192
+
+
+def test_the_run_document_records_an_applied_orientation(cv, tmp_path: Path) -> None:
+    cv2, np = cv
+    ok, jpeg = cv2.imencode(".jpg", _staff_page(np))
+    assert ok
+    source = tmp_path / "phone.jpg"
+    source.write_bytes(_with_exif_orientation(jpeg.tobytes(), 6))
+    document = run_pipeline(
+        source, tmp_path / "run", MockEngine(), preprocess=["grayscale"]
+    ).document
+    validate_run_document(document)
+    assert document["preprocessing"]["orientation_applied"] is True
+    assert document["preprocessing"]["steps"][0]["applied"] is False
+
+
+def test_transparent_images_follow_the_orientation_of_their_colour(cv) -> None:
+    cv2, np = cv
+    from omr_lab.preprocess import steps
+
+    rgba = np.full((20, 30, 4), (255, 255, 255, 0), np.uint8)  # transparent white
+    rgba[0:5, 0:5] = (0, 0, 0, 255)  # opaque black in the stored top-left corner
+    ok, png = cv2.imencode(".png", rgba)
+    assert ok
+    original = cv2.imdecode
+
+    # OpenCV applies no orientation to PNG; stand in for a format that does, by turning
+    # only the decode that applies it (180 degrees keeps the shape).
+    def turned(buffer, flags):
+        image = original(buffer, flags)
+        return image if flags == cv2.IMREAD_UNCHANGED else np.ascontiguousarray(image[::-1, ::-1])
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(steps.cv2, "imdecode", turned)
+    try:
+        image, applied = steps.load_image(png.tobytes())
+    finally:
+        monkeypatch.undo()
+    assert applied
+    assert image.shape == (20, 30, 3)
+    assert image[17, 27].tolist() == [0, 0, 0] and image[0, 0].tolist() == [255, 255, 255]
 
 
 def test_pdf_and_undecodable_inputs_are_rejected(cv, tmp_path: Path) -> None:
@@ -365,6 +408,7 @@ def test_pipeline_gives_the_engine_a_preprocessed_copy_and_records_it(cv, tmp_pa
     assert document["artifacts"][PREPROCESSED_IMAGE_KIND] == "preprocessed/input.png"
     record = document["preprocessing"]
     assert record["requested"] == ["grayscale", "deskew"]
+    assert record["orientation_applied"] is False
     assert [(step["name"], step["applied"]) for step in record["steps"]] == [
         ("grayscale", False),
         ("deskew", True),
@@ -400,6 +444,7 @@ def test_failed_preprocessing_fails_the_run_before_the_engine(cv, tmp_path: Path
     assert "not .pdf files" in document["error"]["message"]
     assert document["preprocessing"] == {
         "requested": ["deskew"],
+        "orientation_applied": None,
         "steps": [],
         "output": None,
         "output_sha256": None,
