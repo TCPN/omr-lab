@@ -1,0 +1,23 @@
+{
+  "schema_version": "0.3.0",
+  "status": "failed",
+  "input": {"filename": "scan.pdf", "media_type": "application/pdf", "sha256": null},
+  "engine": {"name": "audiveris", "version": "5.11.0"},
+  "options": {},
+  "artifacts": {},
+  "preprocessing": {
+    "requested": ["deskew"],
+    "orientation_applied": null,
+    "steps": [],
+    "output": null,
+    "output_sha256": null,
+    "duration_seconds": 0.0
+  },
+  "timing": {"duration_seconds": 0.01},
+  "score": null,
+  "warnings": [],
+  "error": {
+    "code": "preprocessing_failed",
+    "message": "Preprocessing works on single images, not .pdf files. Convert the pages to images first, or run without preprocessing."
+  }
+}

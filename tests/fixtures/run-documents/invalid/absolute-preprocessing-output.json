@@ -1,0 +1,87 @@
+{
+  "schema_version": "0.3.0",
+  "status": "succeeded",
+  "input": {
+    "filename": "phone-photo.jpg",
+    "media_type": "image/jpeg",
+    "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+  },
+  "engine": {
+    "name": "audiveris",
+    "version": "5.11.0"
+  },
+  "options": {},
+  "artifacts": {
+    "preprocessed_image": "preprocessed/input.png",
+    "musicxml": "raw/input.mxl"
+  },
+  "preprocessing": {
+    "requested": [
+      "page",
+      "deskew"
+    ],
+    "orientation_applied": false,
+    "steps": [
+      {
+        "name": "page",
+        "params": {
+          "detection_size": 1000,
+          "min_contrast": 60,
+          "min_page_fraction": 0.2,
+          "min_background_fraction": 0.01
+        },
+        "applied": true,
+        "result": {
+          "corners": [
+            [
+              437.7,
+              131.8
+            ],
+            [
+              1860.3,
+              246.2
+            ],
+            [
+              1815.5,
+              1176.4
+            ],
+            [
+              368.1,
+              1061.9
+            ]
+          ],
+          "contrast": 149.0,
+          "output_size": [
+            1452,
+            933
+          ]
+        },
+        "message": null,
+        "duration_seconds": 0.21
+      },
+      {
+        "name": "deskew",
+        "params": {
+          "detection_size": 1200,
+          "max_degrees": 15,
+          "min_degrees": 0.1
+        },
+        "applied": false,
+        "result": {
+          "angle_degrees": 0.04
+        },
+        "message": "The skew is below 0.1 degrees.",
+        "duration_seconds": 1.9
+      }
+    ],
+    "output": "/home/user/preprocessed/input.png",
+    "output_sha256": "fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9",
+    "duration_seconds": 2.2
+  },
+  "timing": {
+    "duration_seconds": 38.5
+  },
+  "score": null,
+  "warnings": [],
+  "error": null
+}

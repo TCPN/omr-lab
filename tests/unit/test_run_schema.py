@@ -40,6 +40,8 @@ INVALID_EXPECTED_PATH = {
     "warning-as-plain-string": "$.warnings[0]",
     "input-filename-with-directory": "$.input.filename",
     "unknown-top-level-field": "$",
+    "missing-preprocessing": "$",
+    "absolute-preprocessing-output": "$.preprocessing.output",
 }
 
 
@@ -100,13 +102,29 @@ def test_valid_fixtures_include_a_score_object():
 def test_previous_version_still_validates_but_has_no_score_model():
     document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
     document["schema_version"] = "0.1.0"
+    del document["preprocessing"]
     validate_run_document(document)
 
     with_score = _load(FIXTURES / "valid" / "succeeded-with-score.json")
     with_score["schema_version"] = "0.1.0"
+    del with_score["preprocessing"]
     with pytest.raises(RunDocumentValidationError) as excinfo:
         validate_run_document(with_score)
     assert [m.split(": ", 1)[0] for m in excinfo.value.errors] == ["$.score"]
+
+
+def test_version_0_2_0_has_no_preprocessing_record():
+    document = _load(FIXTURES / "valid" / "succeeded-minimal.json")
+    document["schema_version"] = "0.2.0"
+    with pytest.raises(RunDocumentValidationError):
+        validate_run_document(document)
+    del document["preprocessing"]
+    validate_run_document(document)
+
+
+def test_valid_fixtures_include_a_preprocessing_record():
+    records = [_load(path)["preprocessing"] for path in VALID]
+    assert any(isinstance(record, dict) and record["output"] for record in records)
 
 
 def test_non_object_document_is_rejected():

@@ -31,6 +31,7 @@ from omr_lab.engines.base import (
     InvalidEngineOptionError,
 )
 from omr_lab.musicxml import MusicXmlError, load_musicxml
+from omr_lab.preprocess import PreprocessingError, parse_steps, preprocess_image
 from omr_lab.schemas import (
     CURRENT_RUN_SCHEMA_VERSION,
     RunDocumentValidationError,
@@ -55,6 +56,15 @@ ENGINE_DIAGNOSTICS_FILENAME = "engine_diagnostics.log"
 ENGINE_DIAGNOSTICS_KIND = "engine_diagnostics"
 """Artifact kind of the engine diagnostics file."""
 
+PREPROCESSED_DIRNAME = "preprocessed"
+"""Subdirectory of the run output directory that holds the preprocessed copy of the input."""
+
+PREPROCESSED_IMAGE_FILENAME = "input.png"
+"""Fixed name of the preprocessed image, so no part of the input's name reaches a path."""
+
+PREPROCESSED_IMAGE_KIND = "preprocessed_image"
+"""Artifact kind of the preprocessed image that the engine read."""
+
 DEFAULT_TIMEOUT_SECONDS = 600.0
 """Default engine timeout; real engines can need minutes for a multi-page PDF."""
 
@@ -78,7 +88,7 @@ _SERIALIZE_ERRORS = (RunDocumentValidationError, TypeError, ValueError)
 # The adapter's primary MusicXML key (docs/engine-interface.md).
 _PRIMARY_MUSICXML_KEY = "musicxml"
 # Kinds of files the pipeline itself records; an engine key with one of them is renamed.
-_PIPELINE_ARTIFACT_KINDS = frozenset({ENGINE_DIAGNOSTICS_KIND})
+_PIPELINE_ARTIFACT_KINDS = frozenset({ENGINE_DIAGNOSTICS_KIND, PREPROCESSED_IMAGE_KIND})
 # The loader's advice for its own callers (omr_lab.musicxml.document); see _record_score.
 _LOADER_LIMIT_HINT = re.compile(r"\s*Raise max_(?:bytes|elements) if this file is expected\.")
 
@@ -118,6 +128,7 @@ class _RunState:
     engine_version: str | None = None
     options: dict[str, EngineOptionValue] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
+    preprocessing: dict[str, Any] | None = None
     score: dict[str, Any] | None = None
     warnings: list[dict[str, str]] = field(default_factory=list)
     error: dict[str, Any] | None = None
@@ -147,13 +158,19 @@ def run_pipeline(
     *,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     options: EngineOptions | None = None,
+    preprocess: Iterable[str] | None = None,
 ) -> PipelineResult:
     """Recognize one input file with ``engine`` and write a validated run document.
 
     Layout of ``output_dir`` (created if missing; it must not exist or be empty):
     ``raw/`` holds the engine's raw artifacts, ``engine_diagnostics.log`` the
     engine's diagnostics (when there are any) and ``run.json`` the run document.
-    The input file is only read, never modified or copied.
+    The input file is only read, never modified.
+
+    ``preprocess`` names image preprocessing steps (docs/preprocessing.md) to apply,
+    in order, to a copy of the input; the engine then reads
+    ``preprocessed/input.png`` instead of the input. None or an empty list means no
+    preprocessing.
 
     On a run that has not failed, the engine's primary MusicXML is converted into
     the run document's ``score``.
@@ -165,9 +182,10 @@ def run_pipeline(
     KeyboardInterrupt during the run is recorded as an ``interrupted`` run and
     then re-raised. Raises ValueError for arguments that make a run record
     impossible (an unusable ``output_dir`` raises OutputDirectoryError, a
-    ValueError subclass).
+    ValueError subclass, and unknown or repeated preprocessing steps a ValueError).
     """
     input_path = Path(input_path)
+    steps = parse_steps(preprocess) if preprocess is not None else ()
     output_dir = Path(output_dir)
     # bool is an int subclass, so True would otherwise pass as a 1-second timeout.
     if (
@@ -188,7 +206,7 @@ def run_pipeline(
     state = _RunState(redact_paths=_path_redactor(input_path, output_dir))
     pending_interrupt: KeyboardInterrupt | None = None
     try:
-        _check_and_recognize(state, input_path, output_dir, engine, timeout_seconds, options)
+        _check_and_recognize(state, input_path, output_dir, engine, timeout_seconds, options, steps)
     except KeyboardInterrupt as exc:
         # Ctrl-C during a long engine run is normal: leave a record, then re-raise.
         pending_interrupt = exc
@@ -249,6 +267,7 @@ def _fallback_document(
         # The pipeline's own files have fixed, schema-valid paths; keeping them keeps
         # the pointer to the engine diagnostics.
         artifacts={k: v for k, v in state.artifacts.items() if k in _PIPELINE_ARTIFACT_KINDS},
+        preprocessing=state.preprocessing,
         error=state.error,
         redact_paths=state.redact_paths,
     )
@@ -327,9 +346,15 @@ def _check_and_recognize(
     engine: Engine,
     timeout_seconds: float,
     options: EngineOptions | None,
+    steps: tuple[str, ...],
 ) -> None:
     if not _check_and_record_input(state, input_path):
         return
+    engine_input = input_path
+    if steps:
+        engine_input = _preprocess(state, input_path, output_dir, steps)
+        if engine_input is None:
+            return
 
     availability = engine.check_available()
     state.engine_version = availability.version or None
@@ -340,7 +365,7 @@ def _check_and_recognize(
 
     try:
         result = engine.recognize(
-            input_path,
+            engine_input,
             output_dir / RAW_DIRNAME,
             timeout_seconds=timeout_seconds,
             options=options,
@@ -354,6 +379,48 @@ def _check_and_recognize(
     _record_result(state, result, engine.name, output_dir)
     if state.error is None:
         _record_score(state, output_dir)
+
+
+def _preprocess(
+    state: _RunState, input_path: Path, output_dir: Path, steps: tuple[str, ...]
+) -> Path | None:
+    """Write the preprocessed copy and record it; on failure record the error, return None."""
+    relative = f"{PREPROCESSED_DIRNAME}/{PREPROCESSED_IMAGE_FILENAME}"
+    output_path = output_dir / PREPROCESSED_DIRNAME / PREPROCESSED_IMAGE_FILENAME
+    start = time.perf_counter()
+    record: dict[str, Any] = {
+        "requested": list(steps),
+        "orientation_applied": None,
+        "steps": [],
+        "output": None,
+        "output_sha256": None,
+        "duration_seconds": 0.0,
+    }
+    state.preprocessing = record
+    try:
+        output_path.parent.mkdir()
+        result = preprocess_image(input_path, output_path, steps)
+        digest = _sha256(output_path)
+    except PreprocessingError as exc:
+        message = str(exc)
+    except OSError as exc:
+        message = f"The preprocessed image cannot be written: {exc.strerror or exc}."
+    except Exception as exc:  # An OpenCV error on an unusual image; recorded and logged.
+        logger.exception("Preprocessing failed unexpectedly")
+        message = f"Unexpected {type(exc).__name__} while preprocessing: {exc}"
+    else:
+        record.update(
+            orientation_applied=result.orientation_applied,
+            steps=[step.to_json() for step in result.steps],
+            output=relative,
+            output_sha256=digest,
+            duration_seconds=max(time.perf_counter() - start, 0.0),
+        )
+        state.artifacts[PREPROCESSED_IMAGE_KIND] = relative
+        return output_path
+    record["duration_seconds"] = max(time.perf_counter() - start, 0.0)
+    state.record_error(RunErrorCode.PREPROCESSING_FAILED, message)
+    return None
 
 
 def _check_and_record_input(state: _RunState, input_path: Path) -> bool:
@@ -416,7 +483,7 @@ def _record_result(
     if result.version:
         state.engine_version = result.version
     diagnostics = _write_diagnostics(state, result.diagnostics, output_dir)
-    state.artifacts = _map_artifacts(state, result.artifacts, output_dir)
+    state.artifacts.update(_map_artifacts(state, result.artifacts, output_dir))
     if diagnostics is not None:
         state.artifacts[ENGINE_DIAGNOSTICS_KIND] = diagnostics
     if result.success and _PRIMARY_MUSICXML_KEY not in state.artifacts:
@@ -603,6 +670,7 @@ def _build_document(
         "engine": {"name": engine_name, "version": state.engine_version},
         "options": dict(state.options),
         "artifacts": dict(state.artifacts),
+        "preprocessing": state.preprocessing,
         "timing": {
             "duration_seconds": max(duration, 0.0),
             "started_at": started_at.isoformat(timespec="milliseconds"),
@@ -706,6 +774,9 @@ __all__ = [
     "MEDIA_TYPE_BY_EXTENSION",
     "RAW_DIRNAME",
     "RUN_DOCUMENT_FILENAME",
+    "PREPROCESSED_DIRNAME",
+    "PREPROCESSED_IMAGE_FILENAME",
+    "PREPROCESSED_IMAGE_KIND",
     "OutputDirectoryError",
     "PipelineResult",
     "RunErrorCode",

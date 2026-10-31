@@ -1,10 +1,11 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "status": "failed",
   "input": {"filename": "score.png", "media_type": "image/png"},
   "engine": {"name": "audiveris", "version": "5.4"},
   "options": {},
   "artifacts": {"engine_log": "raw/audiveris.log"},
+  "preprocessing": null,
   "timing": {"duration_seconds": 41.0},
   "score": null,
   "warnings": [],

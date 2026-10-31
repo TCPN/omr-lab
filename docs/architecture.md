@@ -11,7 +11,7 @@
 
 ## Boundaries
 - engines/: engine-specific availability and process invocation; shared contracts live in engines/base.py.
-- preprocess/: optional, independently testable image transforms.
+- preprocess/: optional, independently testable image transforms (grayscale, page, deskew, threshold) on a copy of the input; optional `preprocess` extra (OpenCV). Details: docs/preprocessing.md.
 - musicxml/: loading, safe parsing, and structural validation of MusicXML artifacts (including .mxl) plus metadata extraction, independent of engine. A document that loads is parseable, not correctly recognized. Details: docs/musicxml.md.
 - conversion/: normalized JSON mapping.
 - schemas/: checked-in JSON Schemas and validation; no dependency on engines or the pipeline.

@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "status": "succeeded",
   "input": {
     "filename": "score.png",
@@ -13,6 +13,7 @@
   "artifacts": {
     "musicxml": "../result.musicxml"
   },
+  "preprocessing": null,
   "timing": {
     "duration_seconds": 12.5
   },
