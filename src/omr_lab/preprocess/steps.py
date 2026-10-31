@@ -306,6 +306,10 @@ STEPS: dict[str, Step] = {
 """The steps by name, in the order they are usually combined."""
 
 
+class OrientationError(ValueError):
+    """The orientation of a transparent image cannot be determined safely."""
+
+
 def _dihedral(image: np.ndarray) -> list[np.ndarray]:
     """The eight rotations and mirror images of ``image`` (the EXIF orientations)."""
     variants = []
@@ -322,7 +326,8 @@ def load_image(data: bytes) -> tuple[np.ndarray, bool] | None:
     is applied, as photo viewers do: a phone photo taken upright is often stored
     sideways with a tag saying so, and the steps (and the PNG written afterwards, which
     has no tag) must see it upright. Transparent pixels are composited onto white and
-    16-bit images are scaled to 8 bits.
+    16-bit images are scaled to 8 bits. Raises OrientationError when a transparent
+    image's orientation cannot be matched unambiguously.
     """
     buffer = np.frombuffer(data, np.uint8)
     # ANYDEPTH | ANYCOLOR applies the orientation but drops an alpha channel;
@@ -348,10 +353,21 @@ def load_image(data: bytes) -> tuple[np.ndarray, bool] | None:
             for index, variant in enumerate(_dihedral(colour))
             if variant.shape == oriented.shape and np.array_equal(variant, oriented)
         ]
-        if not matches:
-            return None
+        candidates = {_dihedral(stored)[index].tobytes() for index in matches}
+        if 0 in matches:
+            # The colour is unchanged by the decode: no tag was applied. (A tag that
+            # leaves symmetric colour channels unchanged cannot be seen; OpenCV applies
+            # no tag to PNG, the usual transparent format.)
+            matches = [0]
+        elif len(candidates) != 1:
+            # No turn matches, or several give different images (the colour channels
+            # are symmetric, e.g. uniform colour with the drawing only in alpha).
+            raise OrientationError(
+                "its EXIF orientation cannot be applied to the transparency unambiguously; "
+                "flatten the image onto a background or remove the orientation tag first"
+            )
         image = _dihedral(stored)[matches[0]]
-        orientation_applied = matches[0] != 0
+        orientation_applied = 0 not in matches
     if image.dtype == np.uint16:
         image = (image // 257).astype(np.uint8)
     elif image.dtype != np.uint8:

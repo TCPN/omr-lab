@@ -355,6 +355,29 @@ def test_transparent_images_follow_the_orientation_of_their_colour(cv) -> None:
     assert image[17, 27].tolist() == [0, 0, 0] and image[0, 0].tolist() == [255, 255, 255]
 
 
+def test_an_ambiguous_orientation_of_a_transparent_image_is_an_error(cv) -> None:
+    cv2, np = cv
+    from omr_lab.preprocess import steps
+
+    rgba = np.zeros((20, 30, 4), np.uint8)  # uniform black colour ...
+    rgba[0:5, 0:5, 3] = 255  # ... the drawing is only in alpha
+    ok, png = cv2.imencode(".png", rgba)
+    assert ok
+    original = cv2.imdecode
+
+    def turned(buffer, flags):
+        image = original(buffer, flags)
+        return image if flags == cv2.IMREAD_UNCHANGED else np.ascontiguousarray(np.rot90(image))
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(steps.cv2, "imdecode", turned)
+    try:
+        with pytest.raises(steps.OrientationError, match="unambiguously"):
+            steps.load_image(png.tobytes())
+    finally:
+        monkeypatch.undo()
+
+
 def test_pdf_and_undecodable_inputs_are_rejected(cv, tmp_path: Path) -> None:
     pdf = tmp_path / "score.pdf"
     pdf.write_bytes(b"%PDF-1.7\n")

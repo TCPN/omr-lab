@@ -128,7 +128,10 @@ def preprocess_image(
         raise PreprocessingError(
             f"Input file {input_path.name!r} cannot be read: {exc.strerror or exc}."
         ) from exc
-    loaded = module.load_image(data)
+    try:
+        loaded = module.load_image(data)
+    except module.OrientationError as exc:
+        raise PreprocessingError(f"{input_path.name!r} cannot be preprocessed: {exc}.") from exc
     if loaded is None:
         raise PreprocessingError(
             f"OpenCV cannot decode {input_path.name!r} as an 8- or 16-bit image."
