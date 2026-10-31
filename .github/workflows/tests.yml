@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install
-        run: uv sync --dev --locked --extra synthetic
+        run: uv sync --dev --locked --extra synthetic --extra preprocess
       - name: Ruff
         run: uv run ruff check .
       - name: Tests
@@ -24,3 +24,5 @@ jobs:
         env:
           # Fail, not skip, the rendering tests if the synthetic extra or fonts break.
           OMR_LAB_REQUIRE_SYNTHETIC: "1"
+          # The same for the preprocessing tests and the preprocess extra (OpenCV).
+          OMR_LAB_REQUIRE_PREPROCESS: "1"

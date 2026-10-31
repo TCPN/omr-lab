@@ -35,6 +35,7 @@ from omr_lab.pipeline import (
     RunErrorCode,
     run_pipeline,
 )
+from omr_lab.preprocess import PreprocessingUnavailableError, check_available, parse_steps
 from omr_lab.schemas.benchmark import BenchmarkDocumentValidationError
 
 EXIT_OK = 0
@@ -51,7 +52,8 @@ EXIT_INVALID_INPUT = 3
 or one of its source scores cannot be read, is invalid, or cannot be rendered."""
 EXIT_ENGINE_UNAVAILABLE = 4
 """The engine's prerequisites are missing (``run``), an engine is unavailable (``doctor``),
-or a rendering package or text font is missing (``synthesize``)."""
+a rendering package or text font is missing (``synthesize``), or ``--preprocess`` was
+given without the ``preprocess`` extra (``run``, ``benchmark``)."""
 EXIT_INVALID_OPTION = 5
 """The engine rejected an ``--option`` name or value."""
 EXIT_OUTPUT_DIR_UNUSABLE = 6
@@ -199,6 +201,17 @@ def _add_engine_arguments(parser: argparse.ArgumentParser, engine_names: list[st
         metavar="SECONDS",
         help=f"Engine timeout in seconds (default: {DEFAULT_TIMEOUT_SECONDS:g}).",
     )
+    parser.add_argument(
+        "--preprocess",
+        type=_parse_preprocess,
+        default=(),
+        metavar="STEP[,STEP...]",
+        help=(
+            "Preprocess a copy of each input before recognition, with these steps in order: "
+            "grayscale, page, deskew, threshold. The input is not modified. Needs the "
+            "'preprocess' extra. See docs/preprocessing.md."
+        ),
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -212,9 +225,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             options = parse_options(args.options)
         except ValueError as exc:
             parser.error(str(exc))
+        if args.preprocess:
+            try:
+                check_available()
+            except PreprocessingUnavailableError as exc:
+                print(f"omr-lab: error: --preprocess: {exc}", file=sys.stderr)
+                return EXIT_ENGINE_UNAVAILABLE
         if args.command == "run":
-            return _run(args.input, args.output, args.engine, options, args.timeout)
-        return _benchmark(args.manifest, args.output, args.engine, options, args.timeout)
+            return _run(
+                args.input, args.output, args.engine, options, args.timeout, args.preprocess
+            )
+        return _benchmark(
+            args.manifest, args.output, args.engine, options, args.timeout, args.preprocess
+        )
     if args.command == "synthesize":
         return _synthesize(args.spec, args.output, args.seed)
     parser.print_help()
@@ -270,6 +293,16 @@ def _parse_timeout_seconds(text: str) -> float:
     return value
 
 
+def _parse_preprocess(text: str) -> tuple[str, ...]:
+    try:
+        steps = parse_steps(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+    if not steps:
+        raise argparse.ArgumentTypeError("name at least one step")
+    return steps
+
+
 def _parse_seed(text: str) -> int:
     try:
         value = int(text)
@@ -305,6 +338,7 @@ def _run(
     engine_name: str,
     options: EngineOptions,
     timeout_seconds: float,
+    preprocess: tuple[str, ...] = (),
 ) -> int:
     aborted_message = _aborted_run_message(output_dir)
     if aborted_message is not None:
@@ -313,7 +347,12 @@ def _run(
     engine = ENGINES[engine_name]()
     try:
         result = run_pipeline(
-            input_path, output_dir, engine, timeout_seconds=timeout_seconds, options=options
+            input_path,
+            output_dir,
+            engine,
+            timeout_seconds=timeout_seconds,
+            options=options,
+            preprocess=preprocess,
         )
     except OutputDirectoryError as exc:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
@@ -361,6 +400,7 @@ def _benchmark(
     engine_name: str,
     options: EngineOptions,
     timeout_seconds: float,
+    preprocess: tuple[str, ...] = (),
 ) -> int:
     try:
         manifest = load_manifest(manifest_path)
@@ -383,6 +423,7 @@ def _benchmark(
             engine,
             timeout_seconds=timeout_seconds,
             options=options,
+            preprocess=preprocess,
         )
     except OutputDirectoryError as exc:
         print(f"omr-lab: error: {exc}", file=sys.stderr)
