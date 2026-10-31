@@ -111,7 +111,8 @@ def preprocess_image(
 
     ``output_path`` must not exist (it is created exclusively). Raises
     PreprocessingUnavailableError without the extra, PreprocessingError for an input
-    that cannot be read or decoded, and ValueError for unknown step names.
+    that cannot be read or decoded, or a transparent image whose EXIF orientation
+    cannot be matched unambiguously, and ValueError for unknown step names.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)

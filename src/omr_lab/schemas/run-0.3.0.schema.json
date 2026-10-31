@@ -1354,7 +1354,7 @@
           }
         },
         "orientation_applied": {
-          "description": "Whether the input's EXIF orientation tag turned or mirrored the image before the steps ran (the output PNG has no tag); null when preprocessing failed before the image was read.",
+          "description": "Whether the input's EXIF orientation tag turned or mirrored the image before the steps ran (the output PNG has no tag); null when preprocessing failed.",
           "type": [
             "boolean",
             "null"
