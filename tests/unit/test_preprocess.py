@@ -282,6 +282,36 @@ def test_transparent_pixels_become_white(cv, tmp_path: Path) -> None:
     assert out[0, 0] == 255 and out[7, 7] == 0
 
 
+def _with_exif_orientation(jpeg: bytes, orientation: int) -> bytes:
+    """Insert an EXIF segment holding only the Orientation tag after the JPEG's SOI marker."""
+    import struct
+
+    tiff = b"MM\x00*\x00\x00\x00\x08" + struct.pack(">H", 1)
+    tiff += struct.pack(">HHIHH", 0x0112, 3, 1, orientation, 0) + struct.pack(">I", 0)
+    app1 = b"Exif\x00\x00" + tiff
+    return jpeg[:2] + b"\xff\xe1" + struct.pack(">H", len(app1) + 2) + app1 + jpeg[2:]
+
+
+def test_exif_orientation_is_applied_before_the_steps(cv, tmp_path: Path) -> None:
+    cv2, np = cv
+    # Stored sideways (landscape) with Orientation=6: the photo is upright when turned
+    # 90 degrees clockwise, as phone cameras write a portrait shot.
+    stored = np.full((100, 200), 255, np.uint8)
+    stored[0:20, 0:20] = 0  # stored top-left corner
+    ok, jpeg = cv2.imencode(".jpg", stored)
+    assert ok
+    source = tmp_path / "phone.jpg"
+    source.write_bytes(_with_exif_orientation(jpeg.tobytes(), 6))
+
+    result = preprocess_image(source, tmp_path / "out.png", ["grayscale"])
+
+    out = cv2.imread(str(tmp_path / "out.png"), cv2.IMREAD_UNCHANGED)
+    assert (result.width, result.height) == (100, 200)
+    assert out.shape == (200, 100)
+    # Turned clockwise, the stored top-left corner is now top-right.
+    assert out[5, 95] < 64 and out[5, 5] > 192
+
+
 def test_pdf_and_undecodable_inputs_are_rejected(cv, tmp_path: Path) -> None:
     pdf = tmp_path / "score.pdf"
     pdf.write_bytes(b"%PDF-1.7\n")

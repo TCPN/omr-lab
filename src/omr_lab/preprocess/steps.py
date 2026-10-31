@@ -309,11 +309,26 @@ STEPS: dict[str, Step] = {
 def load_image(data: bytes) -> np.ndarray | None:
     """Decode an image file into 8-bit grayscale or BGR; None when OpenCV cannot read it.
 
-    Transparent pixels are composited onto white and 16-bit images are scaled to 8 bits.
+    The EXIF orientation tag is applied, as photo viewers do: a phone photo taken upright
+    is often stored sideways with a tag saying so, and the steps (and the PNG written
+    afterwards, which has no tag) must see it upright. Transparent pixels are composited
+    onto white and 16-bit images are scaled to 8 bits.
     """
-    image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_UNCHANGED)
+    buffer = np.frombuffer(data, np.uint8)
+    # ANYDEPTH | ANYCOLOR applies the orientation but drops an alpha channel;
+    # IMREAD_UNCHANGED keeps alpha but ignores the orientation.
+    image = cv2.imdecode(buffer, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_ANYCOLOR)
     if image is None:
         return None
+    unchanged = cv2.imdecode(buffer, cv2.IMREAD_UNCHANGED)
+    if (
+        unchanged is not None
+        and unchanged.ndim == 3
+        and unchanged.shape[2] in (2, 4)
+        and unchanged.shape[:2] == image.shape[:2]
+    ):
+        # Formats with transparency (PNG, TIFF) rarely carry an orientation tag.
+        image = unchanged
     if image.dtype == np.uint16:
         image = (image // 257).astype(np.uint8)
     elif image.dtype != np.uint8:

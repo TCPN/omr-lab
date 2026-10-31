@@ -41,7 +41,7 @@ Parameters are fixed per step and recorded with every run (`params`):
 | `threshold` | `block_fraction` | 1/30 | Window size as a fraction of the shorter side. |
 | | `offset` | 15 | Grey levels below the local mean that count as ink. |
 
-Inputs: PNG, JPEG, TIFF (first page) and BMP that OpenCV can decode, 8- or 16-bit; transparency is composited onto white and 16-bit images are scaled to 8 bits. PDF inputs fail with `preprocessing_failed`: convert the pages to images first. The output is always a PNG.
+Inputs: PNG, JPEG, TIFF (first page) and BMP that OpenCV can decode, 8- or 16-bit; the EXIF orientation tag is applied (a phone photo stored sideways with a tag comes out upright, and the PNG written afterwards has no tag); transparency is composited onto white and 16-bit images are scaled to 8 bits. PDF inputs fail with `preprocessing_failed`: convert the pages to images first. The output is always a PNG.
 
 ## Record
 
