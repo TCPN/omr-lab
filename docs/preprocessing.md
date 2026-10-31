@@ -51,7 +51,26 @@ If preprocessing cannot run (a PDF, an undecodable image, the extra not installe
 
 ## Measured effect
 
-RESULTS
+Audiveris 5.11.0 on the synthetic corpus (`benchmarks/synthetic/corpus.json`, 4 sources × 5 conditions, seed 20261023), same engine, default options and timeout for every column; generated 2026-10-31 in a Linux container without OCR languages, so chord symbols and lyrics are not read and only notes and measures are compared. Notes are pitch-and-duration recall over the condition's 4 samples ([metrics.md](metrics.md)); "failed" counts runs that did not succeed.
+
+| Condition | none | `page` | `page,deskew` | `deskew` | `page,deskew,threshold` |
+| --- | --- | --- | --- | --- | --- |
+| clean | 0.90 | 0.90 | 0.90 | 0.90 | 0.88 |
+| scan (rotated 1–2°) | 0.97 | 0.97 | 0.98 | 0.98 | 0.65 |
+| photo (perspective, curvature, no background) | 0.97 | 0.97 | 0.97 | 0.97 | 0.20 (1 failed) |
+| phone (page on a background, fold) | 0.69 | **0.97** | 0.95 | 0.69 | 0.72 (1 failed) |
+| phone-tilted (also rotated up to 8° and tilted) | 0.20 (1 failed) | **0.85** | 0.74 | 0.55 (1 failed) | 0.74 |
+| all 20: note precision / recall | 0.90 / 0.75 | 0.95 / 0.93 | 0.92 / 0.91 | 0.90 / 0.82 | 0.90 / 0.64 |
+| all 20: measures exactly right | 63% | 85% | 83% | 70% | 40% |
+
+What this shows, on this small synthetic corpus and this engine only:
+
+- `page` is the step that helps: phone photos go from 0.69 to 0.97 and tilted phone photos from 0.20 to 0.85, with no change on the other conditions (it correctly does nothing there: no background, or a page as bright as its surroundings).
+- `deskew` alone gives a small gain on scans and partly rescues tilted photos, but after `page` it made two tilted photos worse (a fold shifts the dominant line angle, and the rotation adds resampling). Use `page` alone for phone photos.
+- `threshold` hurts: Audiveris binarizes by itself, and a fixed local threshold breaks thin staff lines on soft or shaded images. It is kept for engines that need binary input, not recommended for Audiveris.
+- One sample (amazing-grace, phone-tilted) stays poor with every combination; its fold crosses the staves, which a four-corner correction cannot straighten (issue #66, dewarping).
+
+With 4 samples per condition, single samples move the averages a lot; treat these as a direction to confirm on more and real photos, not as a general result.
 
 ## Limitations
 
