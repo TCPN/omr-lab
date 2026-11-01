@@ -290,8 +290,8 @@ def test_each_degradation_changes_the_image_reproducibly(degradations, page, kin
     spec = next(s for s in _specs() if s.kind == kind)
     params = degradations.resolve(spec, np.random.default_rng(3))
 
-    result = degradations.apply(page, kind, params)
-    again = degradations.apply(page, kind, json.loads(json.dumps(params)))
+    result = degradations.flatten(degradations.apply(page, kind, params))
+    again = degradations.flatten(degradations.apply(page, kind, json.loads(json.dumps(params))))
 
     assert result.mode == "L"
     assert result.tobytes() != page.tobytes()
@@ -315,10 +315,18 @@ def test_apply_names_a_missing_or_unknown_parameter_set(degradations, page) -> N
 
 
 def test_rotation_keeps_the_whole_page_and_fills_with_white(degradations, page) -> None:
+    from PIL import Image
+
     rotated = degradations.apply(page, "rotate", {"degrees": 10.0})
 
     assert rotated.width > page.width and rotated.height > page.height
-    assert rotated.getpixel((0, 0)) == 255
+    # The uncovered corner is white and not paper; the middle is paper.
+    assert rotated.mode == "LA"
+    assert rotated.getpixel((0, 0)) == (255, 0)
+    assert rotated.getpixel((rotated.width // 2, rotated.height // 2))[1] == 255
+    # The grey band is what rotating the grayscale page alone gives, as before #66.
+    alone = page.rotate(10.0, resample=Image.Resampling.BICUBIC, expand=True, fillcolor=255)
+    assert degradations.flatten(rotated).tobytes() == alone.tobytes()
 
 
 @pytest.mark.parametrize("amplitude", [0.1, -0.1])
@@ -331,7 +339,7 @@ def test_curvature_keeps_music_near_the_edges(degradations, amplitude) -> None:
     draw.rectangle([(190, 0), (210, 3)], fill=0)
     draw.rectangle([(190, 296), (210, 299)], fill=0)
 
-    bent = degradations.apply(image, "curvature", {"amplitude": amplitude})
+    bent = degradations.flatten(degradations.apply(image, "curvature", {"amplitude": amplitude}))
 
     assert bent.size == (400, 330)
     # Both marks sit in the middle column, where the shift is largest; none is lost.
@@ -481,8 +489,98 @@ _FLAT_WARP = {
 }
 
 
+_PLAIN_PLACE = {
+    "scale": 1.0,
+    "background": 50,
+    "gradient": 0.0,
+    "texture": 0.0,
+    "offset_x": 0.5,
+    "offset_y": 0.5,
+    "gradient_angle": 0.0,
+    "texture_seed": 1,
+    "degrees": 0.0,
+    "tilt": 0.0,
+    "corner_insets": [0.0] * 8,
+}
+
+# Geometric kinds strong enough to uncover visible parts of the canvas.
+_GEOMETRIC = {
+    "rotate": {"degrees": 10.0},
+    "perspective": {"strength": 0.2, "corner_insets": [0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15]},
+    "curvature": {"amplitude": 0.1},
+    "warp": {
+        **_FLAT_WARP,
+        "bends": 1,
+        "bend_amplitude": 0.05,
+        "bend_shapes": [0.5, 0.0, 0.3, 0.05, 90.0],
+    },
+}
+
+
+@pytest.mark.parametrize("kind", sorted(_GEOMETRIC))
+def test_paper_outline_follows_geometric_kinds_before_place(degradations, kind) -> None:
+    import numpy as np
+    from PIL import Image
+
+    white = Image.new("L", (400, 300), 255)
+    moved = degradations.apply(white, kind, _GEOMETRIC[kind])
+    assert moved.mode == "LA"
+    paper = np.asarray(moved.getchannel("A"))
+    assert (paper == 0).sum() > 0.01 * paper.size  # the move uncovers part of the canvas
+
+    placed = np.asarray(degradations.apply(moved, "place", _PLAIN_PLACE))
+    # Before #66 place saw the uncovered areas as white paper.
+    as_before = np.asarray(degradations.apply(degradations.flatten(moved), "place", _PLAIN_PLACE))
+    background = (placed == 50).sum()
+    assert background > (as_before == 50).sum() + 0.005 * placed.size
+    # Only the background replaces paper: no pixel turns darker than it or lighter.
+    changed = placed != as_before
+    assert np.all((placed[changed] >= 50) & (placed[changed] < 255))
+
+
+def test_rotated_corners_show_the_background_after_place(degradations) -> None:
+    from PIL import Image
+
+    white = Image.new("L", (400, 300), 255)
+    rotated = degradations.apply(white, "rotate", {"degrees": 10.0})
+    placed = degradations.apply(rotated, "place", _PLAIN_PLACE)
+    assert placed.mode == "L"
+    # place keeps the rotated image's size, which the rotated page's bounding box fills.
+    width, height = placed.size
+    assert placed.getpixel((width // 2, height // 2)) == 255
+    # Its uncovered corners are background.
+    assert placed.getpixel((2, 2)) == 50 and placed.getpixel((width - 3, height - 3)) == 50
+
+
+def test_grey_kinds_keep_the_paper_outline(degradations, page) -> None:
+    moved = degradations.apply(page, "rotate", {"degrees": 10.0})
+    blurred = degradations.apply(moved, "blur", {"radius": 2.0})
+
+    assert blurred.mode == "LA"
+    assert blurred.getchannel("A").tobytes() == moved.getchannel("A").tobytes()
+    alone = degradations.apply(degradations.flatten(moved), "blur", {"radius": 2.0})
+    assert blurred.getchannel("L").tobytes() == alone.tobytes()
+    placed = degradations.apply(blurred, "place", _PLAIN_PLACE)
+    assert placed.getpixel((2, 2)) == 50
+
+
+def test_flatten_returns_the_grey_band(degradations, page) -> None:
+    from PIL import Image
+
+    assert degradations.flatten(page) is page
+    moved = degradations.apply(page, "perspective", _GEOMETRIC["perspective"])
+    assert degradations.flatten(moved).mode == "L"
+    assert degradations.flatten(moved).getpixel((1, 1)) == 255
+    with pytest.raises(ValueError, match="'L' or 'LA' image"):
+        degradations.flatten(Image.new("RGB", (4, 4)))
+    with pytest.raises(ValueError, match="'L' or 'LA' image"):
+        degradations.apply(Image.new("RGB", (4, 4)), "blur", {"radius": 1.0})
+
+
 def test_warp_without_components_changes_nothing(degradations, page) -> None:
-    assert degradations.apply(page, "warp", _FLAT_WARP).tobytes() == page.tobytes()
+    warped = degradations.apply(page, "warp", _FLAT_WARP)
+    assert degradations.flatten(warped).tobytes() == page.tobytes()
+    assert warped.getchannel("A").getextrema() == (255, 255)
 
 
 def test_warp_at_its_limits_keeps_every_mark(degradations) -> None:
@@ -500,7 +598,7 @@ def test_warp_at_its_limits_keeps_every_mark(degradations) -> None:
 
     for seed in range(5):
         params = degradations.resolve(spec, np.random.default_rng(seed))
-        warped = degradations.apply(image, "warp", params)
+        warped = degradations.flatten(degradations.apply(image, "warp", params))
         # Each 8 x 8 mark moves and stretches but none is cut off.
         assert _dark(warped) > 0.6 * _dark(image)
         assert _count_marks(np.asarray(warped) < 128) == 5, (seed, params)
@@ -559,7 +657,7 @@ def test_warp_fold_bends_a_line_and_shades_the_crease(degradations) -> None:
     # A vertical fold through the middle that shifts content down, and a dark crease.
     fold = [0.5, 0.5, 90.0, 0.05, 90.0, -0.5]
     params = {**_FLAT_WARP, "folds": 1, "fold_slope": 0.05, "fold_shade": 0.5, "fold_lines": fold}
-    warped = degradations.apply(image, "warp", params)
+    warped = degradations.flatten(degradations.apply(image, "warp", params))
     pixels = np.asarray(warped)
 
     def line_row(column: int) -> float:
@@ -581,7 +679,9 @@ def test_warp_fold_darkens_one_face_fading_with_distance(degradations) -> None:
     # A vertical fold in the middle with no kink; a negative shade darkens the left face.
     fold = [0.5, 0.5, 90.0, 0.0, 0.0, -0.5]
     params = {**_FLAT_WARP, "folds": 1, "fold_shade": 0.5, "fold_lines": fold}
-    pixels = np.asarray(degradations.apply(white, "warp", params), dtype=float)
+    pixels = np.asarray(
+        degradations.flatten(degradations.apply(white, "warp", params)), dtype=float
+    )
     middle = pixels.shape[1] // 2
 
     dark_face, light_face = pixels[:, middle - 40].mean(), pixels[:, middle + 40].mean()
@@ -604,7 +704,9 @@ def test_warp_crease_shading_stays_on_the_kink_when_bends_move_it(degradations) 
         **{"folds": 1, "fold_slope": 0.1, "fold_shade": 0.5, "fold_lines": fold},
         **{"bends": 1, "bend_amplitude": 0.05, "bend_shapes": bend},
     }
-    pixels = np.asarray(degradations.apply(image, "warp", params), dtype=float)
+    pixels = np.asarray(
+        degradations.flatten(degradations.apply(image, "warp", params)), dtype=float
+    )
 
     # The V's tip: the column where the line's topmost dark pixel is highest.
     dark = pixels < 128
@@ -739,6 +841,7 @@ def test_recorded_parameters_reproduce_the_degraded_image(corpus: Path) -> None:
         rebuilt = image.convert("L")
     for step in worn["synthesis"]["degradations"]:
         rebuilt = degradations.apply(rebuilt, step["kind"], step["params"])
+    rebuilt = degradations.flatten(rebuilt)
     with Image.open(out / worn["image"]) as image:
         assert image.tobytes() == rebuilt.tobytes()
 

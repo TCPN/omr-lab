@@ -4,8 +4,13 @@ Resolving draws every random choice from the sample's generator and returns plai
 numbers; applying uses only those numbers. So the recorded parameters reproduce the
 image without the seed, and the same seed always gives the same parameters.
 
-Images are 8-bit grayscale (Pillow mode "L") with a white background; areas uncovered
-by a geometric change are filled with white.
+Images are 8-bit grayscale (Pillow mode "L") with a white background. The geometric
+kinds (rotate, perspective, curvature and warp) return mode "LA": the grey band fills the
+areas they uncover with white, as before, and the alpha band marks the paper, 255 on the
+page and 0 where the canvas is uncovered. The other kinds change only the grey band and
+keep the alpha band, `place` lays the page on its background through that alpha band and
+returns mode "L", and `flatten` turns a result that is still "LA" into the final "L"
+image by dropping the alpha band.
 """
 
 from __future__ import annotations
@@ -41,7 +46,10 @@ def resolve(degradation: DegradationSpec, rng: np.random.Generator) -> ResolvedP
 
 
 def apply(image: Image.Image, kind: str, params: Mapping[str, Any]) -> Image.Image:
-    """Apply one resolved degradation to a grayscale image and return a new image.
+    """Apply one resolved degradation to an "L" or "LA" image and return a new image.
+
+    See the module docstring for which kinds return "LA"; pass the last result to
+    `flatten` to get the final grayscale image.
 
     Raises ValueError for an unknown kind, or a missing or out-of-range parameter, for
     example in a manifest edited by hand.
@@ -68,7 +76,28 @@ def apply(image: Image.Image, kind: str, params: Mapping[str, Any]) -> Image.Ima
                 f"Degradation {kind!r} parameter {name!r} is {value!r}; "
                 f"expected {expected} from {rule.minimum:g} to {rule.maximum:g}"
             )
-    return KINDS[kind].apply(image, params)
+    rule = KINDS[kind]
+    if image.mode not in ("L", "LA"):
+        raise ValueError(f"Degradations need an 'L' or 'LA' image, not {image.mode!r}")
+    if rule.layers == "grey":
+        if image.mode == "L":
+            return rule.apply(image, params)
+        grey, paper = image.split()
+        return Image.merge("LA", (rule.apply(grey, params), paper))
+    return rule.apply(image.convert("LA"), params)
+
+
+def flatten(image: Image.Image) -> Image.Image:
+    """The final grayscale image: the grey band of an "LA" result, an "L" image unchanged.
+
+    The grey band is already white where the paper mask is 0, as the geometric kinds fill
+    the areas they uncover with white, so samples without `place` look as they always did.
+    """
+    if image.mode == "LA":
+        return image.getchannel("L")
+    if image.mode != "L":
+        raise ValueError(f"Degradations need an 'L' or 'LA' image, not {image.mode!r}")
+    return image
 
 
 def _seed(rng: np.random.Generator) -> int:
@@ -90,9 +119,20 @@ def _draw_noise_seed(params: ResolvedParams, rng: np.random.Generator) -> Resolv
     return {"noise_seed": _seed(rng)}
 
 
+def _layers(image: Image.Image, move: Callable[[Image.Image, int], Image.Image]) -> Image.Image:
+    """Move the grey band (uncovered areas white) and the paper mask (uncovered areas 0)
+    of an "LA" image the same way, each as its own "L" image."""
+    grey, paper = image.split()
+    return Image.merge("LA", (move(grey, WHITE), move(paper, 0)))
+
+
 def _rotate(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
-    return image.rotate(
-        float(params["degrees"]), resample=Image.Resampling.BICUBIC, expand=True, fillcolor=WHITE
+    degrees = float(params["degrees"])
+    return _layers(
+        image,
+        lambda layer, fill: layer.rotate(
+            degrees, resample=Image.Resampling.BICUBIC, expand=True, fillcolor=fill
+        ),
     )
 
 
@@ -100,7 +140,7 @@ def _perspective(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     insets = [float(v) for v in params["corner_insets"]]
     if len(insets) != 8 or not all(0 <= v <= float(params["strength"]) for v in insets):
         raise ValueError("Degradation 'perspective' needs 8 corner_insets from 0 to strength")
-    return _tilt(image, insets, WHITE)
+    return _layers(image, lambda layer, fill: _tilt(layer, insets, fill))
 
 
 def _tilt(image: Image.Image, insets: list[float], fill: int) -> Image.Image:
@@ -140,8 +180,8 @@ def _perspective_coefficients(
 
 
 def _curvature(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
-    pixels = np.asarray(image, dtype=np.float64)
-    height, width = pixels.shape
+    grey, paper = (np.asarray(band, dtype=np.float64) for band in image.split())
+    height, width = grey.shape
     amplitude = float(params["amplitude"])
     # Column x moves down by amplitude * height * sin(pi * x / width): 0 at the edges.
     shift = amplitude * height * np.sin(np.pi * np.arange(width) / width)
@@ -154,12 +194,14 @@ def _curvature(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     fraction = source_y - lower
     columns = np.arange(width)[None, :]
 
-    def sample(rows: np.ndarray) -> np.ndarray:
-        inside = (rows >= 0) & (rows < height)
-        return np.where(inside, pixels[np.clip(rows, 0, height - 1), columns], WHITE)
+    def bend(pixels: np.ndarray, fill: int) -> Image.Image:
+        def sample(rows: np.ndarray) -> np.ndarray:
+            inside = (rows >= 0) & (rows < height)
+            return np.where(inside, pixels[np.clip(rows, 0, height - 1), columns], fill)
 
-    bent = sample(lower) * (1 - fraction) + sample(lower + 1) * fraction
-    return _to_image(bent)
+        return _to_image(sample(lower) * (1 - fraction) + sample(lower + 1) * fraction)
+
+    return Image.merge("LA", (bend(grey, WHITE), bend(paper, 0)))
 
 
 def _blur(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
@@ -222,10 +264,11 @@ def _draw_place(params: ResolvedParams, rng: np.random.Generator) -> ResolvedPar
 def _place(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     """Lay the page, tilted, rotated and shrunk, on a background the size of the input.
 
-    The page's outline follows the tilt and rotation, so the background shows around
-    it. The moved page's bounding box is scaled to fit scale of the image's width and
-    height, so the page loses resolution, as in a photo where it fills only part of the
-    frame; nothing is cut off.
+    The page's outline follows the paper mask (the alpha band) left by earlier geometric
+    kinds, and the tilt and rotation, so the background shows around it. The moved
+    page's bounding box is scaled to fit scale of the image's width and height, so the
+    page loses resolution, as in a photo where it fills only part of the frame; nothing
+    is cut off.
     """
     for name in ("offset_x", "offset_y"):
         if not 0 <= float(params[name]) <= 1:  # also rejects NaN
@@ -234,7 +277,7 @@ def _place(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
         raise ValueError("Degradation 'place' needs a finite gradient_angle")
     width, height = image.size
     # The mask marks the paper: 255 on the page, 0 where the moves uncover the canvas.
-    page, mask = image, Image.new("L", image.size, 255)
+    page, mask = image.split()
     insets = [float(v) for v in params["corner_insets"]]
     if len(insets) != 8 or not all(0 <= v <= float(params["tilt"]) for v in insets):
         raise ValueError("Degradation 'place' needs 8 corner_insets from 0 to tilt")
@@ -388,10 +431,10 @@ def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
     """Move each pixel along a smooth displacement field with kinks at fold lines.
 
     The canvas grows to hold the whole moved page, then is trimmed to it, so no part of
-    the page is cut off. Rows are processed in tiles, so memory stays bounded however
-    far the field moves the page.
+    the page is cut off. The paper mask moves with the page but is not shaded. Rows are
+    processed in tiles, so memory stays bounded however far the field moves the page.
     """
-    pixels = np.asarray(image, dtype=np.float64)
+    pixels, paper = (np.asarray(band, dtype=np.float64) for band in image.split())
     height, width = pixels.shape
     field = _WarpField(params, width, height)
     steepness = field.slope_bound()
@@ -402,6 +445,7 @@ def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
 
     left, top, right, bottom = field.canvas()
     warped = np.empty((bottom - top, right - left), dtype=np.uint8)
+    warped_paper = np.empty_like(warped)
     covered_rows = np.zeros(bottom - top, dtype=bool)
     covered_columns = np.zeros(right - left, dtype=bool)
     for start in range(top, bottom, _TILE_ROWS):
@@ -413,10 +457,13 @@ def _warp(image: Image.Image, params: Mapping[str, Any]) -> Image.Image:
         covered = (source_x > -1) & (source_x < width) & (source_y > -1) & (source_y < height)
         tile = field.shade(_sample(pixels, source_x, source_y, WHITE), xs, ys, covered)
         warped[start - top : stop - top] = np.clip(np.rint(tile), 0, 255)
+        paper_tile = _sample(paper, source_x, source_y, 0)
+        warped_paper[start - top : stop - top] = np.clip(np.rint(paper_tile), 0, 255)
         covered_rows[start - top : stop - top] = covered.any(axis=1)
         covered_columns |= covered.any(axis=0)
     rows, columns = np.flatnonzero(covered_rows), np.flatnonzero(covered_columns)
-    return Image.fromarray(warped[rows[0] : rows[-1] + 1, columns[0] : columns[-1] + 1])
+    trim = (slice(rows[0], rows[-1] + 1), slice(columns[0], columns[-1] + 1))
+    return Image.merge("LA", (Image.fromarray(warped[trim]), Image.fromarray(warped_paper[trim])))
 
 
 def _grid(left: int, right: int, top: int, bottom: int) -> tuple[np.ndarray, np.ndarray]:
@@ -634,12 +681,18 @@ class DegradationKind:
     """Draws the kind's extra random values, after its own parameters are resolved."""
     drawn: tuple[str, ...] = ()
     """Names of the values draw returns; apply needs them too."""
+    layers: str = "grey"
+    """"grey": apply takes and returns the grey band ("L") only, and the paper mask is
+    kept. "paper": apply takes "LA" and returns "LA" (geometric kinds, which move the
+    mask) or "L" (place, which uses it up)."""
 
 
 KINDS: dict[str, DegradationKind] = {
-    "rotate": DegradationKind(_rotate),
-    "perspective": DegradationKind(_perspective, _draw_corner_insets, ("corner_insets",)),
-    "curvature": DegradationKind(_curvature),
+    "rotate": DegradationKind(_rotate, layers="paper"),
+    "perspective": DegradationKind(
+        _perspective, _draw_corner_insets, ("corner_insets",), layers="paper"
+    ),
+    "curvature": DegradationKind(_curvature, layers="paper"),
     "blur": DegradationKind(_blur),
     "noise": DegradationKind(_noise, _draw_noise_seed, ("noise_seed",)),
     "lighting": DegradationKind(_lighting),
@@ -648,8 +701,11 @@ KINDS: dict[str, DegradationKind] = {
         _place,
         _draw_place,
         ("offset_x", "offset_y", "gradient_angle", "texture_seed", "corner_insets"),
+        layers="paper",
     ),
     "shadow": DegradationKind(_shadow, _draw_shadow, ("centre", "vertices")),
     "vignette": DegradationKind(_vignette),
-    "warp": DegradationKind(_warp, _draw_warp, ("fold_lines", "bend_shapes", "undulation_seed")),
+    "warp": DegradationKind(
+        _warp, _draw_warp, ("fold_lines", "bend_shapes", "undulation_seed"), layers="paper"
+    ),
 }
