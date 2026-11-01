@@ -118,6 +118,7 @@ def generate_corpus(
                 params = degradations.resolve(degradation, rng)
                 image = degradations.apply(image, degradation.kind, params)
                 applied_degradations.append({"kind": degradation.kind, "params": params})
+            image = degradations.flatten(image)
             image_name = f"{IMAGES_DIRNAME}/{sample_id}.png"
             image.save(output_dir / image_name, format="PNG", dpi=(render.DPI, render.DPI))
             samples.append(

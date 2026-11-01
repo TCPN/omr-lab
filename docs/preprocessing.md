@@ -75,7 +75,7 @@ With 4 samples per condition, single samples move the averages a lot; treat thes
 ## Limitations
 
 - `page` needs a page that is clearly brighter than a visible background. It does not find a page that fills the frame or lies on a white table; it then does nothing, which is safe but no help.
-- `page` fits one quadrilateral. Curved or folded pages are only straightened at their outline; the content inside stays bent (dewarping is a separate, later transform, issue #66 and the roadmap's Phase 4).
+- `page` fits one quadrilateral. Curved or folded pages are only straightened at their outline; the content inside stays bent (dewarping is a separate, later transform, the roadmap's Phase 4; it has no issue yet).
 - `deskew` measures the dominant line angle. Skew beyond `max_degrees` is not corrected and can be misjudged; perspective (lines at different angles) cannot be fixed by a rotation, so use `page` for photos.
 - The parameters are fixed. They were chosen on the synthetic corpus and may need tuning for real photos; changing them would be a code change, recorded in `params`.
 - No step makes up content: transforms only resample or binarize pixels that are there.
