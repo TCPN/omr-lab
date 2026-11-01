@@ -14,7 +14,7 @@ import math
 import platform
 import stat
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +31,7 @@ from omr_lab.pipeline import (
     _write_atomically,
     run_pipeline,
 )
+from omr_lab.preprocess import parse_steps
 from omr_lab.schemas.benchmark import (
     BENCHMARK_REPORT_SCHEMA_VERSION,
     BenchmarkDocumentValidationError,
@@ -129,11 +130,16 @@ def run_benchmark(
     *,
     timeout_seconds: float,
     options: EngineOptions | None = None,
+    preprocess: Iterable[str] | None = None,
 ) -> BenchmarkResult:
     """Run each manifest sample with ``engine`` and write report.json and report.md.
 
-    Raises ValueError for an invalid ``timeout_seconds``, engine name or options before anything
-    is written. ``output_dir`` must be missing or empty (OutputDirectoryError otherwise).
+    ``preprocess`` names preprocessing steps applied to a copy of every sample image
+    (docs/preprocessing.md); the manifest's images are not modified.
+
+    Raises ValueError for an invalid ``timeout_seconds``, engine name, options or
+    preprocessing steps before anything is written. ``output_dir`` must be missing or
+    empty (OutputDirectoryError otherwise).
     Failed runs do not stop the benchmark; they are recorded. A KeyboardInterrupt stops
     it without a report. OSError is raised, without a report, when a run document or
     the report cannot be written (for example a full disk).
@@ -154,10 +160,11 @@ def run_benchmark(
         json.dumps(requested, ensure_ascii=False, allow_nan=False).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise ValueError(f"Engine options cannot be recorded as UTF-8 JSON: {exc}.") from exc
+    steps = parse_steps(preprocess) if preprocess is not None else ()
     generated_at = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     runs_dir = _prepare_output_dir(output_dir)
     entries = [
-        _run_sample(manifest, sample, runs_dir, engine, timeout_seconds, requested)
+        _run_sample(manifest, sample, runs_dir, engine, timeout_seconds, requested, steps)
         for sample in manifest.samples
     ]
     report = {
@@ -175,6 +182,7 @@ def run_benchmark(
             "requested_options": requested,
             "timeout_seconds": timeout_seconds,
         },
+        "preprocessing": {"requested": list(steps)} if steps else None,
         "samples": entries,
         "summary": _summary(entries),
     }
@@ -234,6 +242,7 @@ def _run_sample(
     engine: Engine,
     timeout_seconds: float,
     requested_options: dict[str, Any],
+    steps: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "id": sample["id"],
@@ -274,6 +283,7 @@ def _run_sample(
             engine,
             timeout_seconds=timeout_seconds,
             options=requested_options,
+            preprocess=steps,
         )
     except ValueError as exc:
         # Arguments that make a run record impossible, such as an image file name the
@@ -292,12 +302,20 @@ def _run_sample(
         "options": document["options"],
         "duration_seconds": document["timing"]["duration_seconds"],
         "warning_codes": dict(sorted(Counter(w["code"] for w in document["warnings"]).items())),
+        "preprocessing": _applied_steps(document),
     }
     if sample.get("ground_truth") is not None:
         _measure_correctness(
             entry, manifest.base_dir / sample["ground_truth"], document, runs_dir.parent
         )
     return entry
+
+
+def _applied_steps(document: dict[str, Any]) -> dict[str, bool] | None:
+    record = document.get("preprocessing")
+    if not record or not record["steps"]:
+        return None
+    return {step["name"]: step["applied"] for step in record["steps"]}
 
 
 def _measure_correctness(
@@ -439,6 +457,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"{_markdown_cell(', '.join(summary['engine_versions']) or 'version unknown')}; "
         f"options {_markdown_cell(json.dumps(engine['requested_options'], ensure_ascii=False))}; "
         f"timeout {engine['timeout_seconds']:g} s",
+        *_markdown_preprocessing(report),
         f"- Samples: {summary['samples']} ({summary['excluded']} excluded, "
         f"{summary['not_run']} not run); attempted {summary['attempted']}: "
         f"{summary['succeeded']} succeeded, {summary['failed']} failed"
@@ -448,9 +467,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         "recognized correctly. Correctness against the ground truth is in the next "
         "section, for samples that have one (definitions: docs/metrics.md).",
         "",
-        "| Sample | Status | Condition | Duration (s) | Error or reason | Warnings |",
-        "| --- | --- | --- | --- | --- | --- |",
     ]
+    preprocessed = bool(report.get("preprocessing"))
+    if preprocessed:
+        lines += [
+            "| Sample | Status | Condition | Duration (s) | Preprocessing applied "
+            "| Error or reason | Warnings |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    else:
+        lines += [
+            "| Sample | Status | Condition | Duration (s) | Error or reason | Warnings |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
     for entry in report["samples"]:
         run = entry["run"]
         if run is not None:
@@ -465,13 +494,32 @@ def render_markdown(report: dict[str, Any]) -> str:
                 if entry["status"] == "excluded"
                 else f"{entry['problem']['code']}: {entry['problem']['message']}"
             )
+        applied = ""
+        if preprocessed:
+            steps = run["preprocessing"] if run is not None else None
+            applied = "| " + (
+                ", ".join(name for name, done in steps.items() if done) or "none"
+                if steps is not None
+                else ""
+            )
+            applied += " "
         lines.append(
             f"| {_markdown_cell(entry['id'])} | {entry['status']} "
             f"| {_markdown_cell(entry['condition'])} | {duration} "
-            f"| {_markdown_cell(detail)} | {_markdown_cell(warnings)} |"
+            f"{applied}| {_markdown_cell(detail)} | {_markdown_cell(warnings)} |"
         )
     lines += _markdown_correctness(report)
     return "\n".join(lines) + "\n"
+
+
+def _markdown_preprocessing(report: dict[str, Any]) -> list[str]:
+    record = report.get("preprocessing")
+    if not record:
+        return []
+    return [
+        f"- Preprocessing: {', '.join(record['requested'])} (applied to a copy of each image; "
+        "the steps that changed it are listed per sample, details in each run.json)"
+    ]
 
 
 def _markdown_correctness(report: dict[str, Any]) -> list[str]:

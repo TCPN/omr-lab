@@ -27,6 +27,7 @@ uv run omr-lab run score.png -o runs/0001                  # Audiveris (the defa
 uv run omr-lab run score.png -o runs/0002 --engine mock    # no recognition, for trying the CLI
 uv run omr-lab run score.pdf -o runs/0003 --option outcome=failed --engine mock
 uv run omr-lab run score.png -o runs/0004 --timeout 1200
+uv run omr-lab run photo.jpg -o runs/0005 --preprocess page   # needs the preprocess extra
 ```
 
 | Argument | Meaning |
@@ -36,6 +37,7 @@ uv run omr-lab run score.png -o runs/0004 --timeout 1200
 | `--engine NAME` | `audiveris` (default) or `mock`. The mock engine recognizes nothing; see [pipeline.md](pipeline.md#mock-engine). |
 | `--option KEY=VALUE` | Engine option, repeatable; a key may be given once. |
 | `--timeout SECONDS` | Engine timeout, a finite number greater than zero (default 600). |
+| `--preprocess STEP[,STEP...]` | Preprocess a copy of the input before recognition, with these steps in order: `grayscale`, `page`, `deskew`, `threshold` ([preprocessing.md](preprocessing.md)). The input is not modified; the engine reads `DIR/preprocessed/input.png`. Needs `uv sync --extra preprocess`; without it the command exits with 4 before running. An unknown or repeated step is a usage error (2). |
 
 `--option` values are read as JSON when they are a JSON scalar: a number (`3`, `0.5`), `true`, `false`, `null`, or a quoted string (`'"3"'` for the text 3). Anything else is plain text, so `outcome=failed` is the string `failed`. A JSON array or object, `NaN` and `Infinity` stay text, because engine options are JSON scalars (`EngineOptions`). The engine decides which keys it accepts; an unknown key fails the run with `invalid_option` and the engine's message.
 
@@ -49,7 +51,7 @@ A directory that has `raw/` but no `run.json` is reported as an aborted run (a r
 uv run omr-lab benchmark tests/fixtures/e2e/manifest.json -o benchmarks/reports/generated/0001 --engine mock
 ```
 
-`MANIFEST` and `-o`/`--output DIR` (missing or empty) are required; `--engine`, `--option` and `--timeout` are as for `run` and apply to every sample. It prints the report paths, one line per sample and, when samples have a ground truth, the total note precision and recall and the lyrics character error rate ([metrics.md](metrics.md)). The manifest, report and exit codes are described in [benchmark.md](benchmark.md); the table below is for `doctor` and `run`.
+`MANIFEST` and `-o`/`--output DIR` (missing or empty) are required; `--engine`, `--option`, `--timeout` and `--preprocess` are as for `run` and apply to every sample. It prints the report paths, one line per sample and, when samples have a ground truth, the total note precision and recall and the lyrics character error rate ([metrics.md](metrics.md)). The manifest, report and exit codes are described in [benchmark.md](benchmark.md); the table below is for `doctor` and `run`.
 
 ## synthesize
 
@@ -65,10 +67,10 @@ uv run omr-lab synthesize benchmarks/synthetic/corpus.json -o benchmarks/synthet
 | Code | Meaning | `error.code` in `run.json` |
 | --- | --- | --- |
 | 0 | `run` succeeded, or `doctor` found every checked engine available | none |
-| 1 | The run failed for another reason | `engine_failed`, `engine_timeout`, `musicxml_invalid`, `internal_error` |
-| 2 | Invalid command line: unknown command or engine, malformed `--option`, invalid `--timeout`, or an input file name the run document cannot store; no run directory is created | none |
+| 1 | The run failed for another reason | `engine_failed`, `engine_timeout`, `musicxml_invalid`, `preprocessing_failed`, `internal_error` |
+| 2 | Invalid command line: unknown command or engine, malformed `--option`, invalid `--timeout`, unknown or repeated `--preprocess` step, or an input file name the run document cannot store; no run directory is created | none |
 | 3 | Invalid input: missing, not a file, empty, unreadable, or unsupported extension | `invalid_input` |
-| 4 | Engine unavailable (`run`), or a checked engine unavailable (`doctor`) | `engine_unavailable` |
+| 4 | Engine unavailable (`run`), a checked engine unavailable (`doctor`), or `--preprocess` without the `preprocess` extra (no run directory is created) | `engine_unavailable`, or none |
 | 5 | The engine rejected an option name or value | `invalid_option` |
 | 6 | The output directory cannot be used (not a directory, not empty, an aborted run, or not creatable), or `run.json` could not be written (for example a full disk, which leaves an aborted run); no `run.json` is written | none |
 | 130 | Interrupted with Ctrl-C. During the engine step `run.json` records `interrupted`; before or after it, no `run.json` is written and the CLI says so | `interrupted`, or no `run.json` |

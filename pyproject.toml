@@ -22,6 +22,11 @@ synthetic = [
     "pillow>=11.0",
     "verovio>=6.0",
 ]
+# OpenCV image preprocessing before recognition (`--preprocess`, docs/preprocessing.md).
+preprocess = [
+    "numpy>=2.0",
+    "opencv-python-headless>=4.10",
+]
 
 [project.scripts]
 omr-lab = "omr_lab.cli:main"

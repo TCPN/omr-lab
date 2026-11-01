@@ -17,10 +17,10 @@ BENCHMARK_MANIFEST_SCHEMA_VERSION = "0.2.0"
 SUPPORTED_BENCHMARK_MANIFEST_SCHEMA_VERSIONS: tuple[str, ...] = ("0.1.0", "0.2.0")
 """Manifest schema versions that this package reads."""
 
-BENCHMARK_REPORT_SCHEMA_VERSION = "0.2.0"
+BENCHMARK_REPORT_SCHEMA_VERSION = "0.3.0"
 """Version of the benchmark report schema that this package writes."""
 
-SUPPORTED_BENCHMARK_REPORT_SCHEMA_VERSIONS: tuple[str, ...] = ("0.1.0", "0.2.0")
+SUPPORTED_BENCHMARK_REPORT_SCHEMA_VERSIONS: tuple[str, ...] = ("0.1.0", "0.2.0", "0.3.0")
 """Report schema versions that this package validates."""
 
 

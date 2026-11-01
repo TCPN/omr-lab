@@ -1,0 +1,819 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:omr-lab:schema:benchmark-report:0.3.0",
+  "title": "OMR Lab benchmark report",
+  "description": "Generated record of one benchmark: the manifest, environment and engine configuration, and one entry per manifest sample (run, failed, excluded or not run); see docs/benchmark.md. A generated report is not ground truth.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "manifest",
+    "environment",
+    "engine",
+    "preprocessing",
+    "samples",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.3.0"
+    },
+    "generated_at": {
+      "description": "UTC RFC 3339 timestamp at which the benchmark started.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "sha256",
+        "name",
+        "schema_version"
+      ],
+      "properties": {
+        "filename": {
+          "description": "Base name of the manifest file (no directory, so no local path).",
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schema_version": {
+          "type": "string"
+        }
+      }
+    },
+    "environment": {
+      "description": "The machine the benchmark ran on; no host name, user name or path.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "omr_lab_version",
+        "python_version",
+        "python_implementation",
+        "os",
+        "os_release",
+        "machine"
+      ],
+      "properties": {
+        "omr_lab_version": {
+          "type": "string"
+        },
+        "python_version": {
+          "type": "string"
+        },
+        "python_implementation": {
+          "type": "string"
+        },
+        "os": {
+          "type": "string"
+        },
+        "os_release": {
+          "type": "string"
+        },
+        "machine": {
+          "type": "string"
+        }
+      }
+    },
+    "engine": {
+      "description": "The engine configuration requested for every sample. Each run's effective options and engine version are in its sample entry.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "requested_options",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requested_options": {
+          "$ref": "#/$defs/options"
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "preprocessing": {
+      "description": "Preprocessing steps requested for every sample (docs/preprocessing.md), or null when none. What each step did is in each run document.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requested"
+          ],
+          "properties": {
+            "requested": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "samples": {
+      "description": "One entry per manifest sample, in manifest order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sample"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "samples",
+        "excluded",
+        "not_run",
+        "attempted",
+        "succeeded",
+        "failed",
+        "success_rate",
+        "engine_versions",
+        "error_codes",
+        "run_duration_seconds",
+        "correctness"
+      ],
+      "properties": {
+        "samples": {
+          "$ref": "#/$defs/count"
+        },
+        "excluded": {
+          "$ref": "#/$defs/count"
+        },
+        "not_run": {
+          "$ref": "#/$defs/count"
+        },
+        "attempted": {
+          "description": "Samples given to the pipeline: succeeded + failed.",
+          "$ref": "#/$defs/count"
+        },
+        "succeeded": {
+          "$ref": "#/$defs/count"
+        },
+        "failed": {
+          "$ref": "#/$defs/count"
+        },
+        "success_rate": {
+          "description": "succeeded / attempted, rounded down to 3 decimals, or null when nothing was attempted. Pipeline completion, not musical correctness.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "engine_versions": {
+          "description": "Distinct engine versions recorded by the runs, sorted; null versions are left out.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error_codes": {
+          "description": "Number of failed runs per run error code.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        },
+        "run_duration_seconds": {
+          "description": "Sum of the attempted runs' durations.",
+          "type": "number",
+          "minimum": 0
+        },
+        "correctness": {
+          "description": "Totals over the samples with correctness; null when there are none.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/correctness_summary"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "options": {
+      "description": "Engine options; any JSON values, like the run document's options.",
+      "type": "object"
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "image",
+        "image_sha256",
+        "ground_truth",
+        "source",
+        "license",
+        "condition",
+        "exclusion_reason",
+        "problem",
+        "run",
+        "correctness",
+        "correctness_problem",
+        "ground_truth_warning_codes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "description": "'succeeded' and 'failed' are the run's status; 'excluded' comes from the manifest; 'not_run' means a check before the run failed (see problem).",
+          "enum": [
+            "succeeded",
+            "failed",
+            "excluded",
+            "not_run"
+          ]
+        },
+        "image": {
+          "description": "The image path as written in the manifest.",
+          "type": "string"
+        },
+        "image_sha256": {
+          "description": "The checksum the manifest expects.",
+          "$ref": "#/$defs/sha256"
+        },
+        "ground_truth": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "condition": {
+          "type": "string"
+        },
+        "exclusion_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "problem": {
+          "description": "Why a 'not_run' sample was not run; null otherwise.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "enum": [
+                    "image_unreadable",
+                    "image_checksum_mismatch",
+                    "ground_truth_unreadable",
+                    "ground_truth_checksum_mismatch",
+                    "run_not_started"
+                  ]
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        },
+        "run": {
+          "description": "Summary of the sample's run document; null when the sample was not run.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "document",
+                "status",
+                "error_code",
+                "engine_version",
+                "options",
+                "duration_seconds",
+                "warning_codes",
+                "preprocessing"
+              ],
+              "properties": {
+                "document": {
+                  "description": "Path of the run document relative to the report's directory.",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "enum": [
+                    "succeeded",
+                    "failed"
+                  ]
+                },
+                "error_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "engine_version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "options": {
+                  "description": "Effective options recorded in the run document.",
+                  "$ref": "#/$defs/options"
+                },
+                "duration_seconds": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "warning_codes": {
+                  "description": "Number of run warnings per warning code.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/$defs/count"
+                  }
+                },
+                "preprocessing": {
+                  "description": "Whether each preprocessing step changed the image, by step name, from the run document; null when the run did no preprocessing (none requested, or it stopped before or during preprocessing).",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "correctness": {
+          "description": "Musical correctness, for samples with a ground truth whose run succeeded or failed; null otherwise, or when correctness_problem says why it could not be measured.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/correctness"
+            }
+          ]
+        },
+        "correctness_problem": {
+          "description": "Why correctness could not be measured normally for a sample that has a ground truth and ran; null otherwise. ground_truth_invalid: correctness is null. comparison_too_large: correctness is computed without alignment, so every ground-truth item counts as missed and every predicted item as extra. comparison_failed: an unexpected error while measuring; correctness is computed as a missing prediction, or null when the ground truth itself could not be converted or measured.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ],
+              "properties": {
+                "code": {
+                  "enum": [
+                    "ground_truth_invalid",
+                    "comparison_too_large",
+                    "comparison_failed"
+                  ]
+                },
+                "message": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        },
+        "ground_truth_warning_codes": {
+          "description": "Number of warnings per warning code from loading the ground truth and converting it to a score, when it was converted; null otherwise. Warnings mean the converter dropped or nulled part of the ground truth, so low scores may not be the engine's fault.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/count"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "rate": {
+      "description": "A fraction rounded down to 4 decimals, or null when its denominator is 0.",
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "error_rate": {
+      "description": "Errors divided by the ground-truth length, rounded up to 4 decimals; can exceed 1 when the prediction has many extra items. Null when the ground truth is empty.",
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "matches": {
+      "description": "Items matched after alignment: precision = matched / predicted, recall = matched / ground_truth, f1 = 2 × matched / (ground_truth + predicted).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ground_truth",
+        "predicted",
+        "matched",
+        "precision",
+        "recall",
+        "f1"
+      ],
+      "properties": {
+        "ground_truth": {
+          "$ref": "#/$defs/count"
+        },
+        "predicted": {
+          "$ref": "#/$defs/count"
+        },
+        "matched": {
+          "$ref": "#/$defs/count"
+        },
+        "precision": {
+          "$ref": "#/$defs/rate"
+        },
+        "recall": {
+          "$ref": "#/$defs/rate"
+        },
+        "f1": {
+          "$ref": "#/$defs/rate"
+        }
+      }
+    },
+    "signatures": {
+      "description": "Key (fifths) or time (beats/beat-type) signatures of the compared part in order, without repeats; correct when the lists are equal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ground_truth",
+        "predicted",
+        "correct"
+      ],
+      "properties": {
+        "ground_truth": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ]
+          }
+        },
+        "predicted": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ]
+          }
+        },
+        "correct": {
+          "type": "boolean"
+        }
+      }
+    },
+    "measures": {
+      "description": "Measures whose notes and rests (pitches and durations) are identical after aligning the measure sequences. compared = max(ground_truth, predicted) per sample, summed in totals; accuracy = exact / compared.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ground_truth",
+        "predicted",
+        "compared",
+        "exact",
+        "accuracy"
+      ],
+      "properties": {
+        "ground_truth": {
+          "$ref": "#/$defs/count"
+        },
+        "predicted": {
+          "$ref": "#/$defs/count"
+        },
+        "compared": {
+          "$ref": "#/$defs/count"
+        },
+        "exact": {
+          "$ref": "#/$defs/count"
+        },
+        "accuracy": {
+          "$ref": "#/$defs/rate"
+        }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ground_truth",
+        "predicted",
+        "pitch",
+        "duration",
+        "pitch_and_duration",
+        "rests"
+      ],
+      "properties": {
+        "ground_truth": {
+          "description": "Notes (a chord is one note) in the ground truth, grace notes excluded.",
+          "$ref": "#/$defs/count"
+        },
+        "predicted": {
+          "$ref": "#/$defs/count"
+        },
+        "pitch": {
+          "$ref": "#/$defs/matches"
+        },
+        "duration": {
+          "$ref": "#/$defs/matches"
+        },
+        "pitch_and_duration": {
+          "$ref": "#/$defs/matches"
+        },
+        "rests": {
+          "description": "Rests aligned to a rest of the same duration; hidden rests excluded.",
+          "$ref": "#/$defs/matches"
+        }
+      }
+    },
+    "verse": {
+      "description": "One verse (lyric number): the ground-truth verse against the predicted verse with the same number, or, under extra_predicted_verses, a predicted verse against an empty ground truth.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "number",
+        "ground_truth_syllables",
+        "predicted_syllables",
+        "syllable_errors",
+        "ground_truth_characters",
+        "predicted_characters",
+        "character_errors",
+        "syllable_error_rate",
+        "character_error_rate"
+      ],
+      "properties": {
+        "number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ground_truth_syllables": {
+          "$ref": "#/$defs/count"
+        },
+        "predicted_syllables": {
+          "$ref": "#/$defs/count"
+        },
+        "syllable_errors": {
+          "$ref": "#/$defs/count"
+        },
+        "ground_truth_characters": {
+          "$ref": "#/$defs/count"
+        },
+        "predicted_characters": {
+          "$ref": "#/$defs/count"
+        },
+        "character_errors": {
+          "$ref": "#/$defs/count"
+        },
+        "syllable_error_rate": {
+          "$ref": "#/$defs/error_rate"
+        },
+        "character_error_rate": {
+          "$ref": "#/$defs/error_rate"
+        }
+      }
+    },
+    "correctness": {
+      "description": "Musical correctness of the run's score against the sample's ground truth (docs/metrics.md). The first part of each score is compared.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prediction",
+        "parts",
+        "key_signatures",
+        "time_signatures",
+        "measures",
+        "notes",
+        "chord_symbols",
+        "lyrics"
+      ],
+      "properties": {
+        "prediction": {
+          "description": "'missing' when the run failed or produced no score; every ground-truth item then counts as missed.",
+          "enum": [
+            "score",
+            "missing"
+          ]
+        },
+        "parts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ground_truth",
+            "predicted"
+          ],
+          "properties": {
+            "ground_truth": {
+              "$ref": "#/$defs/count"
+            },
+            "predicted": {
+              "$ref": "#/$defs/count"
+            }
+          }
+        },
+        "key_signatures": {
+          "$ref": "#/$defs/signatures"
+        },
+        "time_signatures": {
+          "$ref": "#/$defs/signatures"
+        },
+        "measures": {
+          "$ref": "#/$defs/measures"
+        },
+        "notes": {
+          "$ref": "#/$defs/notes"
+        },
+        "chord_symbols": {
+          "$ref": "#/$defs/matches"
+        },
+        "lyrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verses",
+            "extra_predicted_verses"
+          ],
+          "properties": {
+            "verses": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/verse"
+              }
+            },
+            "extra_predicted_verses": {
+              "description": "Predicted verses whose number the ground truth does not have, each compared with an empty ground truth (all its syllables and characters are errors).",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/verse"
+              }
+            }
+          }
+        }
+      }
+    },
+    "correctness_summary": {
+      "description": "Counts summed over the compared samples, with rates computed from the sums.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "samples",
+        "predictions_missing",
+        "key_signatures_correct",
+        "time_signatures_correct",
+        "measures",
+        "notes",
+        "chord_symbols",
+        "lyrics"
+      ],
+      "properties": {
+        "samples": {
+          "description": "Samples with a correctness object.",
+          "$ref": "#/$defs/count"
+        },
+        "predictions_missing": {
+          "$ref": "#/$defs/count",
+          "description": "Samples scored as a missing prediction: failed runs, runs without a score, and comparison_failed samples."
+        },
+        "key_signatures_correct": {
+          "$ref": "#/$defs/count"
+        },
+        "time_signatures_correct": {
+          "$ref": "#/$defs/count"
+        },
+        "measures": {
+          "$ref": "#/$defs/measures"
+        },
+        "notes": {
+          "$ref": "#/$defs/notes"
+        },
+        "chord_symbols": {
+          "$ref": "#/$defs/matches"
+        },
+        "lyrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verses",
+            "extra_predicted_verses",
+            "ground_truth_syllables",
+            "predicted_syllables",
+            "syllable_errors",
+            "ground_truth_characters",
+            "predicted_characters",
+            "character_errors",
+            "syllable_error_rate",
+            "character_error_rate"
+          ],
+          "properties": {
+            "verses": {
+              "$ref": "#/$defs/count"
+            },
+            "extra_predicted_verses": {
+              "$ref": "#/$defs/count"
+            },
+            "ground_truth_syllables": {
+              "$ref": "#/$defs/count"
+            },
+            "predicted_syllables": {
+              "$ref": "#/$defs/count"
+            },
+            "syllable_errors": {
+              "$ref": "#/$defs/count"
+            },
+            "ground_truth_characters": {
+              "$ref": "#/$defs/count"
+            },
+            "predicted_characters": {
+              "$ref": "#/$defs/count"
+            },
+            "character_errors": {
+              "$ref": "#/$defs/count"
+            },
+            "syllable_error_rate": {
+              "$ref": "#/$defs/error_rate"
+            },
+            "character_error_rate": {
+              "$ref": "#/$defs/error_rate"
+            }
+          },
+          "description": "Sums over the ground-truth verses and the extra predicted verses of all samples; the error rates divide by the ground-truth length."
+        }
+      }
+    }
+  }
+}

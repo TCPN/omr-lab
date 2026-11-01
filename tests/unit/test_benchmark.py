@@ -642,7 +642,10 @@ def test_reports_of_schema_0_1_0_still_validate(manifest_path: Path, tmp_path: P
     old = copy.deepcopy(report)
     old["schema_version"] = "0.1.0"
     del old["summary"]["correctness"]
+    del old["preprocessing"]
     for entry in old["samples"]:
+        if entry["run"] is not None:
+            del entry["run"]["preprocessing"]
         del entry["correctness_problem"]
         del entry["ground_truth_warning_codes"]
 

@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "status": "succeeded",
   "input": {
     "filename": "page-01.pdf",
@@ -9,6 +9,7 @@
   "engine": {"name": "homr", "version": "0.3.0"},
   "options": {"device": "cpu"},
   "artifacts": {"musicxml": "raw/page-01.musicxml", "engine_log": "raw/homr.log"},
+  "preprocessing": null,
   "timing": {"duration_seconds": 3.25, "started_at": "2026-10-13T09:30:00Z"},
   "score": null,
   "warnings": [

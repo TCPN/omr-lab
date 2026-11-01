@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.3.0",
+  "status": "succeeded",
+  "input": {
+    "filename": "phone-photo.jpg",
+    "media_type": "image/jpeg",
+    "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+  },
+  "engine": {
+    "name": "audiveris",
+    "version": "5.11.0"
+  },
+  "options": {},
+  "artifacts": {
+    "preprocessed_image": "preprocessed/input.png",
+    "musicxml": "raw/input.mxl"
+  },
+  "timing": {
+    "duration_seconds": 38.5
+  },
+  "score": null,
+  "warnings": [],
+  "error": null
+}

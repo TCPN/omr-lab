@@ -16,31 +16,34 @@ result.document_path  # runs/0001/run.json
 
 ```
 <output_dir>/
-  run.json                 normalized run document (schema 0.2.0)
+  run.json                 normalized run document (schema 0.3.0)
   engine_diagnostics.log   EngineResult.diagnostics, one per line (only when there are any)
+  preprocessed/input.png   the preprocessed copy of the input (only with preprocess=...)
   raw/                     raw engine artifacts; the engine's output_dir
 ```
 
 - `output_dir` is created (with parents) if missing. It must not exist or be an empty directory; otherwise `OutputDirectoryError` (a `ValueError`) is raised before anything is written, so earlier results are never overwritten or mixed with a new run. This also keeps the input file's own directory from being used as the output directory.
 - A run claims `output_dir` by creating `raw/` exclusively before anything else is written, so `raw/` exists even when the engine is never called. Of several runs started at once into the same missing or empty directory, one proceeds and the others get `OutputDirectoryError` ("already used by another run").
-- The input file is only read (for its SHA-256 and by the engine); it is never modified, moved, or copied.
+- The input file is only read (for its SHA-256 and by the engine, or by preprocessing); it is never modified or moved. With `preprocess=[...]` the steps are applied to a copy, written as `preprocessed/input.png` (a fixed name, so nothing of the input's name reaches a path), and the engine reads that copy instead ([preprocessing.md](preprocessing.md)).
 - `run.json` is UTF-8 (non-ASCII text such as Chinese lyrics in diagnostics is written as-is), validated with `validate_run_document()` before it is written, and written through a uniquely named temporary file that is then renamed; it gets the same file mode as the other files of the run (the umask applies).
 
 ## Steps
 
-1. Check arguments that make a record impossible and raise `ValueError` for them: `timeout_seconds` that is not an `int` or `float`, not finite, or not greater than zero (a `bool` is rejected too), an empty engine name, an input file name that is empty, contains a backslash or control character, or is not valid UTF-8 (for example a Big5 name read with surrogate escapes) (the schema stores the base name only), and an unusable `output_dir` (`OutputDirectoryError`: not a directory, not empty, or any `OSError` while checking or creating it, such as a dangling symlink or a file as a parent).
+1. Check arguments that make a record impossible and raise `ValueError` for them: `timeout_seconds` that is not an `int` or `float`, not finite, or not greater than zero (a `bool` is rejected too), an empty engine name, an input file name that is empty, contains a backslash or control character, or is not valid UTF-8 (for example a Big5 name read with surrogate escapes) (the schema stores the base name only), and unknown or repeated `preprocess` step names, and an unusable `output_dir` (`OutputDirectoryError`: not a directory, not empty, or any `OSError` while checking or creating it, such as a dangling symlink or a file as a parent).
 2. Check the input with one `stat()`: it must exist, be a regular file, be non-empty, be readable, and have a supported extension (case-insensitive): `.png`, `.jpg`/`.jpeg`, `.tif`/`.tiff`, `.bmp`, `.pdf`. `input.media_type` is derived from the extension (content is not sniffed); `input.sha256` is the digest of the input bytes.
-3. `engine.check_available()`; its version is recorded as `engine.version`.
-4. `engine.recognize(input, output_dir / "raw", timeout_seconds=..., options=...)`. A non-empty `EngineResult.version` replaces the availability version.
-5. Map the `EngineResult` to the run document (below).
-6. If the run has not failed, load the primary `musicxml` artifact with `omr_lab.musicxml.load_musicxml` and convert it with `omr_lab.score.score_from_musicxml` into `score` (see `score` below).
-7. Validate and write.
+3. Only with `preprocess`: apply the steps to a copy of the input and write `preprocessed/input.png`; record them in `preprocessing` and the file as the `preprocessed_image` artifact.
+4. `engine.check_available()`; its version is recorded as `engine.version`.
+5. `engine.recognize(input, output_dir / "raw", timeout_seconds=..., options=...)`, where `input` is the preprocessed copy when there is one. A non-empty `EngineResult.version` replaces the availability version.
+6. Map the `EngineResult` to the run document (below).
+7. If the run has not failed, load the primary `musicxml` artifact with `omr_lab.musicxml.load_musicxml` and convert it with `omr_lab.score.score_from_musicxml` into `score` (see `score` below).
+8. Validate and write.
 
 Run failures do not raise; each produces a failed run document (`status: "failed"`, `score: null`) with the error code below. The run still writes `run.json` and returns a `PipelineResult`.
 
 | Situation | `error.code` | Notes |
 | --- | --- | --- |
 | Input missing, not a file, empty, unreadable, or unsupported extension | `invalid_input` | Engine is not called. |
+| Preprocessing cannot run: a PDF input, an image OpenCV cannot decode, the `preprocess` extra not installed, the copy cannot be written, or an OpenCV error | `preprocessing_failed` | Engine is not called. `preprocessing` lists the requested steps with `steps: []` and `output: null`. |
 | `check_available()` reports unavailable | `engine_unavailable` | Message is the engine's actionable message. |
 | `recognize()` raises `InvalidEngineOptionError` (including `UnknownEngineOptionError`) | `invalid_option` | Message names the engine and the rejected option(s). |
 | `EngineResult.success` is false | `engine_failed` | Message is `EngineResult.error` (or a generic one naming the return code); `returncode` is copied. |

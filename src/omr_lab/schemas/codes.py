@@ -21,6 +21,7 @@ class RunErrorCode(StrEnum):
     ENGINE_TIMEOUT = "engine_timeout"
     """Reserved: not produced until EngineResult can report a timeout (issue #48)."""
     MUSICXML_INVALID = "musicxml_invalid"
+    PREPROCESSING_FAILED = "preprocessing_failed"
     INTERRUPTED = "interrupted"
     INTERNAL_ERROR = "internal_error"
 
