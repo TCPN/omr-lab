@@ -343,6 +343,8 @@ def test_recognize_builds_verified_batch_command(
             "-batch",
             "-transcribe",
             "-export",
+            "-constant",
+            "org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength=15",
             "-output",
             str(run_dir),
             "--",
@@ -355,7 +357,7 @@ def test_recognize_builds_verified_batch_command(
     assert result.returncode == 0
     assert result.version == "5.10.0"
     assert result.artifacts == {"musicxml": run_dir / "score.mxl"}
-    assert result.options == {"min_staff_length": None}
+    assert result.options == {"min_staff_length": 15}
     assert any("INFO done" in line for line in result.diagnostics)
     assert score.read_bytes() == b"not really a png"
 
@@ -428,6 +430,19 @@ def test_min_staff_length_is_passed_as_audiveris_constant(
     assert result.options == {"min_staff_length": value}
 
 
+def test_null_min_staff_length_keeps_the_audiveris_default(
+    monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path
+) -> None:
+    runner = _install(monkeypatch, FakeRunner())
+
+    result = _engine(launcher).recognize(
+        score, tmp_path / "out", timeout_seconds=5, options={"min_staff_length": None}
+    )
+
+    assert "-constant" not in runner.calls[-1][0]
+    assert result.options == {"min_staff_length": None}
+
+
 @pytest.mark.parametrize("value", [0, -1, 1001, True, "15"])
 def test_invalid_min_staff_length_is_rejected(
     monkeypatch: pytest.MonkeyPatch, launcher: Path, score: Path, tmp_path: Path, value: object
@@ -451,7 +466,7 @@ def test_missing_executable_returns_failure_result(
 
     assert result.success is False
     assert "AUDIVERIS_EXE" in (result.error or "")
-    assert result.options == {"min_staff_length": None}
+    assert result.options == {"min_staff_length": 15}
     assert runner.calls == []
 
 

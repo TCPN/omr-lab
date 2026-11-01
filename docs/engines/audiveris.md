@@ -37,9 +37,9 @@ When Audiveris is missing or `-version` fails without printing a version, `check
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `min_staff_length` | `null` (Audiveris default, 30) | Shortest staff Audiveris keeps, in interlines (the distance between two staff lines). A number greater than 0 and at most 1000. It is passed as `-constant org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength=<value>`. Lower it when a score has a short last line; see [Short staves are dropped](#short-staves-are-dropped). |
+| `min_staff_length` | `15` | Shortest staff Audiveris keeps, in interlines (the distance between two staff lines). A number greater than 0 and at most 1000, passed as `-constant org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength=<value>`. `null` passes no constant and keeps the Audiveris default of 30. The default of 15 keeps a short last line; see [Short staves are dropped](#short-staves-are-dropped). |
 
-Any other option name raises `UnknownEngineOptionError`, and an invalid `min_staff_length` raises `InvalidEngineOptionError`, before Audiveris runs. Example: `omr-lab run score.png -o runs/0001 --option min_staff_length=15`.
+Any other option name raises `UnknownEngineOptionError`, and an invalid `min_staff_length` raises `InvalidEngineOptionError`, before Audiveris runs. Example: `omr-lab run score.png -o runs/0001 --option min_staff_length=null` restores the Audiveris default.
 
 `-sheets` is documented, but how it parses several ids/ranges has not been verified, so sheet selection is deferred until it has been checked against a real installation. Other Audiveris constants and flags (`-step`, `-force`, `-save`, `-print`, `-swap`, `-playlist`) are not exposed.
 
@@ -75,7 +75,7 @@ Evidence (Audiveris 5.11.0, the end-to-end sample `tests/fixtures/e2e/twinkle.pn
 
 These runs used the Linux `.deb` of 5.11.0 extracted without installing, in a container without Tesseract languages, so chord symbols and lyrics were not recognized there; staff detection does not depend on OCR. The other layouts were rendered with the same Verovio settings as the sample and system breaks set in the MusicXML. The staff detection log line `Systems: #1[1] #2[2]` already lacks the third system, while `Retrieved raw line clusters: 3` shows that the lines were found and then discarded by length.
 
-Lowering `min_staff_length` keeps such staves. It is not the default because a lower limit may also accept other long horizontal lines as staves; check the result on the corpus before relying on it. omr-lab does not add measures that the engine did not report, and a run alone cannot tell that a staff was dropped: compare the measure count with the ground truth (the benchmark and end-to-end correctness reports do this).
+Lowering `min_staff_length` keeps such staves, so omr-lab passes 15 by default (since 2026-11-01; before that it passed nothing). A lower limit may also accept other long horizontal lines as staves, and 15 has so far been checked only on the end-to-end sample; issue #68 tracks verifying it on a corpus. If a run shows extra or empty staves, retry with `--option min_staff_length=null`. omr-lab does not add measures that the engine did not report, and a run alone cannot tell that a staff was dropped: compare the measure count with the ground truth (the benchmark and end-to-end correctness reports do this).
 
 ## Verified CLI facts
 

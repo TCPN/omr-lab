@@ -88,7 +88,15 @@ MIN_STAFF_LENGTH_OPTION = "min_staff_length"
 
 Audiveris drops every staff shorter than its ``LinesRetriever.minStaffLength``
 constant (30 interlines in 5.11), without a warning; a short last line with one
-measure is lost that way. ``None`` keeps the Audiveris default.
+measure is lost that way. The default is
+DEFAULT_MIN_STAFF_LENGTH; ``None`` passes nothing and keeps the Audiveris default.
+"""
+
+DEFAULT_MIN_STAFF_LENGTH = 15
+"""Default for MIN_STAFF_LENGTH_OPTION, in interlines.
+
+Chosen so that the short last line of the end-to-end sample (about 20 interlines)
+is kept (issue #55); still to be verified on a corpus (issue #68).
 """
 
 _MIN_STAFF_LENGTH_CONSTANT = "org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength"
@@ -99,7 +107,9 @@ _MAX_MIN_STAFF_LENGTH = 1000
 # uses it to reject unknown names and to fill in defaults. ``-sheets`` is
 # documented, but how it parses several ids/ranges has not been verified against
 # a real installation, so it is deferred.
-SUPPORTED_OPTIONS: Mapping[str, EngineOptionValue] = {MIN_STAFF_LENGTH_OPTION: None}
+SUPPORTED_OPTIONS: Mapping[str, EngineOptionValue] = {
+    MIN_STAFF_LENGTH_OPTION: DEFAULT_MIN_STAFF_LENGTH
+}
 
 WhichFunc = Callable[[str], str | None]
 
