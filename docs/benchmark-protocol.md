@@ -11,7 +11,7 @@ Decided in issue #29 (2026-11-03). The scores in [TCPN/song_helper](https://gith
 
 - Exports, rendered images, manifests, run outputs and reports stay in `data/private/`, which Git ignores.
 - Only aggregate metrics may be committed (for example totals per condition in a write-up), never score content: no ABC, MusicXML, images, lyrics or per-sample note lists.
-- A song may enter the repository only after its copyright status is verified as public domain or permissively licensed. Record the provenance (source, license, how it was verified) in the manifest entry, and add each such song in its own PR for the owner to review.
+- A song may enter the repository only after its copyright status is verified as public domain or permissively licensed. Add it with its own entry in a committed manifest under `benchmarks/` (not the private one), with provenance in `source`, `license` and `notes` (how it was verified), and add each such song in its own PR for the owner to review.
 
 ## Metrics
 Record success/failure rate, engine version/options, wall-clock duration, output validity, human musical correctness review, defined ground-truth metrics when available ([metrics.md](metrics.md)), preprocessing time, and API cost when applicable.
