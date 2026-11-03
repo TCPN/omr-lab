@@ -52,7 +52,16 @@ VEROVIO_OPTIONS = {
     "footer": "none",
 }
 _ENCODED_SYSTEM_BREAK = re.compile(r'<print\b[^>]*\bnew-system\s*=\s*["\']yes["\']')
-"""A source with any encoded system break is laid out at its encoded breaks only."""
+_XML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def has_encoded_system_break(musicxml: str) -> bool:
+    """Whether the MusicXML text has a ``<print new-system="yes">`` outside comments.
+
+    A source with any encoded system break is laid out at its encoded breaks only."""
+    return _ENCODED_SYSTEM_BREAK.search(_XML_COMMENT.sub("", musicxml)) is not None
+
+
 OUTPUT_WIDTH_PX = 2480
 DPI = 300
 _VEROVIO_TEXT_FONT_FAMILY = "Times, serif"
@@ -237,7 +246,7 @@ def render_svg(musicxml: str, name: str) -> str:
     """Lay out the MusicXML text (one page) as SVG; ``name`` is used in error messages."""
     toolkit = verovio.toolkit()
     options = dict(VEROVIO_OPTIONS)
-    if _ENCODED_SYSTEM_BREAK.search(musicxml):
+    if has_encoded_system_break(musicxml):
         options["breaks"] = "encoded"
     toolkit.setOptions(options)
     if not toolkit.loadData(musicxml):

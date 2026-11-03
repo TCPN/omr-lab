@@ -1013,6 +1013,24 @@ def test_encoded_system_breaks_are_kept_and_others_are_laid_out_automatically(
     assert render.VEROVIO_OPTIONS["breaks"] == "auto"
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('<measure number="5"><print new-system="yes"/>', True),
+        ("<measure number=\"5\"><print new-system='yes'/>", True),
+        ('<print staff-spacing="80" new-system = "yes">', True),
+        ('<print new-system="no"/>', False),
+        ('<print new-page="yes"/>', False),
+        ('<!-- <print new-system="yes"/> --><measure number="1">', False),
+        ('<measure number="1"></measure>', False),
+    ],
+)
+def test_encoded_system_break_detection(renderer, text: str, expected: bool) -> None:
+    from omr_lab.synthetic import render
+
+    assert render.has_encoded_system_break(text) is expected
+
+
 def test_music_symbols_in_text_are_drawn_in_the_music_font(renderer) -> None:
     import cairosvg
     import numpy as np

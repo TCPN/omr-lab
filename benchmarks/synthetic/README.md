@@ -23,7 +23,7 @@ The sources resemble the target songs: one melody line in treble clef, chord sym
 | `grace-short-end` | [`sources/grace-short-end.musicxml`](sources/grace-short-end.musicxml) | `amazing-grace` with encoded line breaks, 8 + 8 + 1 measures. |
 | `xiaoyu-short-end` | [`sources/xiaoyu-short-end.musicxml`](sources/xiaoyu-short-end.musicxml) | `xiao-yu-di-da` with encoded line breaks, 4 + 3 + 1 measures. |
 
-The three `-short-end` sources differ from their originals only by `<print new-system="yes"/>` at the start of each line, so the last line holds a single measure. Audiveris drops staves shorter than its `min_staff_length` limit ([docs/engines/audiveris.md](../../docs/engines/audiveris.md#short-staves-are-dropped)); together with `twinkle`, whose automatic layout already ends with one measure, they test that case.
+The three `-short-end` sources differ from their originals only by `<print new-system="yes"/>` at the start of each line, so the last line holds a single measure. Audiveris drops staves shorter than its `min_staff_length` limit ([docs/engines/audiveris.md](../../docs/engines/audiveris.md#short-staves-are-dropped)); `twinkle`'s automatic layout already ends with one measure too. In Audiveris 5.11.0 the `-short-end` last lines are also dropped by a second rule (`minClusterLengthRatio`), and `grace-short-end`'s is under 15 interlines, so for now only `twinkle` tells `min_staff_length` 15 from 30 ([docs/engines/audiveris.md](../../docs/engines/audiveris.md#corpus-check-of-the-default-issue-68)).
 
 ## Provenance and license
 
