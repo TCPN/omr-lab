@@ -5,6 +5,14 @@ The manifest and report formats and the `omr-lab benchmark` command are in [benc
 ## Dataset
 Use only scores with redistribution permission or keep private data outside Git. Record source/license, condition, checksum, and ground-truth availability. Include clean scans, phone photos, skew/perspective and curved pages only when relevant.
 
+### song_helper scores
+
+Decided in issue #29 (2026-11-03). The scores in [TCPN/song_helper](https://github.com/TCPN/song_helper) may be used as benchmark data, for private local use only:
+
+- Exports, rendered images, run outputs and reports that contain score content stay in `data/private/`, which Git ignores.
+- Only aggregate metrics may be committed (for example totals per condition in a write-up), never score content: no ABC, MusicXML, images, lyrics or per-sample note lists.
+- A song may enter the repository only after its copyright status is verified as public domain or permissively licensed. Record the provenance (source, license, how it was verified) in the manifest entry, and add each such song in its own PR for the owner to review.
+
 ## Metrics
 Record success/failure rate, engine version/options, wall-clock duration, output validity, human musical correctness review, defined ground-truth metrics when available ([metrics.md](metrics.md)), preprocessing time, and API cost when applicable.
 

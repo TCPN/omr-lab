@@ -31,7 +31,7 @@ Each sample:
 | `synthesis` | no (0.2.0 only) | How a synthetic image was generated: corpus name and seed, source and variant ids, sample seed and the resolved degradation parameters ([synthetic-corpus.md](synthetic-corpus.md#output)). |
 | `excluded` | no | `{"reason": "..."}` keeps the sample in the manifest but does not run it; reports list it with the reason. |
 
-Private or unlicensed scores stay outside Git (for example in `data/private/`, which is ignored); only their manifests may be committed if they contain no score content, and only when the data use is decided (issue #29).
+Private or unlicensed scores stay outside Git (for example in `data/private/`, which is ignored); only their manifests may be committed, and only if they contain no score content. For song_helper scores, see the rules in [benchmark-protocol.md](benchmark-protocol.md#song_helper-scores).
 
 ## Output
 
