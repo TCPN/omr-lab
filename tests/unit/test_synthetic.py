@@ -995,6 +995,24 @@ def test_text_font_without_the_lyric_characters_is_a_dependency_error(
     assert not (tmp_path / "out").exists()
 
 
+def _measures_per_system(svg: str) -> list[int]:
+    return [part.count('class="measure') for part in svg.split('class="system"')[1:]]
+
+
+def test_encoded_system_breaks_are_kept_and_others_are_laid_out_automatically(
+    renderer,
+) -> None:
+    from omr_lab.synthetic import render
+
+    sources = REPO / "benchmarks" / "synthetic" / "sources"
+    # Without encoded breaks Verovio fills each line (issue #68 needs a short last line).
+    auto = (sources / "amazing-grace.musicxml").read_text(encoding="utf-8")
+    assert _measures_per_system(render.render_svg(auto, "amazing-grace")) == [8, 9]
+    encoded = (sources / "grace-short-end.musicxml").read_text(encoding="utf-8")
+    assert _measures_per_system(render.render_svg(encoded, "grace-short-end")) == [8, 8, 1]
+    assert render.VEROVIO_OPTIONS["breaks"] == "auto"
+
+
 def test_music_symbols_in_text_are_drawn_in_the_music_font(renderer) -> None:
     import cairosvg
     import numpy as np

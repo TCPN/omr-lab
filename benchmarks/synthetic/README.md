@@ -1,6 +1,6 @@
 # Synthetic corpus specification
 
-[`corpus.json`](corpus.json) is the specification for `omr-lab synthesize` ([docs/synthetic-corpus.md](../../docs/synthetic-corpus.md)): four lead sheets, each rendered clean and with four degradation recipes (a simulated scan, a simulated phone photo, and two phone photos of a folded song book lying on a table, one held square to the camera and one tilted and rotated), 20 samples in all.
+[`corpus.json`](corpus.json) is the specification for `omr-lab synthesize` ([docs/synthetic-corpus.md](../../docs/synthetic-corpus.md)): seven lead sheets, each rendered clean and with four degradation recipes (a simulated scan, a simulated phone photo, and two phone photos of a folded song book lying on a table, one held square to the camera and one tilted and rotated), 35 samples in all.
 
 ```bash
 uv sync --extra synthetic
@@ -19,6 +19,11 @@ The sources resemble the target songs: one melody line in treble clef, chord sym
 | `ode-to-joy` | [`sources/ode-to-joy.musicxml`](sources/ode-to-joy.musicxml) | D major, 4/4, 16 measures, dotted rhythms and beamed eighths, one German verse with umlauts. |
 | `amazing-grace` | [`sources/amazing-grace.musicxml`](sources/amazing-grace.musicxml) | G major, 3/4 with a one-beat pickup, 17 measures, a tie, minor and seventh chords, two English verses. |
 | `xiao-yu-di-da` | [`sources/xiao-yu-di-da.musicxml`](sources/xiao-yu-di-da.musicxml) | 小雨滴答: C major, 4/4, 8 measures, two verses of Chinese lyrics, one character per note. |
+| `joy-short-end` | [`sources/joy-short-end.musicxml`](sources/joy-short-end.musicxml) | `ode-to-joy` with encoded line breaks, 4 + 4 + 4 + 3 + 1 measures. |
+| `grace-short-end` | [`sources/grace-short-end.musicxml`](sources/grace-short-end.musicxml) | `amazing-grace` with encoded line breaks, 8 + 8 + 1 measures. |
+| `xiaoyu-short-end` | [`sources/xiaoyu-short-end.musicxml`](sources/xiaoyu-short-end.musicxml) | `xiao-yu-di-da` with encoded line breaks, 4 + 3 + 1 measures. |
+
+The three `-short-end` sources differ from their originals only by `<print new-system="yes"/>` at the start of each line, so the last line holds a single measure. Audiveris drops staves shorter than its `min_staff_length` limit ([docs/engines/audiveris.md](../../docs/engines/audiveris.md#short-staves-are-dropped)); together with `twinkle`, whose automatic layout already ends with one measure, they test that case.
 
 ## Provenance and license
 

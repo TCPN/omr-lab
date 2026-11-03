@@ -51,6 +51,8 @@ VEROVIO_OPTIONS = {
     "breaks": "auto",
     "footer": "none",
 }
+_ENCODED_SYSTEM_BREAK = re.compile(r'<print\b[^>]*\bnew-system\s*=\s*["\']yes["\']')
+"""A source with any encoded system break is laid out at its encoded breaks only."""
 OUTPUT_WIDTH_PX = 2480
 DPI = 300
 _VEROVIO_TEXT_FONT_FAMILY = "Times, serif"
@@ -234,7 +236,10 @@ def _fontconfig_literal(family: str) -> str:
 def render_svg(musicxml: str, name: str) -> str:
     """Lay out the MusicXML text (one page) as SVG; ``name`` is used in error messages."""
     toolkit = verovio.toolkit()
-    toolkit.setOptions(VEROVIO_OPTIONS)
+    options = dict(VEROVIO_OPTIONS)
+    if _ENCODED_SYSTEM_BREAK.search(musicxml):
+        options["breaks"] = "encoded"
+    toolkit.setOptions(options)
     if not toolkit.loadData(musicxml):
         raise RenderError(f"Verovio could not load {name}.")
     pages = toolkit.getPageCount()

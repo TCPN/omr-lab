@@ -42,7 +42,7 @@ A UTF-8 JSON file validated against `src/omr_lab/schemas/synthetic-corpus-0.1.0.
 
 Every source is rendered once and combined with every variant. Sample ids are `<source id>-<variant id>`, so ids are 1 to 30 lowercase letters, digits or `-`, are not Windows device names (`con`, `aux`, `com1` and so on, since a source id is also a file name), and must be unique within sources and within variants.
 
-A source must be uncompressed, UTF-8 encoded MusicXML (a byte-order mark is allowed) that the [MusicXML loader](musicxml.md) accepts and that fits on one page. The file is copied unchanged into the corpus as the ground truth of all its samples, so clean and degraded images of one source share one ground truth.
+A source must be uncompressed, UTF-8 encoded MusicXML (a byte-order mark is allowed) that the [MusicXML loader](musicxml.md) accepts and that fits on one page. Verovio lays out the lines itself and ignores the source's line breaks, unless the source has at least one `<print new-system="yes"/>`: then lines break only there, so mark the start of every line, or a line holds all the measures up to the next break. The short-end sources use this to put a single measure on the last line (issue #68). The file is copied unchanged into the corpus as the ground truth of all its samples, so clean and degraded images of one source share one ground truth.
 
 ### Degradations
 

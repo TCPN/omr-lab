@@ -32,6 +32,28 @@
       "source": "omr-lab encoding (benchmarks/synthetic/README.md): traditional melody (Frère Jacques), two verses of Chinese lyrics and chord symbols written for omr-lab",
       "license": "CC0-1.0",
       "text_fonts": ["Noto Serif CJK TC", "Noto Sans CJK TC", "WenQuanYi Zen Hei"]
+    },
+    {
+      "id": "joy-short-end",
+      "musicxml": "sources/joy-short-end.musicxml",
+      "work": "Ode to Joy",
+      "source": "ode-to-joy with encoded system breaks (4 + 4 + 4 + 3 + 1 measures) so the last line holds one measure (benchmarks/synthetic/README.md)",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "grace-short-end",
+      "musicxml": "sources/grace-short-end.musicxml",
+      "work": "Amazing Grace",
+      "source": "amazing-grace with encoded system breaks (8 + 8 + 1 measures) so the last line holds one measure (benchmarks/synthetic/README.md)",
+      "license": "CC0-1.0"
+    },
+    {
+      "id": "xiaoyu-short-end",
+      "musicxml": "sources/xiaoyu-short-end.musicxml",
+      "work": "小雨滴答",
+      "source": "xiao-yu-di-da with encoded system breaks (4 + 3 + 1 measures) so the last line holds one measure (benchmarks/synthetic/README.md)",
+      "license": "CC0-1.0",
+      "text_fonts": ["Noto Serif CJK TC", "Noto Sans CJK TC", "WenQuanYi Zen Hei"]
     }
   ],
   "variants": [

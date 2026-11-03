@@ -63,7 +63,7 @@ def test_min_staff_length_keeps_the_short_last_staff(
 ) -> None:
     # Audiveris ignores an unknown -constant key silently, so this guards against the
     # constant behind min_staff_length being renamed (issue #55). The committed sample's
-    # last staff is about 20 interlines long, under the default limit of 30.
+    # last staff is about 20 interlines long, under the Audiveris default limit of 30.
     result = engine.recognize(
         IMAGE, tmp_path / "out", timeout_seconds=600, options={"min_staff_length": 15}
     )

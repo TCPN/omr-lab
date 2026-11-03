@@ -51,7 +51,7 @@ If preprocessing cannot run (a PDF, an undecodable image, the extra not installe
 
 ## Measured effect
 
-Audiveris 5.11.0 on the synthetic corpus (`benchmarks/synthetic/corpus.json`, 4 sources × 5 conditions, seed 20261023), same engine, options and timeout for every column (the options were the defaults at the time, which passed no `min_staff_length`, so Audiveris used its own limit of 30; the default is 15 since 2026-11-01, issue #68); generated 2026-10-31 in a Linux container without OCR languages, so chord symbols and lyrics are not read and only notes and measures are compared. Notes are pitch-and-duration recall over the condition's 4 samples ([metrics.md](metrics.md)); "failed" counts runs that did not succeed.
+Audiveris 5.11.0 on the synthetic corpus (`benchmarks/synthetic/corpus.json` with the 4 sources it had then, before the `-short-end` sources of issue #68; 4 sources × 5 conditions, seed 20261023), same engine, options and timeout for every column (the options were the defaults at the time, which passed no `min_staff_length`, so Audiveris used its own limit of 30; the default is 15 since 2026-11-01, issue #68); generated 2026-10-31 in a Linux container without OCR languages, so chord symbols and lyrics are not read and only notes and measures are compared. Notes are pitch-and-duration recall over the condition's 4 samples ([metrics.md](metrics.md)); "failed" counts runs that did not succeed.
 
 | Condition | none | `page` | `page,deskew` | `deskew` | `page,deskew,threshold` |
 | --- | --- | --- | --- | --- | --- |
