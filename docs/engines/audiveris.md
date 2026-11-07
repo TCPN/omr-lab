@@ -65,7 +65,7 @@ Audiveris silently drops every staff that is shorter than its `LinesRetriever.mi
 
 Evidence (Audiveris 5.11.0, the end-to-end sample `tests/fixtures/e2e/twinkle.png`, interline 21 px):
 
-| Layout of the sample | Last staff | Audiveris result |
+| Layout of the sample | Last staff | Audiveris result (limit 30) |
 | --- | --- | --- |
 | 5 + 6 + 1 measures (the committed sample) | 430 px, about 20 interlines | 2 systems, 11 measures: measure 12 is lost |
 | 5 + 5 + 2 measures | 778 px, about 37 interlines | 3 systems, 12 measures |
@@ -75,7 +75,26 @@ Evidence (Audiveris 5.11.0, the end-to-end sample `tests/fixtures/e2e/twinkle.pn
 
 These runs used the Linux `.deb` of 5.11.0 extracted without installing, in a container without Tesseract languages, so chord symbols and lyrics were not recognized there; staff detection does not depend on OCR. The other layouts were rendered with the same Verovio settings as the sample and system breaks set in the MusicXML. The staff detection log line `Systems: #1[1] #2[2]` already lacks the third system, while `Retrieved raw line clusters: 3` shows that the lines were found and then discarded by length.
 
-Lowering `min_staff_length` keeps such staves, so omr-lab passes 15 by default (since 2026-11-01; before that it passed nothing). A lower limit may also accept other long horizontal lines as staves, and 15 has so far been checked only on the end-to-end sample; issue #68 tracks verifying it on a corpus. If a run shows extra or empty staves, retry with `--option min_staff_length=null`. omr-lab does not add measures that the engine did not report, and a run alone cannot tell that a staff was dropped: compare the measure count with the ground truth (the benchmark and end-to-end correctness reports do this).
+Lowering `min_staff_length` keeps such staves, so omr-lab passes 15 by default (since 2026-11-01; before that it passed nothing). If a run shows extra or empty staves, retry with `--option min_staff_length=null`. omr-lab does not add measures that the engine did not report, and a run alone cannot tell that a staff was dropped: compare the measure count with the ground truth (the benchmark and end-to-end correctness reports do this).
+
+### Corpus check of the default (issue #68)
+
+Audiveris 5.11.0 on the synthetic corpus (`benchmarks/synthetic/corpus.json`, seed 20261023, 7 sources × 5 conditions = 35 samples, no preprocessing, timeout 600 s), once with `min_staff_length=null` (limit 30) and once with `15`; generated 2026-11-03 in a Linux container without OCR languages, so only notes and measures are compared. Four sources end with a one-measure line: `twinkle` (about 20 interlines long) and the three `-short-end` sources (14 to 26 interlines; [benchmarks/synthetic/README.md](../../benchmarks/synthetic/README.md)). Notes are pitch-and-duration recall and precision over the condition's 7 samples ([metrics.md](../metrics.md)); measures are counted over the condition's samples.
+
+| Condition | Notes R / P, limit 30 | Notes R / P, `15` | Measures predicted, 30 / 15 | Measures exactly right, 30 / 15 | Failed runs, 30 / 15 |
+| --- | --- | --- | --- | --- | --- |
+| clean | 0.89 / 0.92 | 0.90 / 0.93 | 90 / 91 | 78 / 79 | 0 / 0 |
+| scan | 0.95 / 0.98 | 0.96 / 0.98 | 90 / 91 | 79 / 80 | 0 / 0 |
+| photo | 0.92 / 0.99 | 0.93 / 0.99 | 92 / 93 | 77 / 77 | 0 / 0 |
+| phone | 0.76 / 0.90 | 0.76 / 0.90 | 88 / 88 | 53 / 53 | 0 / 0 |
+| phone-tilted | 0.15 / 0.44 | 0.15 / 0.44 | 36 / 36 | 8 / 8 | 1 / 1 |
+
+Each condition has 94 ground-truth measures over its 7 samples. The failed run is `xiao-yu-di-da-phone-tilted` with both settings (no score); the low measure count of `phone-tilted` otherwise comes from runs that succeed with fewer measures, the same with both settings.
+
+- **What changed:** only `twinkle` clean, scan and photo: with 15 they keep the last measure (11 → 12 measures, notes recall 0.93 → 1.00). For clean and scan that adds one exactly right measure; for photo it does not (11 of 12 with both settings): every note matched, but one of its 12 measures is still not exactly right. All other 32 samples gave the same measures and notes with both settings.
+- **No extra or empty staves from the lower limit:** no run found a second part, the measures without any note or rest (`joy-short-end-photo` measure 9, `xiao-yu-di-da-phone` measures 1, 3 and 5) are the same with both settings, and the samples with more measures than the ground truth (`xiao-yu-di-da-phone`, `joy-short-end-photo`, `joy-short-end-phone`) have the same extra measures with limit 30, so they are not caused by 15. The corpus has no text underlines, frames or tables, so those risks are not covered.
+- **Decision:** keep the default at 15.
+- **A second limit drops the `-short-end` last lines too.** With 15 they are still lost: `ClustersRetriever.minClusterLengthRatio` (0.2 in 5.11.0) discards a staff shorter than that fraction of the median staff length, and the log shows `Destroying spurious Cluster` instead of the last system. Lowering it to 0.1 by hand (`-constant org.audiveris.omr.sheet.grid.ClustersRetriever.minClusterLengthRatio=0.1`) brought back the last line of `joy-short-end` and `xiaoyu-short-end`, but some runs then exported several movements, so it needs its own check before omr-lab passes it. `grace-short-end`'s last line, about 14 interlines, is also under 15.
 
 ## Verified CLI facts
 

@@ -96,7 +96,8 @@ DEFAULT_MIN_STAFF_LENGTH = 15
 """Default for MIN_STAFF_LENGTH_OPTION, in interlines.
 
 Chosen so that the short last line of the end-to-end sample (about 20 interlines)
-is kept (issue #55); still to be verified on a corpus (issue #68).
+is kept (issue #55); checked on the synthetic corpus in issue #68
+(docs/engines/audiveris.md, "Corpus check of the default").
 """
 
 _MIN_STAFF_LENGTH_CONSTANT = "org.audiveris.omr.sheet.grid.LinesRetriever.minStaffLength"
