@@ -18,7 +18,7 @@ Python 3.12.3 (/home/user/projects/omr-lab/.venv/bin/python)
 [ok]      mock 0.1.0
 ```
 
-Each engine's own `check_available()` decides the result, so the `[missing]` text is the adapter's actionable message (for Audiveris: where to install it, and `AUDIVERIS_EXE`). Checking Audiveris starts Java once to read its version. The exit code is 0 when every checked engine is available and 4 otherwise.
+Each engine's own `check_available()` decides the result, so the `[missing]` text is the adapter's actionable message (for Audiveris: where to install it, and `AUDIVERIS_EXE`). For an available engine, the adapter's message follows the version when it has one (for Audiveris: `[ok]      audiveris 5.11.0: Audiveris 5.11.0 at /opt/audiveris/bin/Audiveris`). A check that raises an exception, such as a `PermissionError` for an `AUDIVERIS_EXE` under a directory the user cannot search, is reported as `[missing] <engine>: the availability check failed: <error>` instead of a traceback; `benchmark` reports it the same way before it starts. The engines are registered in `omr_lab.engines.ENGINES`. Checking Audiveris starts Java once to read its version. The exit code is 0 when every checked engine is available and 4 otherwise.
 
 ## run
 
@@ -41,7 +41,7 @@ uv run omr-lab run photo.jpg -o runs/0005 --preprocess page   # needs the prepro
 
 `--option` values are read as JSON when they are a JSON scalar: a number (`3`, `0.5`), `true`, `false`, `null`, or a quoted string (`'"3"'` for the text 3). Anything else is plain text, so `outcome=failed` is the string `failed`. A JSON array or object, `NaN` and `Infinity` stay text, because engine options are JSON scalars (`EngineOptions`). The engine decides which keys it accepts; an unknown key fails the run with `invalid_option` and the engine's message.
 
-On every run that writes a record, `run` prints `Run document: DIR/run.json` and then either `Status: succeeded (engine NAME)` on stdout or `Status: failed [CODE]: MESSAGE` on stderr. Each run warning is printed to stderr as `warning [CODE]: MESSAGE`. The run document is the full record; the printed lines are a summary. Characters that the console's encoding cannot show, such as a path that is not valid UTF-8, are printed as backslash escapes instead of stopping the command. A succeeded run is not evidence that the music was recognized correctly.
+On every run that writes a record, `run` prints `Run document: DIR/run.json` and then either `Status: succeeded (engine NAME)` on stdout or `Status: failed [CODE]: MESSAGE` on stderr. Each run warning is printed to stderr as `warning [CODE]: MESSAGE`. The run document is the full record; the printed lines are a summary. Characters that the console's encoding cannot show, such as a path that is not valid UTF-8, are printed as backslash escapes instead of stopping the command, except that under a `surrogateescape` console (the C/POSIX locale) the undecodable bytes of a path are written unchanged. A succeeded run is not evidence that the music was recognized correctly.
 
 A directory that has `raw/` but no `run.json` is reported as an aborted run (a run that could not write its record, for example because the disk was full, or another run still in progress). It is left as it is for inspection; choose a new directory.
 

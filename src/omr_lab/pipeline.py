@@ -97,6 +97,13 @@ class OutputDirectoryError(ValueError):
     """The run output directory cannot be used (not a directory, not empty, or not creatable)."""
 
 
+class RunDocumentWriteError(OSError):
+    """``run.json`` could not be written (for example a full disk).
+
+    The output directory is left as an aborted run: ``raw/`` without ``run.json``.
+    ``errno`` and ``strerror`` are those of the original error, which is the cause."""
+
+
 @dataclass(frozen=True, slots=True)
 class PipelineResult:
     """Outcome of one pipeline run.
@@ -183,6 +190,8 @@ def run_pipeline(
     then re-raised. Raises ValueError for arguments that make a run record
     impossible (an unusable ``output_dir`` raises OutputDirectoryError, a
     ValueError subclass, and unknown or repeated preprocessing steps a ValueError).
+    Raises RunDocumentWriteError, an OSError subclass, when ``run.json`` cannot be
+    written; ``output_dir`` then holds an aborted run.
     """
     input_path = Path(input_path)
     steps = parse_steps(preprocess) if preprocess is not None else ()
@@ -243,7 +252,12 @@ def run_pipeline(
         document, text = _fallback_document(state, exc, build_document)
 
     document_path = output_dir / RUN_DOCUMENT_FILENAME
-    _write_atomically(document_path, text)
+    try:
+        _write_atomically(document_path, text)
+    except OSError as exc:
+        raise RunDocumentWriteError(
+            exc.errno, exc.strerror or str(exc), str(document_path)
+        ) from exc
     if pending_interrupt is not None:
         raise pending_interrupt
     return PipelineResult(document=document, document_path=document_path, output_dir=output_dir)
@@ -779,6 +793,7 @@ __all__ = [
     "PREPROCESSED_IMAGE_KIND",
     "OutputDirectoryError",
     "PipelineResult",
+    "RunDocumentWriteError",
     "RunErrorCode",
     "RunWarningCode",
     "run_pipeline",
