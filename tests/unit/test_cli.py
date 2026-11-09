@@ -223,6 +223,20 @@ def test_engine_registry_lives_in_engines() -> None:
     assert DEFAULT_ENGINE in ENGINES
 
 
+def test_surrogateescape_fallback_escapes_under_utf16(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A raw byte cannot go into UTF-16 output, so the surrogate is escaped there.
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="utf-16-le", errors="surrogateescape", newline="")
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", io.TextIOWrapper(io.BytesIO(), encoding="ascii"))
+
+    cli._tolerate_unencodable_output()
+    print("\u6a02/\udcb8", end="", file=stream)
+    stream.flush()
+
+    assert raw.getvalue().decode("utf-16-le") == "\u6a02/\\udcb8"
+
+
 @pytest.mark.parametrize(
     ("errors", "expected"),
     [

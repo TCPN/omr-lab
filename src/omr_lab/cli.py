@@ -270,11 +270,20 @@ def _surrogateescape_or_backslashreplace(exc: UnicodeError) -> tuple[str | bytes
     if not isinstance(exc, UnicodeEncodeError):
         raise exc
     character = exc.object[exc.start]
-    if 0xDC80 <= ord(character) <= 0xDCFF:
+    # A raw byte is only valid in an ASCII-compatible encoding, not in UTF-16 or UTF-32.
+    if 0xDC80 <= ord(character) <= 0xDCFF and not _is_wide_encoding(exc.encoding):
         return bytes([ord(character) - 0xDC00]), exc.start + 1
     return codecs.backslashreplace_errors(
         UnicodeEncodeError(exc.encoding, exc.object, exc.start, exc.start + 1, exc.reason)
     )
+
+
+def _is_wide_encoding(encoding: str) -> bool:
+    try:
+        name = codecs.lookup(encoding).name
+    except LookupError:
+        return False
+    return name.startswith(("utf-16", "utf-32"))
 
 
 _SURROGATEESCAPE_OR_BACKSLASHREPLACE = "omr_lab.surrogateescape_or_backslashreplace"
