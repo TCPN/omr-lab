@@ -1266,3 +1266,29 @@ def test_run_json_has_the_same_mode_as_other_run_files(score: Path, tmp_path: Pa
 
     mode = (output_dir / ENGINE_DIAGNOSTICS_FILENAME).stat().st_mode
     assert (output_dir / RUN_DOCUMENT_FILENAME).stat().st_mode == mode
+
+
+def test_run_document_write_failure_raises_run_document_write_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import errno
+
+    from omr_lab.pipeline import RunDocumentWriteError
+
+    def disk_full(path: Path, text: str) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(pipeline_module, "_write_atomically", disk_full)
+    image = tmp_path / "score.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nnot-a-real-image")
+    output = tmp_path / "run"
+
+    with pytest.raises(RunDocumentWriteError) as info:
+        run_pipeline(image, output, MockEngine())
+
+    assert isinstance(info.value, OSError)
+    assert info.value.errno == errno.ENOSPC
+    assert info.value.strerror == "No space left on device"
+    assert info.value.filename == str(output / "run.json")
+    assert isinstance(info.value.__cause__, OSError)
+    assert (output / "raw").is_dir() and not (output / "run.json").exists()

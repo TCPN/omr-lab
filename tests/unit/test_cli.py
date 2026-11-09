@@ -19,9 +19,11 @@ from omr_lab.cli import (
     main,
     parse_options,
 )
+from omr_lab.engines import DEFAULT_ENGINE, ENGINES, EngineAvailability
 from omr_lab.engines.mock import MOCK_ENGINE_VERSION, MockEngine
 from omr_lab.schemas import validate_run_document
 
+REPO = Path(__file__).resolve().parents[2]
 PNG_BYTES = b"\x89PNG\r\n\x1a\nnot-a-real-image"
 
 
@@ -154,6 +156,98 @@ def test_doctor_reports_each_engine(capsys: pytest.CaptureFixture[str]) -> None:
 def test_doctor_for_one_available_engine_succeeds(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["doctor", "--engine", "mock"]) == EXIT_OK
     assert "audiveris" not in capsys.readouterr().out
+
+
+class _CheckRaises(MockEngine):
+    name = "audiveris"
+
+    def check_available(self):  # type: ignore[override]
+        raise PermissionError(13, "Permission denied")
+
+
+class _AvailableWithMessage(MockEngine):
+    def check_available(self):  # type: ignore[override]
+        availability = super().check_available()
+        return EngineAvailability(
+            engine_name=availability.engine_name,
+            available=True,
+            version=availability.version,
+            message="found at /opt/mock",
+        )
+
+
+def test_doctor_reports_an_availability_check_that_raises_as_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Path.is_file() raises PermissionError on Python 3.11-3.13 under an unsearchable
+    # directory (issue #53): doctor prints a [missing] line, not a traceback.
+    monkeypatch.setitem(cli.ENGINES, "audiveris", _CheckRaises)
+
+    code = main(["doctor"])
+
+    out = capsys.readouterr().out
+    assert code == EXIT_ENGINE_UNAVAILABLE
+    assert (
+        "[missing] audiveris: the availability check failed: PermissionError: "
+        "[Errno 13] Permission denied" in out
+    )
+    assert f"[ok]      mock {MOCK_ENGINE_VERSION}" in out
+
+
+def test_benchmark_reports_an_availability_check_that_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setitem(cli.ENGINES, "audiveris", _CheckRaises)
+    manifest = REPO / "tests" / "fixtures" / "e2e" / "manifest.json"
+
+    code = main(["benchmark", str(manifest), "-o", str(tmp_path / "bench")])
+
+    assert code == EXIT_ENGINE_UNAVAILABLE
+    assert "the availability check failed: PermissionError" in capsys.readouterr().err
+    assert not (tmp_path / "bench").exists()
+
+
+def test_doctor_shows_the_message_of_an_available_engine(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setitem(cli.ENGINES, "mock", _AvailableWithMessage)
+
+    assert main(["doctor", "--engine", "mock"]) == EXIT_OK
+    assert f"[ok]      mock {MOCK_ENGINE_VERSION}: found at /opt/mock" in capsys.readouterr().out
+
+
+def test_engine_registry_lives_in_engines() -> None:
+    assert cli.ENGINES is ENGINES
+    assert set(ENGINES) == {"audiveris", "mock"}
+    assert DEFAULT_ENGINE in ENGINES
+
+
+class _Stream:
+    def __init__(self, errors: str) -> None:
+        self.errors = errors
+
+    def reconfigure(self, *, errors: str) -> None:
+        self.errors = errors
+
+
+@pytest.mark.parametrize(
+    ("errors", "expected"),
+    [
+        ("strict", "backslashreplace"),
+        ("surrogateescape", "surrogateescape"),
+        ("replace", "replace"),
+    ],
+)
+def test_only_strict_output_streams_are_made_tolerant(
+    monkeypatch: pytest.MonkeyPatch, errors: str, expected: str
+) -> None:
+    stdout, stderr = _Stream(errors), _Stream(errors)
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    cli._tolerate_unencodable_output()
+
+    assert (stdout.errors, stderr.errors) == (expected, expected)
 
 
 def test_run_with_mock_engine_writes_run_document(

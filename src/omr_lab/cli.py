@@ -13,7 +13,7 @@ import json
 import math
 import platform
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TextIO
 
@@ -25,13 +25,20 @@ from omr_lab.benchmark import (
     load_manifest,
     run_benchmark,
 )
-from omr_lab.engines import AudiverisEngine, Engine, EngineOptions, EngineOptionValue
-from omr_lab.engines.mock import MockEngine
+from omr_lab.engines import (
+    DEFAULT_ENGINE,
+    ENGINES,
+    Engine,
+    EngineAvailability,
+    EngineOptions,
+    EngineOptionValue,
+)
 from omr_lab.pipeline import (
     DEFAULT_TIMEOUT_SECONDS,
     RAW_DIRNAME,
     RUN_DOCUMENT_FILENAME,
     OutputDirectoryError,
+    RunDocumentWriteError,
     RunErrorCode,
     run_pipeline,
 )
@@ -67,14 +74,6 @@ _EXIT_BY_ERROR_CODE = {
     RunErrorCode.INVALID_OPTION: EXIT_INVALID_OPTION,
     RunErrorCode.INTERRUPTED: EXIT_INTERRUPTED,
 }
-
-# Engine name -> factory. A factory, not an instance, so each command gets a fresh
-# engine (AudiverisEngine caches its availability check per instance).
-ENGINES: dict[str, Callable[[], Engine]] = {
-    "audiveris": AudiverisEngine,
-    "mock": MockEngine,
-}
-DEFAULT_ENGINE = "audiveris"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -248,9 +247,11 @@ def _tolerate_unencodable_output() -> None:
     # Paths are printed as given. One that stdout cannot encode (a non-UTF-8 directory
     # name on POSIX, or a character outside the ANSI code page of a redirected Windows
     # stream) must not turn a finished run into a traceback and the wrong exit code.
+    # Only strict streams change: another handler, such as surrogateescape under the
+    # C/POSIX locale, already writes such paths and keeps their original bytes.
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
+        if reconfigure is not None and getattr(stream, "errors", None) == "strict":
             reconfigure(errors="backslashreplace")
 
 
@@ -322,14 +323,27 @@ def _doctor(engine_name: str | None, out: TextIO) -> int:
     print(f"Python {platform.python_version()} ({sys.executable})", file=out)
     exit_code = EXIT_OK
     for name in [engine_name] if engine_name else sorted(ENGINES):
-        availability = ENGINES[name]().check_available()
+        availability = _check_engine(ENGINES[name]())
         if availability.available:
             version = f" {availability.version}" if availability.version else ""
-            print(f"[ok]      {name}{version}", file=out)
+            message = f": {availability.message}" if availability.message else ""
+            print(f"[ok]      {name}{version}{message}", file=out)
         else:
             exit_code = EXIT_ENGINE_UNAVAILABLE
             print(f"[missing] {name}: {availability.message or 'not available'}", file=out)
     return exit_code
+
+
+def _check_engine(engine: Engine) -> EngineAvailability:
+    """The engine's availability; an exception from the check counts as unavailable."""
+    try:
+        return engine.check_available()
+    except Exception as exc:  # Reported to the user, as `run` records it as internal_error.
+        return EngineAvailability(
+            engine_name=engine.name,
+            available=False,
+            message=f"the availability check failed: {type(exc).__name__}: {exc}",
+        )
 
 
 def _run(
@@ -371,9 +385,9 @@ def _run(
         # the run document cannot store.
         print(f"omr-lab: error: {exc}", file=sys.stderr)
         return EXIT_USAGE
-    except OSError as exc:
-        # Raised only while writing run.json (a full disk, a quota); the directory is
-        # now an aborted run.
+    except RunDocumentWriteError as exc:
+        # A full disk or a quota while writing run.json; the directory is now an
+        # aborted run.
         print(
             f"omr-lab: error: {output_dir / RUN_DOCUMENT_FILENAME} could not be written "
             f"({exc.strerror or exc}). {output_dir} now holds an aborted run; keep it for "
@@ -409,7 +423,7 @@ def _benchmark(
         return EXIT_INVALID_INPUT
     # Checked once, as `run` does, so a missing engine is exit 4 and not N failed samples.
     engine = ENGINES[engine_name]()
-    availability = engine.check_available()
+    availability = _check_engine(engine)
     if not availability.available:
         print(
             f"omr-lab: error: {engine_name}: {availability.message or 'not available'}",

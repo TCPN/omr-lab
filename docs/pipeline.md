@@ -38,6 +38,8 @@ result.document_path  # runs/0001/run.json
 7. If the run has not failed, load the primary `musicxml` artifact with `omr_lab.musicxml.load_musicxml` and convert it with `omr_lab.score.score_from_musicxml` into `score` (see `score` below).
 8. Validate and write.
 
+If `run.json` itself cannot be written (for example a full disk), `run_pipeline` raises `RunDocumentWriteError`, an `OSError` subclass with the original `errno` and `strerror` and the original error as its cause; `output_dir` then holds an aborted run (`raw/` without `run.json`).
+
 Run failures do not raise; each produces a failed run document (`status: "failed"`, `score: null`) with the error code below. The run still writes `run.json` and returns a `PipelineResult`.
 
 | Situation | `error.code` | Notes |

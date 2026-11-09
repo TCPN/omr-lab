@@ -18,7 +18,7 @@ Python 3.12.3 (/home/user/projects/omr-lab/.venv/bin/python)
 [ok]      mock 0.1.0
 ```
 
-Each engine's own `check_available()` decides the result, so the `[missing]` text is the adapter's actionable message (for Audiveris: where to install it, and `AUDIVERIS_EXE`). Checking Audiveris starts Java once to read its version. The exit code is 0 when every checked engine is available and 4 otherwise.
+Each engine's own `check_available()` decides the result, so the `[missing]` text is the adapter's actionable message (for Audiveris: where to install it, and `AUDIVERIS_EXE`). For an available engine, the adapter's message follows the version when it has one (for Audiveris: `[ok]      audiveris 5.11.0: Audiveris 5.11.0 at /opt/audiveris/bin/Audiveris`). A check that raises an exception, such as a `PermissionError` for an `AUDIVERIS_EXE` under a directory the user cannot search, is reported as `[missing] <engine>: the availability check failed: <error>` instead of a traceback; `benchmark` reports it the same way before it starts. The engines are registered in `omr_lab.engines.ENGINES`. Checking Audiveris starts Java once to read its version. The exit code is 0 when every checked engine is available and 4 otherwise.
 
 ## run
 
