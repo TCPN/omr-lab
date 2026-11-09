@@ -231,6 +231,8 @@ def test_engine_registry_lives_in_engines() -> None:
         # surrogateescape (C/POSIX locale): the undecodable byte is written as it was,
         # characters ASCII cannot hold are escaped instead of raising.
         ("surrogateescape", b"\\u6a02\\u8b5c/\xb8"),
+        # surrogatepass cannot encode either character under ASCII: backslashreplace.
+        ("surrogatepass", b"\\u6a02\\u8b5c/\\udcb8"),
         # A handler that never raises is left alone.
         ("replace", b"??/?"),
     ],

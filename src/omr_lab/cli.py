@@ -251,16 +251,17 @@ def _tolerate_unencodable_output() -> None:
     # A strict stream gets backslashreplace. A surrogateescape stream (the C/POSIX
     # locale) keeps writing undecodable path bytes as they were, and only other
     # characters it cannot encode, such as Chinese under ASCII, are backslash-escaped.
-    # Other handlers already never raise and are left alone.
-    replacement = {
-        "strict": "backslashreplace",
-        "surrogateescape": _SURROGATEESCAPE_OR_BACKSLASHREPLACE,
-    }
+    # Handlers that never raise on encoding are left alone; any other one (strict,
+    # surrogatepass, a custom handler) gets backslashreplace.
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
-        errors = replacement.get(getattr(stream, "errors", None))
-        if reconfigure is not None and errors is not None:
-            reconfigure(errors=errors)
+        current = getattr(stream, "errors", None)
+        if reconfigure is None or current in _NON_RAISING_ENCODE_HANDLERS:
+            continue
+        if current == "surrogateescape":
+            reconfigure(errors=_SURROGATEESCAPE_OR_BACKSLASHREPLACE)
+        else:
+            reconfigure(errors="backslashreplace")
 
 
 def _surrogateescape_or_backslashreplace(exc: UnicodeError) -> tuple[str | bytes, int]:
@@ -277,6 +278,16 @@ def _surrogateescape_or_backslashreplace(exc: UnicodeError) -> tuple[str | bytes
 
 
 _SURROGATEESCAPE_OR_BACKSLASHREPLACE = "omr_lab.surrogateescape_or_backslashreplace"
+_NON_RAISING_ENCODE_HANDLERS = frozenset(
+    {
+        "backslashreplace",
+        "ignore",
+        "namereplace",
+        "replace",
+        "xmlcharrefreplace",
+        _SURROGATEESCAPE_OR_BACKSLASHREPLACE,
+    }
+)
 codecs.register_error(_SURROGATEESCAPE_OR_BACKSLASHREPLACE, _surrogateescape_or_backslashreplace)
 
 
