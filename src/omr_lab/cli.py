@@ -9,6 +9,7 @@ documented interface, so they are named constants here.
 from __future__ import annotations
 
 import argparse
+import codecs
 import json
 import math
 import platform
@@ -247,12 +248,36 @@ def _tolerate_unencodable_output() -> None:
     # Paths are printed as given. One that stdout cannot encode (a non-UTF-8 directory
     # name on POSIX, or a character outside the ANSI code page of a redirected Windows
     # stream) must not turn a finished run into a traceback and the wrong exit code.
-    # Only strict streams change: another handler, such as surrogateescape under the
-    # C/POSIX locale, already writes such paths and keeps their original bytes.
+    # A strict stream gets backslashreplace. A surrogateescape stream (the C/POSIX
+    # locale) keeps writing undecodable path bytes as they were, and only other
+    # characters it cannot encode, such as Chinese under ASCII, are backslash-escaped.
+    # Other handlers already never raise and are left alone.
+    replacement = {
+        "strict": "backslashreplace",
+        "surrogateescape": _SURROGATEESCAPE_OR_BACKSLASHREPLACE,
+    }
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None and getattr(stream, "errors", None) == "strict":
-            reconfigure(errors="backslashreplace")
+        errors = replacement.get(getattr(stream, "errors", None))
+        if reconfigure is not None and errors is not None:
+            reconfigure(errors=errors)
+
+
+def _surrogateescape_or_backslashreplace(exc: UnicodeError) -> tuple[str | bytes, int]:
+    """Encode error handler: a lone surrogate from surrogateescape (U+DC80-U+DCFF)
+    becomes its original byte; any other character is backslash-escaped."""
+    if not isinstance(exc, UnicodeEncodeError):
+        raise exc
+    character = exc.object[exc.start]
+    if 0xDC80 <= ord(character) <= 0xDCFF:
+        return bytes([ord(character) - 0xDC00]), exc.start + 1
+    return codecs.backslashreplace_errors(
+        UnicodeEncodeError(exc.encoding, exc.object, exc.start, exc.start + 1, exc.reason)
+    )
+
+
+_SURROGATEESCAPE_OR_BACKSLASHREPLACE = "omr_lab.surrogateescape_or_backslashreplace"
+codecs.register_error(_SURROGATEESCAPE_OR_BACKSLASHREPLACE, _surrogateescape_or_backslashreplace)
 
 
 def parse_options(pairs: Sequence[str]) -> EngineOptions:

@@ -1,4 +1,5 @@
 import errno
+import io
 import json
 import sys
 from pathlib import Path
@@ -222,32 +223,31 @@ def test_engine_registry_lives_in_engines() -> None:
     assert DEFAULT_ENGINE in ENGINES
 
 
-class _Stream:
-    def __init__(self, errors: str) -> None:
-        self.errors = errors
-
-    def reconfigure(self, *, errors: str) -> None:
-        self.errors = errors
-
-
 @pytest.mark.parametrize(
     ("errors", "expected"),
     [
-        ("strict", "backslashreplace"),
-        ("surrogateescape", "surrogateescape"),
-        ("replace", "replace"),
+        # Strict: everything the stream cannot encode is backslash-escaped.
+        ("strict", b"\\u6a02\\u8b5c/\\udcb8"),
+        # surrogateescape (C/POSIX locale): the undecodable byte is written as it was,
+        # characters ASCII cannot hold are escaped instead of raising.
+        ("surrogateescape", b"\\u6a02\\u8b5c/\xb8"),
+        # A handler that never raises is left alone.
+        ("replace", b"??/?"),
     ],
 )
-def test_only_strict_output_streams_are_made_tolerant(
-    monkeypatch: pytest.MonkeyPatch, errors: str, expected: str
+def test_output_streams_never_raise_on_unencodable_paths(
+    monkeypatch: pytest.MonkeyPatch, errors: str, expected: bytes
 ) -> None:
-    stdout, stderr = _Stream(errors), _Stream(errors)
-    monkeypatch.setattr(sys, "stdout", stdout)
-    monkeypatch.setattr(sys, "stderr", stderr)
+    raw = io.BytesIO()
+    stream = io.TextIOWrapper(raw, encoding="ascii", errors=errors, newline="")
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", io.TextIOWrapper(io.BytesIO(), encoding="ascii"))
 
     cli._tolerate_unencodable_output()
+    print("\u6a02\u8b5c/\udcb8", end="", file=stream)
+    stream.flush()
 
-    assert (stdout.errors, stderr.errors) == (expected, expected)
+    assert raw.getvalue() == expected
 
 
 def test_run_with_mock_engine_writes_run_document(
