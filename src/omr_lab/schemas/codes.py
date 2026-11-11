@@ -19,7 +19,7 @@ class RunErrorCode(StrEnum):
     ENGINE_FAILED = "engine_failed"
     INVALID_OPTION = "invalid_option"
     ENGINE_TIMEOUT = "engine_timeout"
-    """Reserved: not produced until EngineResult can report a timeout (issue #48)."""
+    """The engine exceeded its timeout (EngineResult.timed_out on a failed result)."""
     MUSICXML_INVALID = "musicxml_invalid"
     PREPROCESSING_FAILED = "preprocessing_failed"
     INTERRUPTED = "interrupted"
