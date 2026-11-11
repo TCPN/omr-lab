@@ -425,6 +425,7 @@ class AudiverisEngine:
         diagnostics: Sequence[str] = (),
         artifacts: dict[str, Path] | None = None,
         returncode: int | None = None,
+        timed_out: bool = False,
     ) -> EngineResult:
         return EngineResult(
             engine_name=self.name,
@@ -435,6 +436,7 @@ class AudiverisEngine:
             returncode=returncode,
             error=error,
             options=effective,
+            timed_out=timed_out,
         )
 
     def recognize(
@@ -515,6 +517,7 @@ class AudiverisEngine:
                 diagnostics=diagnostics,
                 artifacts=artifacts,
                 returncode=command.returncode,
+                timed_out=command.timed_out,
             )
         if not produced:
             return self._failure_result(

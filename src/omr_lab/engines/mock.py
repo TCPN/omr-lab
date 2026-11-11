@@ -42,15 +42,16 @@ _PLACEHOLDER_MUSICXML = """\
 </score-partwise>
 """
 
-_OUTCOMES = ("succeeded", "failed")
+_OUTCOMES = ("succeeded", "failed", "timed_out")
 
 
 class MockEngine:
     """Engine adapter that writes fixed placeholder artifacts without recognizing anything.
 
     ``available=False`` simulates missing prerequisites. The ``outcome`` option
-    (``"succeeded"`` by default, or ``"failed"``) selects a successful or a
-    failed result; both write a log artifact so failure handling can be tested.
+    (``"succeeded"`` by default, ``"failed"`` or ``"timed_out"``) selects a successful,
+    a failed or a timed-out result. The first two write a log artifact so failure
+    handling can be tested; ``"timed_out"`` writes nothing, like a killed engine.
     """
 
     name = "mock"
@@ -102,6 +103,16 @@ class MockEngine:
                 returncode=1,
                 error=f"Mock engine simulated a failure for {input_path.name}.",
                 options=effective,
+            )
+        if outcome == "timed_out":
+            return EngineResult(
+                engine_name=self.name,
+                success=False,
+                version=MOCK_ENGINE_VERSION,
+                diagnostics=("Mock engine simulated a timeout (outcome=timed_out).",),
+                error=f"Mock engine simulated a timeout for {input_path.name}.",
+                options=effective,
+                timed_out=True,
             )
 
         musicxml_path = output_dir / MOCK_MUSICXML_FILENAME

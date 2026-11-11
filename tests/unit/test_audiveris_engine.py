@@ -568,6 +568,7 @@ def test_nonzero_exit_is_failure_even_with_artifact(
 
     assert result.success is False
     assert result.returncode == 3
+    assert result.timed_out is False
     assert "code 3" in (result.error or "")
     assert "musicxml" in result.artifacts  # raw output is kept for inspection
     assert result.artifacts["musicxml"].is_file()
@@ -588,6 +589,7 @@ def test_timeout_is_failure(
     result = _engine(launcher).recognize(score, tmp_path / "out", timeout_seconds=5)
 
     assert result.success is False
+    assert result.timed_out is True
     assert result.returncode is None
     assert "timed out" in (result.error or "")
 
