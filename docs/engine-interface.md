@@ -3,7 +3,7 @@
 This contract separates pipeline orchestration from engine-specific behavior. Every engine adapter implements this protocol.
 
 - Implemented: Audiveris (`omr_lab.engines.AudiverisEngine`), see [engines/audiveris.md](engines/audiveris.md).
-- Planned: homr (issue #74, OMR-011).
+- Implemented: homr (`omr_lab.engines.HomrEngine`), see [engines/homr.md](engines/homr.md).
 
 ## Contract
 

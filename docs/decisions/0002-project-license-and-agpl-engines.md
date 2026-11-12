@@ -9,7 +9,7 @@ omr-lab had no license (`pyproject.toml` said "License to be decided"), so by de
 
 ## Decision
 1. omr-lab is licensed under the **MIT License** (`LICENSE`).
-2. **AGPL engines** (currently Audiveris) are used only as **separately installed, unmodified external programs**: omr-lab locates the installed launcher and runs it as a process with command-line arguments (`run_command`), reading the files it writes. omr-lab does not link, import, vendor, bundle or modify them.
+2. **AGPL engines** (currently Audiveris and homr) are used only as **separately installed, unmodified external programs**: omr-lab locates the installed launcher and runs it as a process with command-line arguments (`run_command`), reading the files it writes. omr-lab does not link, import, vendor, bundle or modify them.
 3. **Before any distribution or hosted service** that includes or runs an AGPL engine (for example a Docker image or installer, OMR-014, or the cloud phase), the licenses are reviewed again and the result is recorded in a new ADR.
 4. **New dependencies** that omr-lab imports must have licenses compatible with distributing omr-lab under MIT. A GPL or AGPL library is not added as an import dependency without a new decision; such tools may only be invoked as external programs under rule 2.
 
