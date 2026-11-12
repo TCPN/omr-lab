@@ -27,9 +27,9 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(scope="module")
 def engine() -> HomrEngine:
     engine = HomrEngine()
-    executable, message = engine.find_executable()
-    if executable is None:
-        pytest.skip(f"homr not installed: {message}")
+    lookup = engine.find_executable()
+    if lookup.path is None:
+        pytest.skip(f"homr not installed: {lookup.message}")
     return engine
 
 

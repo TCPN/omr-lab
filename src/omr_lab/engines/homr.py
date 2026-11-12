@@ -34,6 +34,7 @@ import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
+from omr_lab.engines.audiveris import LauncherLookup
 from omr_lab.engines.base import (
     CommandResult,
     EngineAvailability,
@@ -134,6 +135,11 @@ def _command_diagnostics(command: CommandResult) -> list[str]:
     return diagnostics
 
 
+def _looks_like_version(text: str) -> bool:
+    """A single non-empty token; rejects tracebacks or warnings printed on stdout."""
+    return bool(text) and len(text.split()) == 1
+
+
 def _last_line(text: str) -> str | None:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     return _shorten(lines[-1]) if lines else None
@@ -166,29 +172,31 @@ class HomrEngine:
     def name(self) -> str:
         return ENGINE_NAME
 
-    def find_executable(self) -> tuple[Path | None, str | None]:
-        """Locate homr; return ``(path, None)`` or ``(None, actionable message)``."""
+    def find_executable(self) -> LauncherLookup:
+        """Locate homr; on failure, ``path`` is None and ``message`` says why."""
         if self._explicit_executable is not None:
             if self._explicit_executable.is_file():
-                return self._explicit_executable.absolute(), None
-            return None, (
+                return LauncherLookup(self._explicit_executable.absolute())
+            return LauncherLookup(
+                None,
                 f"homr executable {str(self._explicit_executable)!r} (passed explicitly) "
-                "does not exist or is not a file. " + _missing_executable_message()
+                "does not exist or is not a file. " + _missing_executable_message(),
             )
         env_value = self._environ.get(EXECUTABLE_ENV_VAR, "").strip()
         if env_value:
             env_path = Path(env_value)
             if env_path.is_file():
-                return env_path.absolute(), None
-            return None, (
+                return LauncherLookup(env_path.absolute())
+            return LauncherLookup(
+                None,
                 f"{EXECUTABLE_ENV_VAR} is set to {env_value!r}, which does not exist or is "
                 "not a file. Set it to the full path of the homr command, for example "
-                "~/.local/bin/homr."
+                "~/.local/bin/homr.",
             )
         found = self._which(PATH_COMMAND_NAME)
         if found:
-            return Path(found).absolute(), None
-        return None, _missing_executable_message()
+            return LauncherLookup(Path(found).absolute())
+        return LauncherLookup(None, _missing_executable_message())
 
     def check_available(self) -> EngineAvailability:
         """Locate homr and read its version; the result is cached per instance.
@@ -203,10 +211,12 @@ class HomrEngine:
         return self._probe_result
 
     def _probe_availability(self) -> tuple[Path | None, EngineAvailability]:
-        executable, message = self.find_executable()
-        if executable is None:
-            return None, EngineAvailability(engine_name=self.name, available=False, message=message)
-        return executable, self._availability(executable)
+        lookup = self.find_executable()
+        if lookup.path is None:
+            return None, EngineAvailability(
+                engine_name=self.name, available=False, message=lookup.message
+            )
+        return lookup.path, self._availability(lookup.path)
 
     def _availability(self, executable: Path) -> EngineAvailability:
         for interpreter in _interpreter_candidates(executable):
@@ -217,7 +227,7 @@ class HomrEngine:
                 timeout_seconds=self._version_timeout_seconds,
             )
             version = command.stdout.strip()
-            if command.succeeded and version and len(version.split()) == 1:
+            if command.succeeded and _looks_like_version(version):
                 return EngineAvailability(
                     engine_name=self.name,
                     available=True,

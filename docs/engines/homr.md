@@ -30,6 +30,8 @@ homr is licensed under **AGPL-3.0** (its `LICENSE`; PyPI `homr` 0.7.1). Followin
    3. `homr` on `PATH`.
 
    If an explicit path or `HOMR_EXE` is set but wrong, the adapter reports that instead of falling back to `PATH`. Relative paths are made absolute against the current directory.
+
+   `find_executable()` returns the same `LauncherLookup(path, message)` as the Audiveris adapter.
 4. Check: `omr-lab doctor` or `HomrEngine().check_available()`.
 
 ### Version check

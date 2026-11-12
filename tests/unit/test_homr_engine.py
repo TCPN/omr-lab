@@ -8,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from omr_lab.engines import CommandResult, Engine, HomrEngine, UnknownEngineOptionError
+from omr_lab.engines import (
+    CommandResult,
+    Engine,
+    HomrEngine,
+    LauncherLookup,
+    UnknownEngineOptionError,
+)
 from omr_lab.engines import homr as homr_module
 
 
@@ -104,18 +110,18 @@ def test_lookup_order_explicit_env_path(executable: Path, tmp_path: Path) -> Non
     from_env = _engine(environ={"HOMR_EXE": str(executable)}, which=lambda n: str(other))
     from_path = _engine(which=lambda n: str(executable) if n == "homr" else None)
 
-    assert explicit.find_executable() == (executable, None)
-    assert from_env.find_executable() == (executable, None)
-    assert from_path.find_executable() == (executable, None)
+    assert explicit.find_executable() == LauncherLookup(executable)
+    assert from_env.find_executable() == LauncherLookup(executable)
+    assert from_path.find_executable() == LauncherLookup(executable)
 
 
 def test_wrong_env_var_is_reported_without_path_fallback(executable: Path) -> None:
     engine = _engine(environ={"HOMR_EXE": "/nowhere/homr"}, which=lambda n: str(executable))
 
-    path, message = engine.find_executable()
+    lookup = engine.find_executable()
 
-    assert path is None
-    assert "HOMR_EXE" in (message or "") and "/nowhere/homr" in (message or "")
+    assert lookup.path is None
+    assert "HOMR_EXE" in (lookup.message or "") and "/nowhere/homr" in (lookup.message or "")
 
 
 def test_missing_homr_is_unavailable_with_install_hint() -> None:
