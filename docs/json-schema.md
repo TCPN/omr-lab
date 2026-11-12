@@ -131,7 +131,7 @@ Codes are not an enum in the schema. Codes in use so far:
 | `musicxml_mxl_container_missing` | warning | The engine's `.mxl` has no `META-INF/container.xml`; a fallback entry was read. See [musicxml.md](musicxml.md#warnings). |
 | `musicxml_mxl_container_invalid` | warning | The engine's `.mxl` has an unusable `container.xml`; a fallback entry was read. See [musicxml.md](musicxml.md#warnings). |
 
-The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (re-exported by `omr_lab.pipeline`) list the same codes, and a unit test keeps them in step with this table. `engine_timeout` is reserved: `EngineResult` cannot report a timeout separately yet, so the pipeline records adapter timeouts as `engine_failed` (issue #48). The `musicxml_*` warnings are the MusicXML loader's warnings, copied with their own codes and messages.
+The pipeline's use of these codes is described in [pipeline.md](pipeline.md); `omr_lab.schemas.RunErrorCode` and `RunWarningCode` (re-exported by `omr_lab.pipeline`) list the same codes, and a unit test keeps them in step with this table. The pipeline records `engine_timeout` when an adapter returns a failed `EngineResult` with `timed_out=True`. The `musicxml_*` warnings are the MusicXML loader's warnings, copied with their own codes and messages.
 
 Messages must not contain absolute local paths: they name the user and private folders, and they are wrong once the run directory is moved. The pipeline replaces the run output directory, the input file's directory and the home directory with `<output_dir>`, `<input_dir>` and `~` in every message and in the diagnostics file.
 

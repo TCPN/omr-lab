@@ -3,14 +3,14 @@
 This contract separates pipeline orchestration from engine-specific behavior. Every engine adapter implements this protocol.
 
 - Implemented: Audiveris (`omr_lab.engines.AudiverisEngine`), see [engines/audiveris.md](engines/audiveris.md).
-- Planned: homr (issue #11, OMR-011).
+- Planned: homr (issue #74, OMR-011).
 
 ## Contract
 
 - Engine.name: stable engine identifier.
 - Engine.check_available(): local prerequisite check, returning EngineAvailability with availability, optional version, and an actionable message when unavailable.
 - Engine.recognize(input_path, output_dir, *, timeout_seconds, options=None): run recognition and return an EngineResult. See [Engine options](#engine-options).
-- EngineResult: success/failure, engine name/version, raw artifact paths (see [Artifact keys](#artifact-keys)), diagnostics, process return code, an optional error message, and the effective options (`options`, `{}` by default).
+- EngineResult: success/failure, engine name/version, raw artifact paths (see [Artifact keys](#artifact-keys)), diagnostics, process return code, an optional error message, the effective options (`options`, `{}` by default), and `timed_out` (`False` by default).
 - run_command(...): shared subprocess helper that passes an argument sequence without a shell, captures stdout/stderr, enforces a timeout, and normalizes launch/timeout failures. See [Process execution](#process-execution).
 
 ## Artifact keys
@@ -52,7 +52,7 @@ A successful adapter result means the adapter completed its operation and report
 ## Error handling
 
 - Missing executables and other process launch errors are returned as diagnostics in CommandResult.error.
-- Timeouts are indicated by timed_out=True and a descriptive error.
+- Timeouts are indicated by CommandResult.timed_out=True and a descriptive error. An adapter passes this on as EngineResult(success=False, timed_out=True, error=...), so the pipeline records `engine_timeout` instead of `engine_failed`. Raw artifacts written before the timeout are still returned.
 - Non-zero process exits remain visible through returncode, stdout, and stderr; adapter code maps these to EngineResult(success=False, ...).
 - Adapter-specific errors should be actionable and should not silently discard stderr or raw artifacts.
 

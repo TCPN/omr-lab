@@ -34,3 +34,18 @@ def test_mock_engine_rejects_unknown_option(tmp_path: Path) -> None:
     with pytest.raises(UnknownEngineOptionError):
         MockEngine().recognize(tmp_path / "x.png", tmp_path, timeout_seconds=1, options={"x": 1})
     assert list(tmp_path.iterdir()) == []
+
+
+def test_mock_engine_simulates_a_timeout(tmp_path: Path) -> None:
+    input_path = tmp_path / "score.png"
+    input_path.write_bytes(b"x")
+
+    result = MockEngine().recognize(
+        input_path, tmp_path / "raw", timeout_seconds=1, options={"outcome": "timed_out"}
+    )
+
+    assert result.success is False
+    assert result.timed_out is True
+    assert result.returncode is None
+    assert result.artifacts == {}
+    assert result.options == {"outcome": "timed_out"}

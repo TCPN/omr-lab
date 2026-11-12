@@ -488,11 +488,16 @@ def _record_result(
     # The failure is recorded first, so run_pipeline keeps it (and adds a warning) if
     # reading the rest of the result (options, diagnostics, artifacts) raises.
     if not result.success:
-        message = result.error or (
-            f"Engine {engine_name!r} reported a failure without an error message "
-            f"(return code {result.returncode})."
-        )
-        state.record_error(RunErrorCode.ENGINE_FAILED, message, returncode=result.returncode)
+        if result.timed_out:
+            code = RunErrorCode.ENGINE_TIMEOUT
+            fallback = f"Engine {engine_name!r} timed out without an error message."
+        else:
+            code = RunErrorCode.ENGINE_FAILED
+            fallback = (
+                f"Engine {engine_name!r} reported a failure without an error message "
+                f"(return code {result.returncode})."
+            )
+        state.record_error(code, result.error or fallback, returncode=result.returncode)
     state.options = dict(result.options)
     if result.version:
         state.engine_version = result.version

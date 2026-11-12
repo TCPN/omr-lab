@@ -258,11 +258,45 @@ def test_engine_failure_without_message_gets_a_generic_one(score: Path, tmp_path
     assert document["error"]["returncode"] == 3
 
 
+def test_engine_timeout_is_recorded_as_engine_timeout(score: Path, tmp_path: Path) -> None:
+    result = run_pipeline(score, tmp_path / "run", MockEngine(), options={"outcome": "timed_out"})
+
+    document = _written(result)
+    assert document["status"] == "failed"
+    assert document["error"] == {
+        "code": "engine_timeout",
+        "message": "Mock engine simulated a timeout for score.png.",
+        "returncode": None,
+    }
+    assert document["options"] == {"outcome": "timed_out"}
+    assert document["score"] is None
+
+
+def test_engine_timeout_without_message_gets_a_generic_one(score: Path, tmp_path: Path) -> None:
+    engine = ScriptedEngine(build=lambda _: EngineResult("scripted", success=False, timed_out=True))
+
+    document = _written(run_pipeline(score, tmp_path / "run", engine))
+
+    assert document["error"]["code"] == "engine_timeout"
+    assert "timed out" in document["error"]["message"]
+
+
+def test_timed_out_flag_is_ignored_on_success(score: Path, tmp_path: Path) -> None:
+    def build(output_dir: Path) -> EngineResult:
+        succeeded = MockEngine().recognize(score, output_dir, timeout_seconds=1)
+        return EngineResult("scripted", success=True, artifacts=succeeded.artifacts, timed_out=True)
+
+    document = _written(run_pipeline(score, tmp_path / "run", ScriptedEngine(build=build)))
+
+    assert document["status"] == "succeeded"
+    assert document["error"] is None
+
+
 @pytest.mark.parametrize(
     ("options", "fragment"),
     [
         ({"outcom": "failed"}, "Unknown option(s) for engine 'mock': outcom"),
-        ({"outcome": "maybe"}, "must be one of succeeded, failed"),
+        ({"outcome": "maybe"}, "must be one of succeeded, failed, timed_out"),
         ({"outcome": ["failed"]}, "must be a string, number, boolean, or None"),
     ],
 )

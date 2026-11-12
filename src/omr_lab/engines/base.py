@@ -107,6 +107,10 @@ class EngineResult:
 
     ``options`` holds the effective engine options (requested values merged with
     adapter defaults) so that the pipeline can record them in the run output.
+
+    ``timed_out`` marks a failure caused by the engine exceeding its timeout (for
+    example from ``CommandResult.timed_out``). It only has a meaning when ``success``
+    is false; the pipeline then records ``engine_timeout`` instead of ``engine_failed``.
     """
 
     engine_name: str
@@ -117,6 +121,7 @@ class EngineResult:
     returncode: int | None = None
     error: str | None = None
     options: dict[str, EngineOptionValue] = field(default_factory=dict)
+    timed_out: bool = False
 
 
 @dataclass(frozen=True, slots=True)
