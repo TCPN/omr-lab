@@ -98,11 +98,13 @@ def _interpreter_candidates(executable: Path) -> list[Path]:
     names = ("python.exe",) if sys.platform == "win32" else ("python", "python3")
     directories = [executable.parent]
     try:
-        resolved = executable.resolve().parent
+        # Compare resolved paths: a symlinked parent directory (for example
+        # /home -> /var/home) must not make the same directory appear twice.
+        target = executable.resolve().parent
+        if target != executable.parent.resolve():
+            directories.append(target)
     except (OSError, RuntimeError):
-        resolved = executable.parent
-    if resolved != executable.parent:
-        directories.append(resolved)
+        pass
     return [directory / name for directory in directories for name in names]
 
 

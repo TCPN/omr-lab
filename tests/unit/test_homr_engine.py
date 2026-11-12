@@ -156,6 +156,56 @@ def test_symlinked_shim_finds_the_interpreter_of_its_target(
     assert availability.version == "0.7.1"
 
 
+def test_interpreter_of_another_environment_next_to_the_shim_is_skipped(
+    monkeypatch: pytest.MonkeyPatch, executable: Path, tmp_path: Path
+) -> None:
+    # `uv python install --default` puts a python without homr next to the uv tool shim.
+    shim_dir = tmp_path / "local-bin"
+    shim_dir.mkdir()
+    shim = shim_dir / "homr"
+    try:
+        shim.symlink_to(executable)
+    except OSError:
+        pytest.skip("symlinks are not available")
+    (shim_dir / "python").write_text("", encoding="utf-8")
+    runner = _install(monkeypatch, FakeRunner())
+    real_call = runner.__call__
+
+    def call(args, *, timeout_seconds: float, cwd=None) -> CommandResult:
+        if Path(str(args[0])).parent == shim_dir:
+            runner.calls.append((tuple(str(a) for a in args), timeout_seconds))
+            return CommandResult(args=(), returncode=1, stderr="PackageNotFoundError: homr\n")
+        return real_call(args, timeout_seconds=timeout_seconds, cwd=cwd)
+
+    monkeypatch.setattr(homr_module, "run_command", call)
+
+    availability = _engine(shim).check_available()
+
+    assert availability.version == "0.7.1"
+    interpreters = [Path(command[0]).parent for command, _ in runner.calls]
+    assert interpreters[0] == shim_dir
+    assert executable.parent in interpreters
+
+
+def test_symlinked_parent_directory_is_probed_once(
+    monkeypatch: pytest.MonkeyPatch, executable: Path, tmp_path: Path
+) -> None:
+    link = tmp_path / "venv-link"
+    try:
+        link.symlink_to(executable.parent.parent, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not available")
+    failing = CommandResult(args=(), returncode=1)
+    runner = _install(monkeypatch, FakeRunner(version_result=failing))
+
+    _engine(link / executable.parent.name / executable.name).check_available()
+
+    version_calls = [command for command, _ in runner.calls if "-c" in command]
+    # One interpreter file exists, so one version call; probing link/bin and its
+    # resolved target as two directories would make it two.
+    assert len(version_calls) == 1
+
+
 def test_without_interpreter_help_decides_and_version_is_unknown(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
