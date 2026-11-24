@@ -4,6 +4,9 @@ This contract separates pipeline orchestration from engine-specific behavior. Ev
 
 - Implemented: Audiveris (`omr_lab.engines.AudiverisEngine`), see [engines/audiveris.md](engines/audiveris.md).
 - Implemented: homr (`omr_lab.engines.HomrEngine`), see [engines/homr.md](engines/homr.md).
+- Implemented: oemer (`omr_lab.engines.OemerEngine`), see [engines/oemer.md](engines/oemer.md).
+
+homr and oemer are Python console programs installed in their own environments; their adapters share `omr_lab.engines.console_tool.ConsoleToolEngine` (executable lookup, version probe, run directory, result mapping). `engines/base.py` holds what every adapter uses: `run_command`, `LauncherLookup` and the diagnostics helpers `command_diagnostics`, `output_tail` and `last_output_line`.
 
 ## Contract
 
