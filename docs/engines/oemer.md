@@ -73,7 +73,7 @@ When oemer is missing or unusable, `check_available()` returns `available=False`
 
 - `artifacts["musicxml"]` is `input.musicxml` in the run directory (uncompressed MusicXML). The run directory also keeps the input copy and oemer's `input_teaser.png` (a picture of the recognized symbols); they are not reported as artifacts.
 - `success` is `True` only if oemer exited with code 0, did not time out, **and** wrote `input.musicxml`. oemer reports a failure as an uncaught Python exception (exit code 1); the error message then includes the last stderr line, normally the exception.
-- `diagnostics` contain the argument list, the return code or launch/timeout error, the last 20 non-empty lines of stdout and stderr (each shortened to 300 characters: progress bars end up on one line), and the run directory.
+- `diagnostics` contain the argument list, the return code or launch/timeout error, the last 20 non-empty lines of stdout and stderr (each shortened to 300 characters). `run_command` turns carriage returns into line breaks, so each update of oemer's progress counter counts as a line; on a failure the tail still ends with the Python traceback, and the run directory.
 - A successful result only means MusicXML was produced, not that the music was recognized correctly.
 
 ## Evidence
