@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.3.0",
+  "schema_version": "0.4.0",
   "status": "failed",
   "input": {"filename": "scan.pdf", "media_type": "application/pdf", "sha256": null},
   "engine": {"name": "audiveris", "version": "5.11.0"},

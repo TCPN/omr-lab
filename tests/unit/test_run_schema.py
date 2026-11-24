@@ -246,3 +246,37 @@ def test_artifact_path_violation_names_the_rule_or_returns_none() -> None:
     assert artifact_path_violation("") == "'' should be non-empty"
     with pytest.raises(ValueError):
         artifact_path_violation("raw/a", version="9.9.9")
+
+
+def test_unreadable_values_need_version_0_4_0():
+    # Issue #64: 0.4.0 marks present-but-unreadable values with null inside the event.
+    document = _load(FIXTURES / "valid" / "succeeded-with-unreadable-values.json")
+    validate_run_document(document)
+
+    document["schema_version"] = "0.3.0"
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(document)
+    paths = {m.split(": ", 1)[0] for m in excinfo.value.errors}
+    events = "$.score.parts[0].measures[0].events"
+    assert f"{events}[0].fifths" in paths
+    assert any(path.startswith(f"{events}[4]") for path in paths)
+
+
+@pytest.mark.parametrize(
+    ("change", "path"),
+    [
+        ({"bass": {"step": "H", "alter": 0}}, "bass.step"),
+        ({"bass": {"step": None}}, "bass"),
+        ({"degrees": [{"value": 0, "alter": 0, "type": "add"}]}, "degrees[0].value"),
+        ({"degrees": [{"value": 9, "alter": 0, "type": "sharpen"}]}, "degrees[0].type"),
+    ],
+)
+def test_unreadable_marker_keeps_the_value_rules(change: dict, path: str):
+    document = _load(FIXTURES / "valid" / "succeeded-with-unreadable-values.json")
+    document["score"]["parts"][0]["measures"][0]["events"][4].update(change)
+
+    with pytest.raises(RunDocumentValidationError) as excinfo:
+        validate_run_document(document)
+    assert [m.split(": ", 1)[0] for m in excinfo.value.errors] == [
+        f"$.score.parts[0].measures[0].events[4].{path}"
+    ]

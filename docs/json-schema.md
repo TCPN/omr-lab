@@ -1,8 +1,8 @@
-# Run Document JSON Schema (v0.3.0)
+# Run Document JSON Schema (v0.4.0)
 
 Each pipeline run produces one **run document**: a JSON object recording what was run, how, and what came out. It records only facts supported by the pipeline and engine output. A valid run document is not proof that the music was recognized correctly.
 
-- Schema (source of truth): [`src/omr_lab/schemas/run-0.3.0.schema.json`](../src/omr_lab/schemas/run-0.3.0.schema.json), JSON Schema draft 2020-12, `$id` `urn:omr-lab:schema:run:0.3.0`. It ships inside the `omr_lab` package together with the previous versions, `run-0.1.0.schema.json` and `run-0.2.0.schema.json`.
+- Schema (source of truth): [`src/omr_lab/schemas/run-0.4.0.schema.json`](../src/omr_lab/schemas/run-0.4.0.schema.json), JSON Schema draft 2020-12, `$id` `urn:omr-lab:schema:run:0.4.0`. It ships inside the `omr_lab` package together with the previous versions, `run-0.1.0.schema.json` to `run-0.3.0.schema.json`.
 - Validation: `omr_lab.schemas.validate_run_document(document, *, version=None)` raises `RunDocumentValidationError` (a `ValueError`) whose `errors` list holds one `"<json path>: <message>"` entry per violation, ordered by location (array indexes numerically). Artifact path errors name the broken rule instead of printing a regular expression. `omr_lab.schemas.load_run_schema(version=CURRENT_RUN_SCHEMA_VERSION)` returns a schema as a dict.
 - Examples: `tests/fixtures/run-documents/valid/` and `tests/fixtures/run-documents/invalid/`.
 
@@ -10,7 +10,7 @@ Each pipeline run produces one **run document**: a JSON object recording what wa
 
 ```json
 {
-  "schema_version": "0.3.0",
+  "schema_version": "0.4.0",
   "status": "succeeded",
   "input": {"filename": "score.png", "media_type": "image/png"},
   "engine": {"name": "audiveris", "version": null},
@@ -30,7 +30,7 @@ Each pipeline run produces one **run document**: a JSON object recording what wa
 
 ```json
 {
-  "schema_version": "0.3.0",
+  "schema_version": "0.4.0",
   "status": "failed",
   "input": {"filename": "score.png", "media_type": "image/png"},
   "engine": {"name": "audiveris", "version": "5.4"},
@@ -50,7 +50,7 @@ All top-level fields are **required**; unknown top-level fields are rejected. "N
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `schema_version` | `"0.3.0"` | Exact version of this contract. |
+| `schema_version` | `"0.4.0"` | Exact version of this contract. |
 | `status` | `"succeeded"` \| `"failed"` | Pipeline outcome, not a correctness claim. |
 | `input` | object | See below. |
 | `engine` | object | Engine provenance. See below. |
@@ -141,7 +141,7 @@ Messages must not contain absolute local paths: they name the user and private f
 - Raw engine artifacts are kept separate from normalized content.
 
 ## Versioning
-`schema_version` is fixed per schema file. Any change to the contract adds a new schema file with a new version and updates this document. 0.2.0 replaced the `score` placeholder of 0.1.0 (always `null`) with the score model (issue #19). 0.3.0 added the required `preprocessing` field (issue #58); everything else is unchanged. Within 0.x, any change may be breaking.
+`schema_version` is fixed per schema file. Any change to the contract adds a new schema file with a new version and updates this document. 0.2.0 replaced the `score` placeholder of 0.1.0 (always `null`) with the score model (issue #19). 0.3.0 added the required `preprocessing` field (issue #58). 0.4.0 lets the score mark values that are present but unreadable (issue #64): `key.fifths` may be `null`, a harmony `bass` may have a `null` `step` or `alter`, and a degree may have `null` fields ([score-model.md](score-model.md#present-but-unreadable)); everything else is unchanged. Within 0.x, any change may be breaking.
 
 - Old schema files stay in the package. `SUPPORTED_RUN_SCHEMA_VERSIONS` lists every version that can still be validated; `CURRENT_RUN_SCHEMA_VERSION` is the one writers emit.
 - Writers always emit the current version.

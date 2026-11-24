@@ -16,7 +16,7 @@ result.document_path  # runs/0001/run.json
 
 ```
 <output_dir>/
-  run.json                 normalized run document (schema 0.3.0)
+  run.json                 normalized run document (schema 0.4.0)
   engine_diagnostics.log   EngineResult.diagnostics, one per line (only when there are any)
   preprocessed/input.png   the preprocessed copy of the input (only with preprocess=...)
   raw/                     raw engine artifacts; the engine's output_dir

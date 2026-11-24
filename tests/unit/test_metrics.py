@@ -75,7 +75,7 @@ def _harmony(step: str, kind: str = "major", *, bass: str | None = None, text=No
     }
 
 
-def _key(fifths: int) -> dict:
+def _key(fifths: int | None) -> dict:
     return {"kind": "key", "offset": "0", "staff": None, "fifths": fifths, "mode": None}
 
 
@@ -283,6 +283,33 @@ def test_no_key_signature_means_zero_fifths() -> None:
     )
 
 
+def test_an_unreadable_key_never_matches() -> None:
+    # Issue #64: an unreadable <key> is kept with fifths null; it must not pass for
+    # C major (no key), nor match another unreadable key.
+    unreadable = _score([_key(None), _note("C")])
+    c_major = _score([_note("C")])
+    explicit_c = _score([_key(0), _note("C")])
+
+    for truth, predicted in (
+        (unreadable, c_major),
+        (c_major, unreadable),
+        (explicit_c, unreadable),
+        (unreadable, copy.deepcopy(unreadable)),
+    ):
+        result = compare_scores(truth, predicted)["key_signatures"]
+        assert result["correct"] is False
+
+
+def test_an_unreadable_key_is_listed_as_null() -> None:
+    result = compare_scores(_score([_key(None), _note("C")]), _score([_note("C")]))
+
+    assert result["key_signatures"] == {
+        "ground_truth": [None],
+        "predicted": [0],
+        "correct": False,
+    }
+
+
 def test_signatures_are_compared_as_changes() -> None:
     truth = _score([_key(1), _time("3", "4"), _note("C")], [_key(1), _note("D")])
     predicted = _score([_key(0), _time("3", "4"), _note("C")], [_note("D")])
@@ -334,6 +361,48 @@ def test_chord_degrees_match_in_any_order() -> None:
     swapped = _score([{**_harmony("C", "dominant"), "degrees": [sharp_eleven, flat_nine]}])
 
     assert compare_scores(truth, swapped)["chord_symbols"]["matched"] == 1
+
+
+_FLAT_NINE = {"value": 9, "alter": -1, "type": "alter"}
+
+
+def _g7_over_b(**changes) -> dict:
+    return {**_harmony("G", "dominant", bass="B"), "degrees": [_FLAT_NINE], **changes}
+
+
+@pytest.mark.parametrize(
+    "unreadable",
+    [
+        {"chord_kind": None},
+        {"bass": {"step": None, "alter": 0}},
+        {"bass": {"step": "B", "alter": None}},
+        {"degrees": [{**_FLAT_NINE, "type": None}]},
+        {"degrees": [{**_FLAT_NINE, "value": None}]},
+        {"degrees": [{**_FLAT_NINE, "alter": None}]},
+    ],
+)
+def test_a_chord_with_an_unreadable_part_never_matches(unreadable: dict) -> None:
+    # Issue #64: whichever side the unreadable part is on, and even against the same
+    # unreadable chord, it is not counted as matched.
+    readable = _g7_over_b()
+    broken = _g7_over_b(**unreadable)
+
+    for truth, predicted in (
+        (readable, broken),
+        (broken, readable),
+        (broken, copy.deepcopy(broken)),
+    ):
+        result = compare_scores(_score([truth, _note("C")]), _score([predicted, _note("C")]))
+        assert result["chord_symbols"]["matched"] == 0
+    assert (
+        compare_scores(_score([readable]), _score([_g7_over_b()]))["chord_symbols"]["matched"] == 1
+    )
+
+
+def test_a_readable_chord_without_bass_still_matches() -> None:
+    truth = _score([_harmony("C"), _note("C")])
+
+    assert compare_scores(truth, copy.deepcopy(truth))["chord_symbols"]["matched"] == 1
 
 
 def test_lyrics_per_verse() -> None:

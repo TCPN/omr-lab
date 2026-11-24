@@ -1,8 +1,8 @@
-# Score Model (v0.1, run schema 0.2.0)
+# Score Model (v0.2, run schema 0.4.0)
 
 The `score` field of a run document holds the music read from one source artifact in a small, engine-independent shape. It is aimed at what the downstream consumer ([TCPN/song_helper](https://github.com/TCPN/song_helper)) stores as ABC: single melody lines with chord symbols and lyrics, often several verses under the same notes.
 
-- Schema (source of truth): `$defs/score` and the definitions it references in [`src/omr_lab/schemas/run-0.2.0.schema.json`](../src/omr_lab/schemas/run-0.2.0.schema.json). The score model is versioned with the run document; there is no separate schema file.
+- Schema (source of truth): `$defs/score` and the definitions it references in [`src/omr_lab/schemas/run-0.4.0.schema.json`](../src/omr_lab/schemas/run-0.4.0.schema.json). The score model is versioned with the run document; there is no separate schema file. Run schema 0.2.0 introduced it (v0.1); 0.4.0 added the unreadable marker (v0.2, see [Present but unreadable](#present-but-unreadable)).
 - Converter: `omr_lab.score.score_from_musicxml(document, *, source_artifact=None)` takes a `MusicXmlDocument` from `omr_lab.musicxml` and returns a `ScoreConversion` with `score` (a dict ready for the run document) and `warnings` (`ScoreWarning` objects with `code`, `message` and `to_dict()`).
 - Examples: [`tests/fixtures/musicxml/score-features.musicxml`](../tests/fixtures/musicxml/score-features.musicxml) and its expected conversion [`score-features.score.json`](../tests/fixtures/musicxml/score-features.score.json); a full run document with a score is [`tests/fixtures/run-documents/valid/succeeded-with-score.json`](../tests/fixtures/run-documents/valid/succeeded-with-score.json).
 
@@ -44,13 +44,26 @@ Events of a measure are in source order. Every event has `kind` and `offset`; mo
 | --- | --- |
 | `note` | `voice`, `staff`, `duration`, `type`, `dots`, `time_modification` `{actual_notes, normal_notes}` \| `null`, `tuplets[]` `{type: start\|stop, number}`, `grace` `{slash}` \| `null`, `pitches[]` `{step, alter, octave, ties[]}`, `lyrics[]` |
 | `rest` | `voice`, `staff`, `duration`, `type`, `dots`, `time_modification`, `tuplets[]`, `measure_rest`, `hidden` |
-| `harmony` | `staff`, `root` `{step, alter}`, `chord_kind`, `chord_kind_text`, `bass` `{step, alter}` \| `null`, `degrees[]` `{value, alter, type}` |
+| `harmony` | `staff`, `root` `{step, alter}`, `chord_kind`, `chord_kind_text`, `bass` `{step, alter}` \| `null`, `degrees[]` `{value, alter, type}` (a `null` inside `bass` or a degree, or a `null` `chord_kind`, marks an unreadable part) |
 | `tempo` | `staff`, `bpm`, `beat_unit`, `beat_unit_dots`, `per_minute`, `words` |
 | `clef` | `staff`, `sign`, `line`, `octave_change` |
-| `key` | `staff`, `fifths`, `mode` |
+| `key` | `staff`, `fifths` (`null` when unreadable), `mode` |
 | `time` | `staff`, `beats`, `beat_type`, `symbol` |
 
 `harmony.chord_kind` is the `<kind>` value (e.g. `major`, `minor-seventh`), named so it is not confused with the event `kind`. `harmony.chord_kind_text` is the `text` attribute of `<kind>` as written: `null` when absent, and `""` when the source says to print no kind text (for example a major chord shown as the root alone).
+
+### Present but unreadable
+
+Some elements are in the source but cannot be read. Dropping them, or writing `null` in the place that means "absent", would make them look like a score without them, and the correctness metrics would then count broken output as correct (issue #64). Instead the element is kept, and the value that cannot be read is `null` inside it. The converter also adds its usual warning (`score_invalid_value`, or `score_unsupported_element` for a non-traditional key).
+
+| Source | Recorded as | Absent looks like |
+| --- | --- | --- |
+| `<key>` without `<fifths>` (a non-traditional key), or with a missing, non-integer or out-of-range `<fifths>` | a `key` event with `fifths: null`; `mode` as written | no `key` event |
+| `<bass>` whose `<bass-step>` is not A–G or whose `<bass-alter>` is not a number | `bass` with the readable part and `null` for the other, for example `{"step": null, "alter": 0}` | `bass: null` |
+| `<degree>` with a missing or invalid `<degree-value>` (also below 1), `<degree-alter>` or `<degree-type>` | the degree with `null` for each unreadable field, for example `{"value": 9, "alter": -1, "type": null}` | no entry in `degrees` |
+| `<harmony>` with a missing or empty `<kind>` (MusicXML requires one) | `chord_kind: null` | (always present) |
+
+A `<harmony>` whose `<root>` cannot be read is still left out with a warning: a chord symbol without its root has nothing left to compare. The metrics never count a marked value as equal to anything, not even to another marked value ([metrics.md](metrics.md)).
 
 `rest.hidden` is `true` when the rest's `<note>` has `print-object="no"`: a placeholder that is not printed, such as the gap fillers notation programs export for a second voice.
 
@@ -130,7 +143,7 @@ The converter adds these run-document warnings (see the code table in [json-sche
 | Code | When |
 | --- | --- |
 | `score_unsupported_element` | The source uses something the model has no field for, for example slurs, articulations, fermatas, dynamics, ornaments, cue or unpitched notes, `<harmony>` without `<root>` (Roman numerals, functions), non-traditional keys, `<senza-misura>`, composite time signatures (only the first `<beats>`/`<beat-type>` pair is kept), metric modulation in `<metronome>`, `<words>` without a tempo, `<transpose>`, `<measure-style>`, `<figured-bass>`, lyrics on rests, `<end-line>`/`<humming>` in lyrics, and any unknown element. |
-| `score_invalid_value` | A value is malformed or out of range (a step other than A–G, an octave outside 0–9, non-numeric numbers (alters and tempos included), `<fifths>` outside −11..11, a `<backup>` or `<forward>` that is not positive, decimal text longer than 32 characters). The field becomes `null`, or the element is left out when it cannot exist without that value (a note without a valid pitch keeps its time but is not listed). |
+| `score_invalid_value` | A value is malformed or out of range (a step other than A–G, an octave outside 0–9, non-numeric numbers (alters and tempos included), `<fifths>` outside −11..11, an incomplete `<degree>`, a missing `<kind>`, a `<backup>` or `<forward>` that is not positive, decimal text longer than 32 characters). The field becomes `null` (for keys and chord symbols, see [Present but unreadable](#present-but-unreadable)), or the element is left out when it cannot exist without that value (a note without a valid pitch keeps its time but is not listed; a `<harmony>` without a valid root). |
 | `score_divisions_missing` | A duration or `<offset>` appears before any `<divisions>`. That value is `null`; a duration that moves the position also makes later offsets in the measure `null`. |
 | `score_timing_inconsistent` | A `<backup>` moves before the start of the measure, or the position needs more than 512 bits (only possible with many different `<divisions>` in one measure): later offsets are `null`. An `<offset>` that points before the start of the measure: only its own offset is `null`. |
 

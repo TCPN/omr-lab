@@ -54,6 +54,7 @@ sounding ``<tie>`` is recorded instead.
 """
 
 _STEPS = frozenset("ABCDEFG")
+_DEGREE_TYPES = frozenset({"add", "alter", "subtract"})
 _CLEF_SIGNS = frozenset({"G", "F", "C", "percussion", "TAB", "jianpu", "none"})
 _DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)")
 # Real files use a few digits; the cap keeps a crafted value from growing huge.
@@ -651,14 +652,22 @@ class _PartConverter:
         return None
 
     def key(self, element: ET.Element, events: list[dict[str, Any]]) -> None:
+        # A <key> that cannot be read is kept with ``fifths: null`` (present but
+        # unreadable), so it is not mistaken for a score without a key signature.
+        fifths: int | None
         if element.find("fifths") is None:
-            self.unsupported("A non-traditional <key> (without <fifths>)")
-            return
-        self.check_children(element, {"fifths", "mode", "cancel"}, "key")
-        fifths = self.integer(element.find("fifths"), "<fifths>")
-        if fifths is None or not -11 <= fifths <= 11:
-            self.invalid("A <key> with an invalid <fifths> was left out")
-            return
+            self.unsupported(
+                "A non-traditional <key> (without <fifths>) was recorded with null fifths"
+            )
+            fifths = None
+        else:
+            self.check_children(element, {"fifths", "mode", "cancel"}, "key")
+            fifths = self.integer(element.find("fifths"), "<fifths>")
+            if fifths is None or not -11 <= fifths <= 11:
+                self.invalid(
+                    "A <key> with a missing or invalid <fifths> was recorded with null fifths"
+                )
+                fifths = None
         events.append(
             {
                 "kind": "key",
@@ -714,12 +723,20 @@ class _PartConverter:
     # -- harmony, directions, barlines -----------------------------------------------------
 
     def pitch_class(self, element: ET.Element, prefix: str) -> dict[str, Any] | None:
+        readable = self.readable_pitch_class(element, prefix)
+        if readable["step"] is None or readable["alter"] is None:
+            return None
+        return readable
+
+    def readable_pitch_class(self, element: ET.Element, prefix: str) -> dict[str, Any]:
+        """``{step, alter}`` with null for each part that is missing or invalid."""
         step = _text(element.find(f"{prefix}-step"))
         alter_text = _text(element.find(f"{prefix}-alter"))
         alter = 0 if alter_text is None else self.number(alter_text, f"<{prefix}-alter>")
-        if step not in _STEPS or alter is None:
-            return None
-        return {"step": step, "alter": _compact(alter)}
+        return {
+            "step": step if step in _STEPS else None,
+            "alter": None if alter is None else _compact(alter),
+        }
 
     def harmony(self, element: ET.Element, events: list[dict[str, Any]]) -> None:
         roots = element.findall("root")
@@ -735,38 +752,35 @@ class _PartConverter:
         if root is None:
             self.invalid("A <harmony> with an invalid <root> was left out")
             return
+        # Unreadable parts of a chord are kept as null inside the chord (present but
+        # unreadable), not dropped, so the chord never looks like one without them.
         bass_element = element.find("bass")
         bass = None
         if bass_element is not None:
-            bass = self.pitch_class(bass_element, "bass")
-            if bass is None:
-                self.invalid("An invalid <bass> was recorded as null")
+            bass = self.readable_pitch_class(bass_element, "bass")
+            if bass["step"] is None or bass["alter"] is None:
+                self.invalid("An invalid <bass> was recorded with null step or alter")
         degrees = []
         for degree in element.findall("degree"):
             value = self.integer(degree.find("degree-value"), "<degree-value>")
             alter = self.number(_text(degree.find("degree-alter")), "<degree-alter>")
             degree_type = _text(degree.find("degree-type"))
-            if (
-                value is None
-                or value < 1
-                or alter is None
-                or degree_type
-                not in (
-                    "add",
-                    "alter",
-                    "subtract",
-                )
-            ):
-                self.invalid("An incomplete <degree> was left out")
-                continue
+            if value is not None and value < 1:
+                value = None
+            if degree_type not in _DEGREE_TYPES:
+                degree_type = None
+            if value is None or alter is None or degree_type is None:
+                self.invalid("An incomplete <degree> was recorded with null fields")
             degrees.append(
                 {
                     "value": value,
-                    "alter": _compact(alter),
+                    "alter": None if alter is None else _compact(alter),
                     "type": degree_type,
                 }
             )
         kind = element.find("kind")
+        if _text(kind) is None:
+            self.invalid("A <harmony> without a readable <kind> was recorded with null chord_kind")
         events.append(
             {
                 "kind": "harmony",
