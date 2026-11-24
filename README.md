@@ -8,6 +8,7 @@ Local-first, modular Optical Music Recognition (OMR) pipeline:
 - Phase 1: Local OMR Foundation
 - Initial engine candidate: Audiveris, adapter in `omr_lab.engines.AudiverisEngine`; setup, verified CLI, and AGPL notes in `docs/engines/audiveris.md` (run only as an unmodified external program, see [ADR 0002](docs/decisions/0002-project-license-and-agpl-engines.md))
 - Second engine: homr (deep learning: UNet segmentation and a transformer), adapter in `omr_lab.engines.HomrEngine`; setup and AGPL notes in `docs/engines/homr.md` (also run only as an unmodified external program)
+- Third engine: oemer (deep learning: UNet segmentation, MIT), adapter in `omr_lab.engines.OemerEngine`; setup with the pinned dependency versions it needs in `docs/engines/oemer.md` (run as an external program in its own environment)
 - Interchange format: MusicXML
 - Python, uv, pytest, Ruff
 
@@ -30,7 +31,7 @@ uv run omr-lab run score.png -o runs/0001                # recognize with Audive
 uv run omr-lab run score.png -o runs/0002 --engine mock  # try the CLI without an engine
 ```
 
-`run` writes `runs/0001/run.json` (the run document, [docs/json-schema.md](docs/json-schema.md)) and the engine's raw output under `runs/0001/raw/`, and exits with a documented code (0 on success). Options, output and exit codes are in [docs/cli.md](docs/cli.md). `omr-lab benchmark MANIFEST -o DIR` runs every sample of a benchmark manifest and writes a report, including correctness against the ground truth ([docs/benchmark.md](docs/benchmark.md), [docs/metrics.md](docs/metrics.md)). `omr-lab synthesize SPEC -o DIR` renders and degrades a synthetic corpus with exact ground truth ([docs/synthetic-corpus.md](docs/synthetic-corpus.md)); it needs `uv sync --extra synthetic`. `--preprocess page,deskew` (on `run` and `benchmark`) corrects a copy of the input before recognition ([docs/preprocessing.md](docs/preprocessing.md)); it needs `uv sync --extra preprocess`. The mock engine recognizes nothing; real recognition needs Audiveris or homr (see `docs/engines/audiveris.md`, `docs/engines/homr.md`).
+`run` writes `runs/0001/run.json` (the run document, [docs/json-schema.md](docs/json-schema.md)) and the engine's raw output under `runs/0001/raw/`, and exits with a documented code (0 on success). Options, output and exit codes are in [docs/cli.md](docs/cli.md). `omr-lab benchmark MANIFEST -o DIR` runs every sample of a benchmark manifest and writes a report, including correctness against the ground truth ([docs/benchmark.md](docs/benchmark.md), [docs/metrics.md](docs/metrics.md)). `omr-lab synthesize SPEC -o DIR` renders and degrades a synthetic corpus with exact ground truth ([docs/synthetic-corpus.md](docs/synthetic-corpus.md)); it needs `uv sync --extra synthetic`. `--preprocess page,deskew` (on `run` and `benchmark`) corrects a copy of the input before recognition ([docs/preprocessing.md](docs/preprocessing.md)); it needs `uv sync --extra preprocess`. The mock engine recognizes nothing; real recognition needs Audiveris, homr or oemer (see `docs/engines/audiveris.md`, `docs/engines/homr.md`, `docs/engines/oemer.md`).
 
 ## Test selection
 Tests that need more than a plain Python environment carry a pytest marker:

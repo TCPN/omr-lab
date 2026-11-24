@@ -29,16 +29,16 @@ import shutil
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 from omr_lab.engines.base import (
-    CommandResult,
     EngineAvailability,
     EngineOptions,
     EngineOptionValue,
     EngineResult,
     InvalidEngineOptionError,
+    LauncherLookup,
+    command_diagnostics,
     resolve_options,
     run_command,
 )
@@ -81,8 +81,6 @@ DEFAULT_VERSION_TIMEOUT_SECONDS = 60.0
 # ``-version`` prints a block such as ``- Version:      5.10.0``.
 _VERSION_PATTERN = re.compile(r"^\s*-?\s*Version:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
-_MAX_LOG_LINES = 20
-
 MIN_STAFF_LENGTH_OPTION = "min_staff_length"
 """Option: shortest staff Audiveris keeps, in interlines (issue #55).
 
@@ -113,18 +111,6 @@ SUPPORTED_OPTIONS: Mapping[str, EngineOptionValue] = {
 }
 
 WhichFunc = Callable[[str], str | None]
-
-
-@dataclass(frozen=True, slots=True)
-class LauncherLookup:
-    """Outcome of AudiverisEngine.find_executable().
-
-    ``path`` is the absolute launcher path when one was found; otherwise it is
-    None and ``message`` explains, actionably, why no launcher can be used.
-    """
-
-    path: Path | None
-    message: str | None = None
 
 
 def _default_launchers() -> tuple[Path, ...]:
@@ -168,15 +154,6 @@ def parse_version(output: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _tail(text: str, label: str) -> list[str]:
-    lines = [line for line in text.splitlines() if line.strip()]
-    if not lines:
-        return []
-    shown = lines[-_MAX_LOG_LINES:]
-    header = f"{label} (last {len(shown)} of {len(lines)} lines):"
-    return [header, *shown]
-
-
 def _validate_min_staff_length(engine_name: str, value: EngineOptionValue) -> None:
     # bool is an int subclass; resolve_options() has already rejected NaN and infinity.
     if value is None or (
@@ -190,17 +167,6 @@ def _validate_min_staff_length(engine_name: str, value: EngineOptionValue) -> No
         f"interlines greater than 0 and at most {_MAX_MIN_STAFF_LENGTH}, or null for the "
         f"Audiveris default; got {value!r}."
     )
-
-
-def _command_diagnostics(command: CommandResult) -> list[str]:
-    diagnostics = [f"command: {list(command.args)!r}"]
-    if command.error:
-        diagnostics.append(f"error: {command.error}")
-    if command.returncode is not None:
-        diagnostics.append(f"returncode: {command.returncode}")
-    diagnostics.extend(_tail(command.stdout, "stdout"))
-    diagnostics.extend(_tail(command.stderr, "stderr"))
-    return diagnostics
 
 
 def _find_musicxml_files(directory: Path, stem: str) -> list[Path]:
@@ -501,7 +467,7 @@ class AudiverisEngine:
 
         args = self.build_command(executable, input_path, run_dir, effective)
         command = run_command(args, timeout_seconds=timeout_seconds)
-        diagnostics = _command_diagnostics(command)
+        diagnostics = command_diagnostics(command)
         diagnostics.append(f"run directory: {run_dir}")
 
         produced = _find_musicxml_files(run_dir, input_path.stem)

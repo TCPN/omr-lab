@@ -125,6 +125,18 @@ class EngineResult:
 
 
 @dataclass(frozen=True, slots=True)
+class LauncherLookup:
+    """Outcome of an adapter's ``find_executable()``.
+
+    ``path`` is the absolute path of the engine's executable when one was found;
+    otherwise it is None and ``message`` explains, actionably, why none can be used.
+    """
+
+    path: Path | None
+    message: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CommandResult:
     """Normalized result of invoking one external command."""
 
@@ -139,6 +151,50 @@ class CommandResult:
     def succeeded(self) -> bool:
         """Whether the command exited successfully without a launch error or timeout."""
         return self.returncode == 0 and not self.timed_out and self.error is None
+
+
+DEFAULT_LOG_LINES = 20
+"""How many of the last non-empty output lines command_diagnostics keeps per stream."""
+
+
+def _shorten(line: str, max_chars: int | None) -> str:
+    if max_chars is None or len(line) <= max_chars:
+        return line
+    return f"{line[:max_chars]}... ({len(line)} characters)"
+
+
+def output_tail(
+    text: str, label: str, *, max_lines: int = DEFAULT_LOG_LINES, max_line_chars: int | None = None
+) -> list[str]:
+    """The last ``max_lines`` non-empty lines of ``text`` under a ``label`` header.
+
+    ``max_line_chars`` shortens longer lines (some engines print a whole result on
+    one line); None keeps them whole.
+    """
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return []
+    shown = lines[-max_lines:]
+    header = f"{label} (last {len(shown)} of {len(lines)} lines):"
+    return [header, *(_shorten(line, max_line_chars) for line in shown)]
+
+
+def command_diagnostics(command: CommandResult, *, max_line_chars: int | None = None) -> list[str]:
+    """Diagnostic lines for an engine run: arguments, error, return code, output tails."""
+    diagnostics = [f"command: {list(command.args)!r}"]
+    if command.error:
+        diagnostics.append(f"error: {command.error}")
+    if command.returncode is not None:
+        diagnostics.append(f"returncode: {command.returncode}")
+    diagnostics.extend(output_tail(command.stdout, "stdout", max_line_chars=max_line_chars))
+    diagnostics.extend(output_tail(command.stderr, "stderr", max_line_chars=max_line_chars))
+    return diagnostics
+
+
+def last_output_line(text: str, *, max_chars: int | None = None) -> str | None:
+    """The last non-empty line of ``text``, stripped (and shortened), or None."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return _shorten(lines[-1], max_chars) if lines else None
 
 
 # Engines such as Audiveris emit UTF-8; decode it ourselves instead of relying on

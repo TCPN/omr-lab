@@ -31,7 +31,7 @@ homr is licensed under **AGPL-3.0** (its `LICENSE`; PyPI `homr` 0.7.1). Followin
 
    If an explicit path or `HOMR_EXE` is set but wrong, the adapter reports that instead of falling back to `PATH`. Relative paths are made absolute against the current directory.
 
-   `find_executable()` returns the same `LauncherLookup(path, message)` as the Audiveris adapter.
+   `find_executable()` returns the same `LauncherLookup(path, message)` as the Audiveris adapter. Lookup, version check and run handling are shared with the oemer adapter (`omr_lab.engines.console_tool.ConsoleToolEngine`).
 4. Check: `omr-lab doctor` or `HomrEngine().check_available()`.
 
 ### Version check
@@ -74,4 +74,4 @@ The integration test `tests/integration/test_homr_integration.py` (marker `integ
 HOMR_EXE=~/.local/bin/homr uv run pytest -m integration -s tests/integration/test_homr_integration.py
 ```
 
-A comparison with Audiveris and oemer on the synthetic corpus is issue #75 (OMR-012).
+oemer 0.1.8 matched 22 of 42 notes on the same sample in about 4.5 minutes ([oemer.md](oemer.md#evidence)). A comparison with Audiveris and oemer on the synthetic corpus is issue #75 (OMR-012).

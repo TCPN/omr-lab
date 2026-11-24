@@ -42,11 +42,19 @@ class _UnavailableHomr(MockEngine):
         super().__init__(available=False)
 
 
+class _UnavailableOemer(MockEngine):
+    name = "oemer"
+
+    def __init__(self) -> None:
+        super().__init__(available=False)
+
+
 @pytest.fixture(autouse=True)
 def no_real_engines(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Unit tests must not look for Java, Audiveris or homr on the machine running them.
+    # Unit tests must not look for Java, Audiveris, homr or oemer on the machine running them.
     monkeypatch.setitem(cli.ENGINES, "audiveris", _UnavailableAudiveris)
     monkeypatch.setitem(cli.ENGINES, "homr", _UnavailableHomr)
+    monkeypatch.setitem(cli.ENGINES, "oemer", _UnavailableOemer)
 
 
 @pytest.fixture
@@ -228,7 +236,7 @@ def test_doctor_shows_the_message_of_an_available_engine(
 
 def test_engine_registry_lives_in_engines() -> None:
     assert cli.ENGINES is ENGINES
-    assert set(ENGINES) == {"audiveris", "homr", "mock"}
+    assert set(ENGINES) == {"audiveris", "homr", "mock", "oemer"}
     assert DEFAULT_ENGINE in ENGINES
 
 

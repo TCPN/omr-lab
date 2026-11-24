@@ -14,8 +14,8 @@ from omr_lab.engines import (
     HomrEngine,
     LauncherLookup,
     UnknownEngineOptionError,
+    console_tool,
 )
-from omr_lab.engines import homr as homr_module
 
 
 def _no_which(name: str) -> str | None:
@@ -83,7 +83,7 @@ def score(tmp_path: Path) -> Path:
 
 
 def _install(monkeypatch: pytest.MonkeyPatch, runner: FakeRunner) -> FakeRunner:
-    monkeypatch.setattr(homr_module, "run_command", runner)
+    monkeypatch.setattr(console_tool, "run_command", runner)
     return runner
 
 
@@ -183,7 +183,7 @@ def test_interpreter_of_another_environment_next_to_the_shim_is_skipped(
             return CommandResult(args=(), returncode=1, stderr="PackageNotFoundError: homr\n")
         return real_call(args, timeout_seconds=timeout_seconds, cwd=cwd)
 
-    monkeypatch.setattr(homr_module, "run_command", call)
+    monkeypatch.setattr(console_tool, "run_command", call)
 
     availability = _engine(shim).check_available()
 
