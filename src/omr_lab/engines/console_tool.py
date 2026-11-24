@@ -1,7 +1,7 @@
 """Shared plumbing for engines that are Python console programs run as external processes.
 
 homr and oemer are both installed with pip or uv into their own environment and
-started as a console script (``homr <image>``, ``oemer <image> -o <dir>``). Neither
+started as a console script (``homr <image>``, ``oemer <image> -o <file.musicxml>``). Neither
 has a ``--version`` flag, and both write files whose names are derived from the
 input name. :class:`ConsoleToolEngine` holds what such adapters share:
 
