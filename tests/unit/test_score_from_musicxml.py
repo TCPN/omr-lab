@@ -563,7 +563,6 @@ def test_unicode_digits_in_number_attributes_do_not_crash(content: str) -> None:
 @pytest.mark.parametrize(
     "content",
     [
-        "<attributes><key><fifths>1_0</fifths></key></attributes>",
         "<note><pitch><step>C</step><octave>\u0664</octave></pitch><duration>1</duration></note>",
         "<note><pitch><step>C</step><alter>1e0</alter><octave>4</octave></pitch>"
         "<duration>1</duration></note>",
@@ -578,6 +577,120 @@ def test_numbers_must_be_plain_ascii_xml_numbers(content: str) -> None:
 
     assert _events(conversion) == []
     assert RunWarningCode.SCORE_INVALID_VALUE in _codes(conversion)
+
+
+def test_non_ascii_fifths_keeps_the_key_with_null_fifths() -> None:
+    conversion = _convert(_measure("<attributes><key><fifths>1_0</fifths></key></attributes>"))
+
+    assert [e["fifths"] for e in _events(conversion)] == [None]
+    assert RunWarningCode.SCORE_INVALID_VALUE in _codes(conversion)
+
+
+# --- present but unreadable (issue #64) -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "<key><fifths>12</fifths><mode>major</mode></key>",
+        "<key><fifths>x</fifths><mode>major</mode></key>",
+        "<key><fifths/><mode>major</mode></key>",
+    ],
+)
+def test_unreadable_key_is_kept_with_null_fifths(key: str) -> None:
+    conversion = _convert(_measure(f"<attributes>{key}</attributes>{NOTE_C4}"))
+
+    key_event = _events(conversion)[0]
+    assert key_event["kind"] == "key"
+    assert key_event["fifths"] is None
+    assert key_event["mode"] == "major"
+    assert RunWarningCode.SCORE_INVALID_VALUE in _codes(conversion)
+    assert any("null fifths" in w.message for w in conversion.warnings)
+
+
+def test_non_traditional_key_is_kept_with_null_fifths() -> None:
+    conversion = _convert(
+        _measure(
+            "<attributes><key><key-step>C</key-step><key-alter>0</key-alter></key></attributes>"
+        )
+    )
+
+    assert [(e["kind"], e["fifths"]) for e in _events(conversion)] == [("key", None)]
+    assert _codes(conversion) == [RunWarningCode.SCORE_UNSUPPORTED_ELEMENT]
+
+
+def _harmony(inner: str) -> tuple[dict, list[str]]:
+    conversion = _convert(
+        _measure(f"<harmony><root><root-step>C</root-step></root>{inner}</harmony>{NOTE_C4}")
+    )
+    return _events(conversion)[0], _codes(conversion)
+
+
+@pytest.mark.parametrize(
+    ("bass", "expected"),
+    [
+        ("<bass><bass-step>H</bass-step></bass>", {"step": None, "alter": 0}),
+        (
+            "<bass><bass-step>F</bass-step><bass-alter>x</bass-alter></bass>",
+            {"step": "F", "alter": None},
+        ),
+        ("<bass/>", {"step": None, "alter": 0}),
+    ],
+)
+def test_unreadable_bass_keeps_its_readable_part(bass: str, expected: dict) -> None:
+    harmony, codes = _harmony(f"<kind>major</kind>{bass}")
+
+    assert harmony["bass"] == expected
+    assert RunWarningCode.SCORE_INVALID_VALUE in codes
+
+
+def test_readable_bass_and_no_bass_are_unchanged() -> None:
+    with_bass, codes = _harmony(
+        "<kind>major</kind><bass><bass-step>F</bass-step><bass-alter>1</bass-alter></bass>"
+    )
+    without, _ = _harmony("<kind>major</kind>")
+
+    assert with_bass["bass"] == {"step": "F", "alter": 1}
+    assert codes == []
+    assert without["bass"] is None
+
+
+@pytest.mark.parametrize(
+    ("degree", "expected"),
+    [
+        (
+            "<degree><degree-value>9</degree-value><degree-alter>-1</degree-alter></degree>",
+            {"value": 9, "alter": -1, "type": None},
+        ),
+        (
+            "<degree><degree-value>0</degree-value><degree-alter>0</degree-alter>"
+            "<degree-type>add</degree-type></degree>",
+            {"value": None, "alter": 0, "type": "add"},
+        ),
+        (
+            "<degree><degree-value>11</degree-value><degree-type>add</degree-type></degree>",
+            {"value": 11, "alter": None, "type": "add"},
+        ),
+        (
+            "<degree><degree-value>11</degree-value><degree-alter>1</degree-alter>"
+            "<degree-type>sharpen</degree-type></degree>",
+            {"value": 11, "alter": 1, "type": None},
+        ),
+    ],
+)
+def test_incomplete_degree_is_kept_with_null_fields(degree: str, expected: dict) -> None:
+    harmony, codes = _harmony(f"<kind>dominant</kind>{degree}")
+
+    assert harmony["degrees"] == [expected]
+    assert RunWarningCode.SCORE_INVALID_VALUE in codes
+
+
+@pytest.mark.parametrize("kind", ["", "<kind/>", "<kind>  </kind>"])
+def test_missing_or_empty_kind_is_null_with_a_warning(kind: str) -> None:
+    harmony, codes = _harmony(kind)
+
+    assert harmony["chord_kind"] is None
+    assert codes == [RunWarningCode.SCORE_INVALID_VALUE]
 
 
 def test_very_long_decimals_are_rejected() -> None:

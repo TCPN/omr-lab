@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.3.0",
+  "schema_version": "0.4.0",
   "status": "succeeded",
   "input": {"filename": "score.png", "media_type": "image/png"},
   "engine": {"name": "audiveris", "version": null},

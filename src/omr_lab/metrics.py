@@ -182,10 +182,13 @@ def _signatures(
     guess_values = _changes(
         _implied_initial_signature(guess, kind) + [value(e) for e in _events(guess, kind)]
     )
+    # A signature the converter could not read (``fifths: null``) is never correct,
+    # even against another unreadable one.
+    readable = None not in truth_values and None not in guess_values
     return {
         "ground_truth": truth_values,
         "predicted": guess_values,
-        "correct": has_prediction and truth_values == guess_values,
+        "correct": has_prediction and readable and truth_values == guess_values,
     }
 
 
@@ -276,26 +279,39 @@ def _chord_symbols(
 ) -> dict[str, Any]:
     truth_chords = [_chord(e) for e in _events(truth, "harmony")]
     guess_chords = [_chord(e) for e in _events(guess, "harmony")]
-    pairs = _align(truth_chords, guess_chords, lambda a, b: 0.0 if a == b else 1.0, align)
-    matched = sum(1 for a, b in pairs if a is not None and b is not None and a == b)
+    pairs = _align(
+        truth_chords, guess_chords, lambda a, b: 0.0 if _same_chord(a, b) else 1.0, align
+    )
+    matched = sum(1 for a, b in pairs if _same_chord(a, b))
     return _prf(
         {"ground_truth": len(truth_chords), "predicted": len(guess_chords), "matched": matched}
     )
 
 
-def _chord(event: dict[str, Any]) -> tuple[Any, ...]:
+def _same_chord(a: tuple[Any, ...] | None, b: tuple[Any, ...] | None) -> bool:
+    return a is not None and b is not None and a == b
+
+
+def _chord(event: dict[str, Any]) -> tuple[Any, ...] | None:
     """What a chord symbol means: root, kind, bass and degrees; not how it is printed
-    (``chord_kind_text``)."""
+    (``chord_kind_text``). None when any part is present but unreadable (a null kind,
+    or a null inside the bass or a degree): such a chord never matches."""
     root = event["root"]
     bass = event["bass"]
+    degrees = [(d["value"], d["alter"], d["type"]) for d in event["degrees"]]
+    if (
+        event["chord_kind"] is None
+        or (bass is not None and (bass["step"] is None or bass["alter"] is None))
+        or any(None in degree for degree in degrees)
+    ):
+        return None
     return (
         root["step"],
         root["alter"],
         event["chord_kind"],
         (bass["step"], bass["alter"]) if bass is not None else None,
-        # The order of the <degree> elements does not change the chord; repr sorts any
-        # mix of values, including nulls.
-        tuple(sorted(((d["value"], d["alter"], d["type"]) for d in event["degrees"]), key=repr)),
+        # The order of the <degree> elements does not change the chord.
+        tuple(sorted(degrees)),
     )
 
 
