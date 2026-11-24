@@ -88,6 +88,26 @@ class ConsoleToolEngine:
     MAX_LOG_LINE_CHARS: ClassVar[int | None] = 300
     """Diagnostics shorten longer stdout/stderr lines to this many characters."""
 
+    _REQUIRED_ATTRIBUTES: ClassVar[tuple[str, ...]] = (
+        "ENGINE_NAME",
+        "EXECUTABLE_ENV_VAR",
+        "PATH_COMMAND_NAME",
+        "PACKAGE_NAME",
+        "PROJECT_URL",
+        "INPUT_SUFFIXES",
+    )
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        # Fail when the adapter module is imported, not later inside recognize().
+        super().__init_subclass__(**kwargs)
+        missing = [name for name in cls._REQUIRED_ATTRIBUTES if not hasattr(cls, name)]
+        hooks = ("missing_executable_message", "build_command", "expected_musicxml")
+        missing += [
+            f"{hook}()" for hook in hooks if getattr(cls, hook) is getattr(ConsoleToolEngine, hook)
+        ]
+        if missing:
+            raise TypeError(f"{cls.__name__} must define {', '.join(missing)}")
+
     def __init__(
         self,
         executable: Path | str | None = None,

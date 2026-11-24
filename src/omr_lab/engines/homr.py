@@ -68,8 +68,6 @@ class HomrEngine(ConsoleToolEngine):
     PROJECT_URL: ClassVar[str] = PROJECT_URL
     INPUT_SUFFIXES: ClassVar[tuple[str, ...]] = INPUT_SUFFIXES
     SUPPORTED_OPTIONS: ClassVar[Mapping[str, EngineOptionValue]] = SUPPORTED_OPTIONS
-    # homr prints its whole recognized token list on one line; keep diagnostics short.
-    MAX_LOG_LINE_CHARS: ClassVar[int | None] = 300
 
     def missing_executable_message(self) -> str:
         return (

@@ -215,3 +215,17 @@ def test_zero_exit_without_musicxml_is_a_failure(
 
     assert result.success is False
     assert "wrote no input.musicxml" in (result.error or "")
+
+
+def test_incomplete_console_tool_subclass_fails_at_definition() -> None:
+    with pytest.raises(TypeError, match="PACKAGE_NAME.*build_command"):
+
+        class Incomplete(console_tool.ConsoleToolEngine):  # pyright: ignore[reportUnusedClass]
+            ENGINE_NAME = "x"
+            EXECUTABLE_ENV_VAR = "X_EXE"
+            PATH_COMMAND_NAME = "x"
+            PROJECT_URL = "https://example.invalid"
+            INPUT_SUFFIXES = (".png",)
+
+            def missing_executable_message(self) -> str:
+                return "missing"
