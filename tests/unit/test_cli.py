@@ -35,10 +35,18 @@ class _UnavailableAudiveris(MockEngine):
         super().__init__(available=False)
 
 
+class _UnavailableHomr(MockEngine):
+    name = "homr"
+
+    def __init__(self) -> None:
+        super().__init__(available=False)
+
+
 @pytest.fixture(autouse=True)
-def no_real_audiveris(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Unit tests must not look for Java or Audiveris on the machine running them.
+def no_real_engines(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Unit tests must not look for Java, Audiveris or homr on the machine running them.
     monkeypatch.setitem(cli.ENGINES, "audiveris", _UnavailableAudiveris)
+    monkeypatch.setitem(cli.ENGINES, "homr", _UnavailableHomr)
 
 
 @pytest.fixture
@@ -151,6 +159,7 @@ def test_doctor_reports_each_engine(capsys: pytest.CaptureFixture[str]) -> None:
     assert f"omr-lab {__version__}" in out
     assert "Python " in out
     assert "[missing] audiveris: Mock engine was configured as unavailable" in out
+    assert "[missing] homr: Mock engine was configured as unavailable" in out
     assert f"[ok]      mock {MOCK_ENGINE_VERSION}" in out
 
 
@@ -219,7 +228,7 @@ def test_doctor_shows_the_message_of_an_available_engine(
 
 def test_engine_registry_lives_in_engines() -> None:
     assert cli.ENGINES is ENGINES
-    assert set(ENGINES) == {"audiveris", "mock"}
+    assert set(ENGINES) == {"audiveris", "homr", "mock"}
     assert DEFAULT_ENGINE in ENGINES
 
 

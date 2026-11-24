@@ -33,7 +33,7 @@
 MusicXML is the initial interchange format. Keep engine-specific arguments in adapters. Unit tests must not require Java, network, model downloads, or paid APIs. A successful process exit does not prove musical correctness. Do not fabricate image coordinates or confidence. Dewarping is a separately evaluated transform; measure downstream music correctness, not only visual straightness.
 
 ## Candidates
-Audiveris is the initial integration candidate, subject to verified CLI behavior and license review. homr is the second candidate. Flat OMR API is a possible later cloud adapter gated by credentials, cost controls, privacy/terms review, and explicit approval.
+Audiveris is the initial integration candidate, subject to verified CLI behavior and license review. homr is the second engine (adapter implemented, issue #74). Flat OMR API is a possible later cloud adapter gated by credentials, cost controls, privacy/terms review, and explicit approval.
 
 ## Cloud direction
 Keep schema, parsing, and engine interface independent of hosting. Add a service/API layer only after local runs are repeatable and benchmarked.

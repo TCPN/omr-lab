@@ -13,6 +13,7 @@ from omr_lab.engines.base import (
     resolve_options,
     run_command,
 )
+from omr_lab.engines.homr import HomrEngine
 from omr_lab.engines.registry import DEFAULT_ENGINE, ENGINES
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "EngineOptionValue",
     "EngineOptions",
     "EngineResult",
+    "HomrEngine",
     "InvalidEngineOptionError",
     "LauncherLookup",
     "UnknownEngineOptionError",

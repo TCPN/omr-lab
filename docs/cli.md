@@ -34,7 +34,7 @@ uv run omr-lab run photo.jpg -o runs/0005 --preprocess page   # needs the prepro
 | --- | --- |
 | `INPUT` | Image (`.png`, `.jpg`/`.jpeg`, `.tif`/`.tiff`, `.bmp`) or PDF. It is only read. |
 | `-o`, `--output DIR` | Run directory. It must not exist or be empty; use a new one per run. |
-| `--engine NAME` | `audiveris` (default) or `mock`. The mock engine recognizes nothing; see [pipeline.md](pipeline.md#mock-engine). |
+| `--engine NAME` | `audiveris` (default), `homr` ([engines/homr.md](engines/homr.md); reads only PNG, JPEG and PDF) or `mock`. The mock engine recognizes nothing; see [pipeline.md](pipeline.md#mock-engine). |
 | `--option KEY=VALUE` | Engine option, repeatable; a key may be given once. |
 | `--timeout SECONDS` | Engine timeout, a finite number greater than zero (default 600). |
 | `--preprocess STEP[,STEP...]` | Preprocess a copy of the input before recognition, with these steps in order: `grayscale`, `page`, `deskew`, `threshold` ([preprocessing.md](preprocessing.md)). The input is not modified; the engine reads `DIR/preprocessed/input.png`. Needs `uv sync --extra preprocess`; without it the command exits with 4 before running. An unknown or repeated step is a usage error (2). |
